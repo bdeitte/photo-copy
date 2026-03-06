@@ -17,6 +17,8 @@ func NewRootCmd() *cobra.Command {
 
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable verbose debug logging to stderr")
 
+	rootCmd.AddCommand(newConfigCmd())
+
 	return rootCmd
 }
 
