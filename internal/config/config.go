@@ -11,6 +11,7 @@ const (
 	flickrFile      = "flickr.json"
 	googleFile      = "google_credentials.json"
 	googleTokenFile = "google_token.json"
+	s3File          = "s3.json"
 )
 
 type FlickrConfig struct {
@@ -64,6 +65,24 @@ func LoadGoogleToken(configDir string) (map[string]any, error) {
 		return nil, err
 	}
 	return token, nil
+}
+
+type S3Config struct {
+	AccessKeyID     string `json:"access_key_id"`
+	SecretAccessKey string `json:"secret_access_key"`
+	Region          string `json:"region"`
+}
+
+func SaveS3Config(configDir string, cfg *S3Config) error {
+	return saveJSON(configDir, s3File, cfg)
+}
+
+func LoadS3Config(configDir string) (*S3Config, error) {
+	var cfg S3Config
+	if err := loadJSON(configDir, s3File, &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
 }
 
 func saveJSON(configDir, filename string, v any) error {

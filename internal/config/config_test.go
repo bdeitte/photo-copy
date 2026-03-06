@@ -61,6 +61,35 @@ func TestSaveAndLoadGoogleConfig(t *testing.T) {
 	}
 }
 
+func TestSaveAndLoadS3Config(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	sc := &S3Config{
+		AccessKeyID:     "AKIAIOSFODNN7EXAMPLE",
+		SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		Region:          "us-east-1",
+	}
+
+	if err := SaveS3Config(tmpDir, sc); err != nil {
+		t.Fatalf("save failed: %v", err)
+	}
+
+	loaded, err := LoadS3Config(tmpDir)
+	if err != nil {
+		t.Fatalf("load failed: %v", err)
+	}
+
+	if loaded.AccessKeyID != sc.AccessKeyID {
+		t.Fatalf("access key mismatch: got %s", loaded.AccessKeyID)
+	}
+	if loaded.SecretAccessKey != sc.SecretAccessKey {
+		t.Fatalf("secret key mismatch")
+	}
+	if loaded.Region != sc.Region {
+		t.Fatalf("region mismatch: got %s", loaded.Region)
+	}
+}
+
 func TestConfigDir_CreatesDir(t *testing.T) {
 	tmpDir := t.TempDir()
 	subDir := filepath.Join(tmpDir, "newdir")

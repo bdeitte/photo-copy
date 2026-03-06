@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/briandeitte/photo-copy/internal/config"
@@ -19,6 +20,7 @@ func newConfigCmd() *cobra.Command {
 
 	cmd.AddCommand(newConfigFlickrCmd())
 	cmd.AddCommand(newConfigGoogleCmd())
+	cmd.AddCommand(newConfigS3Cmd())
 	return cmd
 }
 
@@ -82,6 +84,128 @@ func newConfigFlickrCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func newConfigS3Cmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "s3",
+		Short: "Set up S3 credentials",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			reader := bufio.NewReader(os.Stdin)
+			configDir := config.DefaultDir()
+
+			fmt.Println("S3 Credential Setup")
+			fmt.Println()
+
+			home, _ := os.UserHomeDir()
+			awsCredsPath := filepath.Join(home, ".aws", "credentials")
+			if _, err := os.Stat(awsCredsPath); err == nil {
+				fmt.Print("Found existing AWS credentials at ~/.aws/credentials. Use these? (y/n): ")
+				answer, _ := reader.ReadString('\n')
+				answer = strings.TrimSpace(strings.ToLower(answer))
+
+				if answer == "y" || answer == "yes" {
+					cfg, err := readAWSCredentials(awsCredsPath)
+					if err != nil {
+						fmt.Printf("Warning: could not read AWS credentials: %v\n", err)
+						fmt.Println("Falling back to manual entry.")
+					} else {
+						fmt.Print("AWS Region (e.g., us-east-1): ")
+						region, _ := reader.ReadString('\n')
+						region = strings.TrimSpace(region)
+						if region == "" {
+							region = "us-east-1"
+						}
+						cfg.Region = region
+
+						if err := config.SaveS3Config(configDir, cfg); err != nil {
+							return fmt.Errorf("saving config: %w", err)
+						}
+						fmt.Printf("\nS3 credentials saved to %s\n", configDir)
+						return nil
+					}
+				}
+			}
+
+			fmt.Print("AWS Access Key ID: ")
+			accessKey, _ := reader.ReadString('\n')
+			accessKey = strings.TrimSpace(accessKey)
+
+			fmt.Print("AWS Secret Access Key: ")
+			secretKey, _ := reader.ReadString('\n')
+			secretKey = strings.TrimSpace(secretKey)
+
+			fmt.Print("AWS Region (e.g., us-east-1): ")
+			region, _ := reader.ReadString('\n')
+			region = strings.TrimSpace(region)
+			if region == "" {
+				region = "us-east-1"
+			}
+
+			if accessKey == "" || secretKey == "" {
+				return fmt.Errorf("access key and secret key are required")
+			}
+
+			cfg := &config.S3Config{
+				AccessKeyID:     accessKey,
+				SecretAccessKey: secretKey,
+				Region:          region,
+			}
+
+			if err := config.SaveS3Config(configDir, cfg); err != nil {
+				return fmt.Errorf("saving config: %w", err)
+			}
+
+			fmt.Printf("\nS3 credentials saved to %s\n", configDir)
+			return nil
+		},
+	}
+}
+
+func readAWSCredentials(path string) (*config.S3Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg := &config.S3Config{}
+	lines := strings.Split(string(data), "\n")
+	inDefault := false
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "[default]" {
+			inDefault = true
+			continue
+		}
+		if strings.HasPrefix(line, "[") {
+			inDefault = false
+			continue
+		}
+		if !inDefault {
+			continue
+		}
+
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+
+		switch key {
+		case "aws_access_key_id":
+			cfg.AccessKeyID = val
+		case "aws_secret_access_key":
+			cfg.SecretAccessKey = val
+		}
+	}
+
+	if cfg.AccessKeyID == "" || cfg.SecretAccessKey == "" {
+		return nil, fmt.Errorf("could not find access key and secret in [default] profile")
+	}
+
+	return cfg, nil
 }
 
 func newConfigGoogleCmd() *cobra.Command {
