@@ -2,10 +2,12 @@ package flickr
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -276,9 +278,53 @@ func (c *Client) Upload(ctx context.Context, inputDir string) error {
 	return nil
 }
 
-// uploadFile is a placeholder until OAuth is wired in.
-func (c *Client) uploadFile(path string) error {
-	return fmt.Errorf("upload requires OAuth (not yet implemented)")
+func (c *Client) uploadFile(filePath string) error {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	part, err := writer.CreateFormFile("photo", filepath.Base(filePath))
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(part, f); err != nil {
+		return err
+	}
+
+	params := map[string]string{}
+	oauthSign("POST", "https://up.flickr.com/services/upload/", params, c.cfg)
+
+	for k, v := range params {
+		if strings.HasPrefix(k, "oauth_") {
+			writer.WriteField(k, v)
+		}
+	}
+
+	writer.Close()
+
+	req, err := http.NewRequest("POST", "https://up.flickr.com/services/upload/", body)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("upload failed HTTP %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
 }
 
 // loadTransferLog reads the transfer log and returns a set of transferred filenames.
