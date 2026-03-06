@@ -60,7 +60,9 @@ func newGoogleImportTakeoutCmd() *cobra.Command {
 		Use:   "import-takeout",
 		Short: "Import photos from Google Takeout zip files",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("not yet implemented - will be added in next task")
+			log := logging.New(debug, nil)
+			_, err := google.ImportTakeout(takeoutDir, outputDir, log)
+			return err
 		},
 	}
 
