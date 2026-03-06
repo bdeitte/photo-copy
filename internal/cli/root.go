@@ -19,6 +19,7 @@ func NewRootCmd() *cobra.Command {
 
 	rootCmd.AddCommand(newConfigCmd())
 	rootCmd.AddCommand(newFlickrCmd())
+	rootCmd.AddCommand(newGooglePhotosCmd())
 
 	return rootCmd
 }
