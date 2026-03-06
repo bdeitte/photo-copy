@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/briandeitte/photo-copy/internal/config"
+	"github.com/briandeitte/photo-copy/internal/flickr"
 	"github.com/spf13/cobra"
 )
 
@@ -54,7 +55,30 @@ func newConfigFlickrCmd() *cobra.Command {
 				return fmt.Errorf("saving config: %w", err)
 			}
 
-			fmt.Printf("\nFlickr credentials saved to %s\n", configDir)
+			fmt.Println("\nStarting OAuth authorization...")
+			reqToken, reqSecret, authURL, err := flickr.GetRequestToken(cfg)
+			if err != nil {
+				return fmt.Errorf("getting request token: %w", err)
+			}
+
+			fmt.Printf("\nOpen this URL in your browser:\n%s\n\n", authURL)
+			fmt.Print("Enter the verification code: ")
+			verifier, _ := reader.ReadString('\n')
+			verifier = strings.TrimSpace(verifier)
+
+			accessToken, accessSecret, err := flickr.ExchangeToken(cfg, reqToken, reqSecret, verifier)
+			if err != nil {
+				return fmt.Errorf("exchanging token: %w", err)
+			}
+
+			cfg.OAuthToken = accessToken
+			cfg.OAuthTokenSecret = accessSecret
+
+			if err := config.SaveFlickrConfig(configDir, cfg); err != nil {
+				return fmt.Errorf("saving config with tokens: %w", err)
+			}
+
+			fmt.Println("Flickr OAuth complete! Credentials saved.")
 			return nil
 		},
 	}
