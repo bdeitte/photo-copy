@@ -1,14 +1,22 @@
 # photo-copy
 
+![photo-copy](photocopy.png)
+
 Copy photos and videos between Flickr, Google Photos, S3, and local directories.
+
+**DANGER: THIS REPO IS ACTIVELY BEING CLAUDE CODE DEVELOPED. USE WITH CAUTION UNTIL IT IS FURTHER ALONG**
 
 ## Setup
 
-```bash
-./setup.sh
-```
+Requires Go 1.21+
 
-Requires Go 1.21+. Rclone binaries for S3 support are bundled in the repo.
+```bash
+# macOS / Linux
+./setup.sh
+
+# Windows
+setup.bat
+```
 
 ## Usage
 
@@ -57,6 +65,10 @@ Add `--debug` to any command for verbose logging:
 ```bash
 ./photo-copy flickr download --output-dir ./photos --debug
 ```
+
+## Development
+
+See [CLAUDE.md] for some details on the project.
 
 ### Updating rclone
 
