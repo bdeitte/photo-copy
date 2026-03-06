@@ -1,0 +1,5 @@
+photo-copy
+.venv/
+*.egg-info/
+__pycache__/
+helpful_info.txt
