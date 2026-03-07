@@ -37,24 +37,24 @@ setup.bat
 ./photo-copy flickr download ../flickr-photos
 
 # Upload local photos to Flickr
-./photo-copy flickr upload ./photos
+./photo-copy flickr upload ../photos
 ```
 
 ### Google Photos
 
 ```bash
 # Upload local photos to Google Photos
-./photo-copy google-photos upload ./photos
+./photo-copy google-photos upload ../photos
 
 # Extract media from Google Takeout zips
-./photo-copy google-photos import-takeout ./takeout-zips ../google-photos
+./photo-copy google-photos import-takeout ../takeout-zips ../google-photos
 ```
 
 ### S3
 
 ```bash
 # Upload local photos to S3
-./photo-copy s3 upload ./photos --bucket my-bucket --prefix photos/
+./photo-copy s3 upload ../photos --bucket my-bucket --prefix photos/
 
 # Download photos from S3
 ./photo-copy s3 download ../photos --bucket my-bucket --prefix photos/
