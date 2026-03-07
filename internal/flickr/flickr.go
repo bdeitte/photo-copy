@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -14,11 +15,18 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/briandeitte/photo-copy/internal/config"
 	"github.com/briandeitte/photo-copy/internal/logging"
 	"github.com/briandeitte/photo-copy/internal/media"
 	"github.com/schollz/progressbar/v3"
+)
+
+const (
+	maxRetries       = 5
+	baseRetryDelay   = 2 * time.Second
+	minRequestInterval = time.Second // Stay under 3,600 requests/hour
 )
 
 const (
@@ -28,9 +36,10 @@ const (
 
 // Client provides Flickr API operations.
 type Client struct {
-	cfg    *config.FlickrConfig
-	http   *http.Client
-	log    *logging.Logger
+	cfg        *config.FlickrConfig
+	http       *http.Client
+	log        *logging.Logger
+	lastRequest time.Time
 }
 
 // NewClient creates a new Flickr client.
@@ -42,7 +51,64 @@ func NewClient(cfg *config.FlickrConfig, log *logging.Logger) *Client {
 	}
 }
 
-// buildAPIURL constructs a Flickr REST API URL.
+// throttle ensures we don't exceed the Flickr API rate limit of 3,600 requests/hour.
+func (c *Client) throttle() {
+	if !c.lastRequest.IsZero() {
+		elapsed := time.Since(c.lastRequest)
+		if elapsed < minRequestInterval {
+			time.Sleep(minRequestInterval - elapsed)
+		}
+	}
+	c.lastRequest = time.Now()
+}
+
+// retryableGet performs an HTTP GET with retry on 429 and 5xx errors.
+func (c *Client) retryableGet(ctx context.Context, url string) (*http.Response, error) {
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		c.throttle()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		resp, err := c.http.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+			resp.Body.Close()
+			if attempt == maxRetries {
+				return nil, fmt.Errorf("HTTP %d after %d retries: %s", resp.StatusCode, maxRetries, url)
+			}
+			delay := c.retryDelay(attempt, resp)
+			c.log.Info("HTTP %d, retrying in %v (attempt %d/%d)", resp.StatusCode, delay, attempt+1, maxRetries)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
+			continue
+		}
+
+		return resp, nil
+	}
+	// unreachable
+	return nil, fmt.Errorf("retries exhausted for %s", url)
+}
+
+// retryDelay calculates the backoff delay, honoring the Retry-After header if present.
+func (c *Client) retryDelay(attempt int, resp *http.Response) time.Duration {
+	if ra := resp.Header.Get("Retry-After"); ra != "" {
+		if seconds, err := strconv.Atoi(ra); err == nil {
+			return time.Duration(seconds) * time.Second
+		}
+	}
+	return baseRetryDelay * time.Duration(math.Pow(2, float64(attempt)))
+}
+
+// buildAPIURL constructs a Flickr REST API URL (unsigned, for non-authenticated calls).
 func buildAPIURL(method, apiKey string, params map[string]string) string {
 	u, _ := url.Parse(apiBaseURL)
 	q := u.Query()
@@ -55,6 +121,26 @@ func buildAPIURL(method, apiKey string, params map[string]string) string {
 	}
 	u.RawQuery = q.Encode()
 	return u.String()
+}
+
+// signedAPIGet makes an OAuth-signed GET request to the Flickr REST API with rate limiting and retry.
+func (c *Client) signedAPIGet(ctx context.Context, method string, extra map[string]string) (*http.Response, error) {
+	params := map[string]string{
+		"method":         method,
+		"format":         "json",
+		"nojsoncallback": "1",
+	}
+	for k, v := range extra {
+		params[k] = v
+	}
+
+	oauthSign("GET", apiBaseURL, params, c.cfg)
+
+	v := url.Values{}
+	for k, val := range params {
+		v.Set(k, val)
+	}
+	return c.retryableGet(ctx, apiBaseURL+"?"+v.Encode())
 }
 
 // photosResponse represents the Flickr getPhotos API response.
@@ -108,13 +194,11 @@ func (c *Client) Download(ctx context.Context, outputDir string) error {
 		}
 
 		c.log.Debug("fetching photo list page %d", page)
-		apiURL := buildAPIURL("flickr.people.getPhotos", c.cfg.APIKey, map[string]string{
+		resp, err := c.signedAPIGet(ctx, "flickr.people.getPhotos", map[string]string{
 			"user_id":  "me",
 			"page":     strconv.Itoa(page),
 			"per_page": "500",
 		})
-
-		resp, err := c.http.Get(apiURL)
 		if err != nil {
 			return fmt.Errorf("fetching photos page %d: %w", page, err)
 		}
@@ -139,7 +223,7 @@ func (c *Client) Download(ctx context.Context, outputDir string) error {
 				continue
 			}
 
-			downloadURL, err := c.getOriginalURL(photo.ID)
+			downloadURL, err := c.getOriginalURL(ctx, photo.ID)
 			if err != nil {
 				c.log.Error("getting original URL for %s: %v", photo.ID, err)
 				continue
@@ -169,12 +253,10 @@ func (c *Client) Download(ctx context.Context, outputDir string) error {
 }
 
 // getOriginalURL retrieves the original-size URL for a photo.
-func (c *Client) getOriginalURL(photoID string) (string, error) {
-	apiURL := buildAPIURL("flickr.photos.getSizes", c.cfg.APIKey, map[string]string{
+func (c *Client) getOriginalURL(ctx context.Context, photoID string) (string, error) {
+	resp, err := c.signedAPIGet(ctx, "flickr.photos.getSizes", map[string]string{
 		"photo_id": photoID,
 	})
-
-	resp, err := c.http.Get(apiURL)
 	if err != nil {
 		return "", fmt.Errorf("fetching sizes: %w", err)
 	}
@@ -205,14 +287,9 @@ func (c *Client) getOriginalURL(photoID string) (string, error) {
 	return "", fmt.Errorf("no sizes available for photo %s", photoID)
 }
 
-// downloadFile downloads a URL to a local file path.
+// downloadFile downloads a URL to a local file path with rate limiting and retry.
 func (c *Client) downloadFile(ctx context.Context, fileURL, destPath string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fileURL, nil)
-	if err != nil {
-		return err
-	}
-
-	resp, err := c.http.Do(req)
+	resp, err := c.retryableGet(ctx, fileURL)
 	if err != nil {
 		return err
 	}
@@ -268,7 +345,7 @@ func (c *Client) Upload(ctx context.Context, inputDir string) error {
 		default:
 		}
 
-		if err := c.uploadFile(filepath.Join(inputDir, filename)); err != nil {
+		if err := c.uploadFile(ctx, filepath.Join(inputDir, filename)); err != nil {
 			return fmt.Errorf("uploading %s: %w", filename, err)
 		}
 		bar.Add(1)
@@ -278,7 +355,8 @@ func (c *Client) Upload(ctx context.Context, inputDir string) error {
 	return nil
 }
 
-func (c *Client) uploadFile(filePath string) error {
+func (c *Client) uploadFile(ctx context.Context, filePath string) error {
+	c.throttle()
 	f, err := os.Open(filePath)
 	if err != nil {
 		return err
@@ -307,7 +385,7 @@ func (c *Client) uploadFile(filePath string) error {
 
 	writer.Close()
 
-	req, err := http.NewRequest("POST", "https://up.flickr.com/services/upload/", body)
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://up.flickr.com/services/upload/", body)
 	if err != nil {
 		return err
 	}

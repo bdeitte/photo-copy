@@ -22,15 +22,12 @@ func newFlickrCmd() *cobra.Command {
 }
 
 func newFlickrDownloadCmd() *cobra.Command {
-	var outputDir string
-
 	cmd := &cobra.Command{
-		Use:   "download",
+		Use:   "download <output-dir>",
 		Short: "Download all photos from Flickr",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if outputDir == "" {
-				return fmt.Errorf("--output-dir is required")
-			}
+			outputDir := args[0]
 
 			cfg, err := config.LoadFlickrConfig(config.DefaultDir())
 			if err != nil {
@@ -43,21 +40,16 @@ func newFlickrDownloadCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&outputDir, "output-dir", "", "Directory to save downloaded photos")
-	cmd.MarkFlagRequired("output-dir")
 	return cmd
 }
 
 func newFlickrUploadCmd() *cobra.Command {
-	var inputDir string
-
 	cmd := &cobra.Command{
-		Use:   "upload",
+		Use:   "upload <input-dir>",
 		Short: "Upload photos to Flickr",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if inputDir == "" {
-				return fmt.Errorf("--input-dir is required")
-			}
+			inputDir := args[0]
 
 			cfg, err := config.LoadFlickrConfig(config.DefaultDir())
 			if err != nil {
@@ -70,7 +62,5 @@ func newFlickrUploadCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&inputDir, "input-dir", "", "Directory containing photos to upload")
-	cmd.MarkFlagRequired("input-dir")
 	return cmd
 }

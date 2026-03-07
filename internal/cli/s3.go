@@ -22,11 +22,12 @@ func newS3Cmd() *cobra.Command {
 }
 
 func newS3UploadCmd() *cobra.Command {
-	var inputDir, bucket, prefix string
+	var bucket, prefix string
 
 	cmd := &cobra.Command{
-		Use:   "upload",
+		Use:   "upload <input-dir>",
 		Short: "Upload photos to S3",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.LoadS3Config(config.DefaultDir())
 			if err != nil {
@@ -35,24 +36,23 @@ func newS3UploadCmd() *cobra.Command {
 
 			log := logging.New(debug, nil)
 			client := s3.NewClient(cfg, log)
-			return client.Upload(context.Background(), inputDir, bucket, prefix, true)
+			return client.Upload(context.Background(), args[0], bucket, prefix, true)
 		},
 	}
 
-	cmd.Flags().StringVar(&inputDir, "input-dir", "", "Directory containing photos to upload")
 	cmd.Flags().StringVar(&bucket, "bucket", "", "S3 bucket name")
 	cmd.Flags().StringVar(&prefix, "prefix", "", "S3 key prefix (optional)")
-	cmd.MarkFlagRequired("input-dir")
 	cmd.MarkFlagRequired("bucket")
 	return cmd
 }
 
 func newS3DownloadCmd() *cobra.Command {
-	var outputDir, bucket, prefix string
+	var bucket, prefix string
 
 	cmd := &cobra.Command{
-		Use:   "download",
+		Use:   "download <output-dir>",
 		Short: "Download photos from S3",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.LoadS3Config(config.DefaultDir())
 			if err != nil {
@@ -61,14 +61,12 @@ func newS3DownloadCmd() *cobra.Command {
 
 			log := logging.New(debug, nil)
 			client := s3.NewClient(cfg, log)
-			return client.Download(context.Background(), bucket, prefix, outputDir, true)
+			return client.Download(context.Background(), bucket, prefix, args[0], true)
 		},
 	}
 
-	cmd.Flags().StringVar(&outputDir, "output-dir", "", "Directory to save downloaded photos")
 	cmd.Flags().StringVar(&bucket, "bucket", "", "S3 bucket name")
 	cmd.Flags().StringVar(&prefix, "prefix", "", "S3 key prefix (optional)")
-	cmd.MarkFlagRequired("output-dir")
 	cmd.MarkFlagRequired("bucket")
 	return cmd
 }

@@ -22,15 +22,12 @@ func newGooglePhotosCmd() *cobra.Command {
 }
 
 func newGoogleUploadCmd() *cobra.Command {
-	var inputDir string
-
 	cmd := &cobra.Command{
-		Use:   "upload",
+		Use:   "upload <input-dir>",
 		Short: "Upload photos to Google Photos",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if inputDir == "" {
-				return fmt.Errorf("--input-dir is required")
-			}
+			inputDir := args[0]
 
 			cfg, err := config.LoadGoogleConfig(config.DefaultDir())
 			if err != nil {
@@ -48,27 +45,20 @@ func newGoogleUploadCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&inputDir, "input-dir", "", "Directory containing photos to upload")
-	cmd.MarkFlagRequired("input-dir")
 	return cmd
 }
 
 func newGoogleImportTakeoutCmd() *cobra.Command {
-	var takeoutDir, outputDir string
-
 	cmd := &cobra.Command{
-		Use:   "import-takeout",
+		Use:   "import-takeout <takeout-dir> <output-dir>",
 		Short: "Import photos from Google Takeout zip files",
+		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			log := logging.New(debug, nil)
-			_, err := google.ImportTakeout(takeoutDir, outputDir, log)
+			_, err := google.ImportTakeout(args[0], args[1], log)
 			return err
 		},
 	}
 
-	cmd.Flags().StringVar(&takeoutDir, "takeout-dir", "", "Directory containing Takeout zip files")
-	cmd.Flags().StringVar(&outputDir, "output-dir", "", "Directory to extract photos to")
-	cmd.MarkFlagRequired("takeout-dir")
-	cmd.MarkFlagRequired("output-dir")
 	return cmd
 }

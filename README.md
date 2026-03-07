@@ -60,6 +60,19 @@ setup.bat
 ./photo-copy s3 download --bucket my-bucket --prefix photos/ --output-dir ./photos
 ```
 
+## Resumable transfers
+
+All transfers are resumable — if a download or upload is interrupted, re-running the same command picks up where it left off:
+
+- **Flickr downloads** — A `transfer.log` file in the output directory tracks each successfully downloaded file. Already-downloaded files are skipped on restart.
+- **Google Photos uploads** — An upload log file tracks completed uploads the same way.
+- **S3 uploads/downloads** — Handled by rclone, which compares source and destination and only transfers changed or missing files.
+
+## Rate limiting & retry
+
+- **Flickr** — Requests are throttled to 1/second (staying under Flickr's 3,600 requests/hour API limit). HTTP 429 and 5xx errors are retried up to 5 times with exponential backoff (2s, 4s, 8s, 16s, 32s), honoring the `Retry-After` header when present. This applies to both API calls and photo downloads.
+- **Google Photos** — Subject to a 10,000 uploads/day limit, enforced in code.
+
 ### Debug mode
 
 Add `--debug` to any command for verbose logging:
@@ -70,7 +83,7 @@ Add `--debug` to any command for verbose logging:
 
 ## Development
 
-See [CLAUDE.md] for some details on the project.
+See [CLAUDE.md](CLAUDE.md) for some details on the project.
 
 ### Updating rclone
 
