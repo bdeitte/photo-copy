@@ -34,7 +34,7 @@ setup.bat
 
 ```bash
 # Download all photos from Flickr
-./photo-copy flickr download ./flickr-photos
+./photo-copy flickr download ../flickr-photos
 
 # Upload local photos to Flickr
 ./photo-copy flickr upload ./photos
@@ -47,7 +47,7 @@ setup.bat
 ./photo-copy google-photos upload ./photos
 
 # Extract media from Google Takeout zips
-./photo-copy google-photos import-takeout ./takeout-zips ./google-photos
+./photo-copy google-photos import-takeout ./takeout-zips ../google-photos
 ```
 
 ### S3
@@ -57,7 +57,7 @@ setup.bat
 ./photo-copy s3 upload ./photos --bucket my-bucket --prefix photos/
 
 # Download photos from S3
-./photo-copy s3 download ./photos --bucket my-bucket --prefix photos/
+./photo-copy s3 download ../photos --bucket my-bucket --prefix photos/
 ```
 
 ## Resumable transfers
@@ -78,7 +78,7 @@ All transfers are resumable — if a download or upload is interrupted, re-runni
 Add `--debug` to any command for verbose logging:
 
 ```bash
-./photo-copy flickr download ./photos --debug
+./photo-copy flickr download ../photos --debug
 ```
 
 ## Development
