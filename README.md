@@ -1,8 +1,10 @@
-# photo-copy
+<div align="center">
+  <img src="photocopy.png" alt="photo copy logo"></h1>
+</div>
 
-![photo-copy](photocopy.png)
+# photo copy
 
-Copy photos and videos between Flickr, Google Photos, S3, and local directories.
+Copy photos and videos between Google Photos, Flickr, AWS S3, and local directories.<p>
 
 **DANGER: THIS REPO IS ACTIVELY BEING CLAUDE CODE DEVELOPED. USE WITH CAUTION UNTIL IT IS FURTHER ALONG**
 
