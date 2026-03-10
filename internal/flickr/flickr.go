@@ -148,6 +148,7 @@ type photosResponse struct {
 	Photos struct {
 		Page    int `json:"page"`
 		Pages   int `json:"pages"`
+		Total   int `json:"total"`
 		Photo   []struct {
 			ID     string `json:"id"`
 			Secret string `json:"secret"`
@@ -186,6 +187,8 @@ func (c *Client) Download(ctx context.Context, outputDir string) error {
 
 	page := 1
 	totalDownloaded := 0
+	totalSkipped := 0
+	totalPhotos := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -216,9 +219,15 @@ func (c *Client) Download(ctx context.Context, outputDir string) error {
 
 		c.log.Debug("page %d/%d: %d photos", page, photosResp.Photos.Pages, len(photosResp.Photos.Photo))
 
+		if page == 1 {
+			totalPhotos = photosResp.Photos.Total
+			c.log.Info("found %d photos on Flickr", totalPhotos)
+		}
+
 		for _, photo := range photosResp.Photos.Photo {
 			filename := fmt.Sprintf("%s_%s.jpg", photo.ID, photo.Secret)
 			if transferred[filename] {
+				totalSkipped++
 				c.log.Debug("skipping already downloaded: %s", filename)
 				continue
 			}
@@ -239,7 +248,7 @@ func (c *Client) Download(ctx context.Context, outputDir string) error {
 			}
 
 			totalDownloaded++
-			c.log.Debug("downloaded %s (%d total)", filename, totalDownloaded)
+			c.log.Info("[%d/%d] downloaded %s", totalDownloaded+totalSkipped, totalPhotos, filename)
 		}
 
 		if page >= photosResp.Photos.Pages {
@@ -248,7 +257,11 @@ func (c *Client) Download(ctx context.Context, outputDir string) error {
 		page++
 	}
 
-	c.log.Info("download complete: %d photos downloaded", totalDownloaded)
+	if totalSkipped > 0 {
+		c.log.Info("download complete: %d photos downloaded, %d already existed", totalDownloaded, totalSkipped)
+	} else {
+		c.log.Info("download complete: %d photos downloaded", totalDownloaded)
+	}
 	return nil
 }
 
