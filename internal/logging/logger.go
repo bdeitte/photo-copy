@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"time"
 )
 
 type Logger struct {
@@ -23,19 +22,16 @@ func (l *Logger) Debug(format string, args ...any) {
 	if !l.debug {
 		return
 	}
-	l.write("DEBUG", format, args...)
+	msg := fmt.Sprintf(format, args...)
+	fmt.Fprintf(l.writer, "[DEBUG] %s\n", msg)
 }
 
 func (l *Logger) Info(format string, args ...any) {
-	l.write("INFO", format, args...)
+	msg := fmt.Sprintf(format, args...)
+	fmt.Fprintf(l.writer, "%s\n", msg)
 }
 
 func (l *Logger) Error(format string, args ...any) {
-	l.write("ERROR", format, args...)
-}
-
-func (l *Logger) write(level, format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
-	timestamp := time.Now().Format("15:04:05")
-	fmt.Fprintf(l.writer, "[%s] %s: %s\n", timestamp, level, msg)
+	fmt.Fprintf(l.writer, "ERROR: %s\n", msg)
 }
