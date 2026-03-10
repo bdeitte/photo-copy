@@ -188,6 +188,7 @@ func (c *Client) Download(ctx context.Context, outputDir string) error {
 	page := 1
 	totalDownloaded := 0
 	totalSkipped := 0
+	totalErrors := 0
 	totalPhotos := 0
 	for {
 		select {
@@ -224,22 +225,26 @@ func (c *Client) Download(ctx context.Context, outputDir string) error {
 			c.log.Info("found %d photos on Flickr", totalPhotos)
 		}
 
+		pageSkipped := 0
 		for _, photo := range photosResp.Photos.Photo {
 			filename := fmt.Sprintf("%s_%s.jpg", photo.ID, photo.Secret)
 			if transferred[filename] {
 				totalSkipped++
+				pageSkipped++
 				c.log.Debug("skipping already downloaded: %s", filename)
 				continue
 			}
 
 			downloadURL, err := c.getOriginalURL(ctx, photo.ID)
 			if err != nil {
-				c.log.Error("getting original URL for %s: %v", photo.ID, err)
+				totalErrors++
+				c.log.Error("[%d/%d] getting original URL for %s: %v", totalDownloaded+totalSkipped+totalErrors, totalPhotos, photo.ID, err)
 				continue
 			}
 
 			if err := c.downloadFile(ctx, downloadURL, filepath.Join(outputDir, filename)); err != nil {
-				c.log.Error("downloading %s: %v", filename, err)
+				totalErrors++
+				c.log.Error("[%d/%d] downloading %s: %v", totalDownloaded+totalSkipped+totalErrors, totalPhotos, filename, err)
 				continue
 			}
 
@@ -248,7 +253,10 @@ func (c *Client) Download(ctx context.Context, outputDir string) error {
 			}
 
 			totalDownloaded++
-			c.log.Info("[%d/%d] downloaded %s", totalDownloaded+totalSkipped, totalPhotos, filename)
+			c.log.Info("[%d/%d] downloaded %s", totalDownloaded+totalSkipped+totalErrors, totalPhotos, filename)
+		}
+		if pageSkipped > 0 {
+			c.log.Info("[%d/%d] skipped %d already-downloaded photos on page %d", totalDownloaded+totalSkipped+totalErrors, totalPhotos, pageSkipped, page)
 		}
 
 		if page >= photosResp.Photos.Pages {
@@ -257,11 +265,14 @@ func (c *Client) Download(ctx context.Context, outputDir string) error {
 		page++
 	}
 
+	parts := []string{fmt.Sprintf("%d downloaded", totalDownloaded)}
 	if totalSkipped > 0 {
-		c.log.Info("download complete: %d photos downloaded, %d already existed", totalDownloaded, totalSkipped)
-	} else {
-		c.log.Info("download complete: %d photos downloaded", totalDownloaded)
+		parts = append(parts, fmt.Sprintf("%d already existed", totalSkipped))
 	}
+	if totalErrors > 0 {
+		parts = append(parts, fmt.Sprintf("%d failed", totalErrors))
+	}
+	c.log.Info("download complete: %s", strings.Join(parts, ", "))
 	return nil
 }
 

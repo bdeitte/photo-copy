@@ -102,6 +102,9 @@ func (c *Client) Upload(ctx context.Context, inputDir string) error {
 
 	c.log.Info("uploading %d files (%d already uploaded)", len(toUpload), len(uploaded))
 
+	totalUploaded := 0
+	totalErrors := 0
+
 	for i, filePath := range toUpload {
 		filename := filepath.Base(filePath)
 		c.log.Info("[%d/%d] uploading %s", i+1, len(toUpload), filename)
@@ -109,12 +112,14 @@ func (c *Client) Upload(ctx context.Context, inputDir string) error {
 
 		uploadToken, err := c.uploadBytes(filePath, filename)
 		if err != nil {
+			totalErrors++
 			c.log.Error("upload failed for %s: %v", filename, err)
 			continue
 		}
 
 		c.log.Debug("got upload token for %s, creating media item", filename)
 		if err := c.createMediaItem(uploadToken, filename); err != nil {
+			totalErrors++
 			c.log.Error("create media item failed for %s: %v", filename, err)
 			continue
 		}
@@ -123,10 +128,18 @@ func (c *Client) Upload(ctx context.Context, inputDir string) error {
 			c.log.Error("failed to update upload log: %v", err)
 		}
 
+		totalUploaded++
 		c.log.Debug("successfully uploaded %s", filename)
 	}
 
-	c.log.Info("upload complete")
+	parts := []string{fmt.Sprintf("%d uploaded", totalUploaded)}
+	if len(uploaded) > 0 {
+		parts = append(parts, fmt.Sprintf("%d already existed", len(uploaded)))
+	}
+	if totalErrors > 0 {
+		parts = append(parts, fmt.Sprintf("%d failed", totalErrors))
+	}
+	c.log.Info("upload complete: %s", strings.Join(parts, ", "))
 	return nil
 }
 
