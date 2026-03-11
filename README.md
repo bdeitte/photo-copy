@@ -38,10 +38,10 @@ setup.bat
 
 ```bash
 # Upload local photos to Google Photos
-./photo-copy google-photos upload ../photos
+./photo-copy google upload ../photos
 
 # Extract media from Google Takeout zips
-./photo-copy google-photos import-takeout ../takeout-zips ../google-photos
+./photo-copy google import-takeout ../takeout-zips ../google-photos
 ```
 
 ### S3

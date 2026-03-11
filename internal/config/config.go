@@ -101,6 +101,9 @@ func loadJSON(configDir, filename string, v any) error {
 	path := filepath.Join(configDir, filename)
 	data, err := os.ReadFile(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("config file not found: %s", filename)
+		}
 		return fmt.Errorf("reading %s: %w", filename, err)
 	}
 	return json.Unmarshal(data, v)

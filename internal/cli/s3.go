@@ -31,7 +31,7 @@ func newS3UploadCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.LoadS3Config(config.DefaultDir())
 			if err != nil {
-				return fmt.Errorf("loading S3 config (run 'photo-copy config s3' first): %w", err)
+				return fmt.Errorf("S3 credentials not configured. Run 'photo-copy config s3' to set up")
 			}
 
 			log := logging.New(debug, nil)
@@ -56,7 +56,7 @@ func newS3DownloadCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.LoadS3Config(config.DefaultDir())
 			if err != nil {
-				return fmt.Errorf("loading S3 config (run 'photo-copy config s3' first): %w", err)
+				return fmt.Errorf("S3 credentials not configured. Run 'photo-copy config s3' to set up")
 			}
 
 			log := logging.New(debug, nil)
