@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/briandeitte/photo-copy/internal/config"
@@ -31,7 +32,10 @@ func newGoogleUploadCmd() *cobra.Command {
 
 			cfg, err := config.LoadGoogleConfig(config.DefaultDir())
 			if err != nil {
-				return fmt.Errorf("Google credentials not configured. Run 'photo-copy config google' to set up")
+				if errors.Is(err, config.ErrNotConfigured) {
+					return fmt.Errorf("Google credentials not configured. Run 'photo-copy config google' to set up")
+				}
+				return fmt.Errorf("loading Google config: %w", err)
 			}
 
 			log := logging.New(debug, nil)

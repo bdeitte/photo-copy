@@ -2,10 +2,14 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 )
+
+// ErrNotConfigured is returned when a config file does not exist.
+var ErrNotConfigured = errors.New("not configured")
 
 const (
 	flickrFile      = "flickr.json"
@@ -102,7 +106,7 @@ func loadJSON(configDir, filename string, v any) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("config file not found: %s", filename)
+			return ErrNotConfigured
 		}
 		return fmt.Errorf("reading %s: %w", filename, err)
 	}

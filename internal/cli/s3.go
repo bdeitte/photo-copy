@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/briandeitte/photo-copy/internal/config"
@@ -31,7 +32,10 @@ func newS3UploadCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.LoadS3Config(config.DefaultDir())
 			if err != nil {
-				return fmt.Errorf("S3 credentials not configured. Run 'photo-copy config s3' to set up")
+				if errors.Is(err, config.ErrNotConfigured) {
+					return fmt.Errorf("S3 credentials not configured. Run 'photo-copy config s3' to set up")
+				}
+				return fmt.Errorf("loading S3 config: %w", err)
 			}
 
 			log := logging.New(debug, nil)
@@ -56,7 +60,10 @@ func newS3DownloadCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.LoadS3Config(config.DefaultDir())
 			if err != nil {
-				return fmt.Errorf("S3 credentials not configured. Run 'photo-copy config s3' to set up")
+				if errors.Is(err, config.ErrNotConfigured) {
+					return fmt.Errorf("S3 credentials not configured. Run 'photo-copy config s3' to set up")
+				}
+				return fmt.Errorf("loading S3 config: %w", err)
 			}
 
 			log := logging.New(debug, nil)

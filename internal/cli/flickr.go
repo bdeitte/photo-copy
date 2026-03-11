@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/briandeitte/photo-copy/internal/config"
@@ -31,7 +32,10 @@ func newFlickrDownloadCmd() *cobra.Command {
 
 			cfg, err := config.LoadFlickrConfig(config.DefaultDir())
 			if err != nil {
-				return fmt.Errorf("Flickr credentials not configured. Run 'photo-copy config flickr' to set up")
+				if errors.Is(err, config.ErrNotConfigured) {
+					return fmt.Errorf("Flickr credentials not configured. Run 'photo-copy config flickr' to set up")
+				}
+				return fmt.Errorf("loading Flickr config: %w", err)
 			}
 
 			log := logging.New(debug, nil)
@@ -53,7 +57,10 @@ func newFlickrUploadCmd() *cobra.Command {
 
 			cfg, err := config.LoadFlickrConfig(config.DefaultDir())
 			if err != nil {
-				return fmt.Errorf("Flickr credentials not configured. Run 'photo-copy config flickr' to set up")
+				if errors.Is(err, config.ErrNotConfigured) {
+					return fmt.Errorf("Flickr credentials not configured. Run 'photo-copy config flickr' to set up")
+				}
+				return fmt.Errorf("loading Flickr config: %w", err)
 			}
 
 			log := logging.New(debug, nil)
