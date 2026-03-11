@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/briandeitte/photo-copy/internal/config"
 	"github.com/briandeitte/photo-copy/internal/logging"
@@ -20,9 +22,12 @@ import (
 )
 
 const (
-	uploadURL      = "https://photoslibrary.googleapis.com/v1/uploads"
-	batchCreateURL = "https://photoslibrary.googleapis.com/v1/mediaItems:batchCreate"
-	dailyLimit     = 10000
+	uploadURL          = "https://photoslibrary.googleapis.com/v1/uploads"
+	batchCreateURL     = "https://photoslibrary.googleapis.com/v1/mediaItems:batchCreate"
+	dailyLimit         = 10000
+	maxRetries         = 5
+	baseRetryDelay     = 2 * time.Second
+	minUploadInterval  = 2 * time.Second // Throttle uploads to avoid rate limiting
 )
 
 var oauthScopes = []string{
@@ -31,9 +36,10 @@ var oauthScopes = []string{
 
 // Client wraps an authenticated HTTP client for Google Photos API.
 type Client struct {
-	httpClient *http.Client
-	log        *logging.Logger
-	configDir  string
+	httpClient  *http.Client
+	log         *logging.Logger
+	configDir   string
+	lastRequest time.Time
 }
 
 // NewClient creates a new Google Photos client with OAuth2 authentication.
@@ -110,7 +116,7 @@ func (c *Client) Upload(ctx context.Context, inputDir string) error {
 		c.log.Info("[%d/%d] uploading %s", i+1, len(toUpload), filename)
 		c.log.Debug("reading file: %s", filePath)
 
-		uploadToken, err := c.uploadBytes(filePath, filename)
+		uploadToken, err := c.uploadBytes(ctx, filePath, filename)
 		if err != nil {
 			totalErrors++
 			c.log.Error("upload failed for %s: %v", filename, err)
@@ -118,7 +124,7 @@ func (c *Client) Upload(ctx context.Context, inputDir string) error {
 		}
 
 		c.log.Debug("got upload token for %s, creating media item", filename)
-		if err := c.createMediaItem(uploadToken, filename); err != nil {
+		if err := c.createMediaItem(ctx, uploadToken, filename); err != nil {
 			totalErrors++
 			c.log.Error("create media item failed for %s: %v", filename, err)
 			continue
@@ -143,23 +149,80 @@ func (c *Client) Upload(ctx context.Context, inputDir string) error {
 	return nil
 }
 
+// throttle ensures we don't exceed Google Photos API rate limits.
+func (c *Client) throttle() {
+	if !c.lastRequest.IsZero() {
+		elapsed := time.Since(c.lastRequest)
+		if elapsed < minUploadInterval {
+			time.Sleep(minUploadInterval - elapsed)
+		}
+	}
+	c.lastRequest = time.Now()
+}
+
+// retryDelay calculates the backoff delay, honoring the Retry-After header if present.
+func (c *Client) retryDelay(attempt int, resp *http.Response) time.Duration {
+	if ra := resp.Header.Get("Retry-After"); ra != "" {
+		if seconds, err := strconv.Atoi(ra); err == nil {
+			return time.Duration(seconds) * time.Second
+		}
+	}
+	return baseRetryDelay * (1 << uint(attempt))
+}
+
+// retryableDo performs an HTTP request with throttling and retry on 429/5xx errors.
+func (c *Client) retryableDo(ctx context.Context, buildReq func() (*http.Request, error)) (*http.Response, error) {
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		c.throttle()
+
+		req, err := buildReq()
+		if err != nil {
+			return nil, err
+		}
+		req = req.WithContext(ctx)
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+			resp.Body.Close()
+			if attempt == maxRetries {
+				return nil, fmt.Errorf("HTTP %d after %d retries", resp.StatusCode, maxRetries)
+			}
+			delay := c.retryDelay(attempt, resp)
+			c.log.Info("HTTP %d, retrying in %v (attempt %d/%d)", resp.StatusCode, delay, attempt+1, maxRetries)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
+			continue
+		}
+
+		return resp, nil
+	}
+	return nil, fmt.Errorf("unreachable")
+}
+
 // uploadBytes uploads raw file bytes and returns an upload token.
-func (c *Client) uploadBytes(filePath, filename string) (string, error) {
+func (c *Client) uploadBytes(ctx context.Context, filePath, filename string) (string, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return "", fmt.Errorf("reading file: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", uploadURL, bytes.NewReader(data))
-	if err != nil {
-		return "", fmt.Errorf("creating request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/octet-stream")
-	req.Header.Set("X-Goog-Upload-File-Name", filename)
-	req.Header.Set("X-Goog-Upload-Protocol", "raw")
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.retryableDo(ctx, func() (*http.Request, error) {
+		req, err := http.NewRequest("POST", uploadURL, bytes.NewReader(data))
+		if err != nil {
+			return nil, fmt.Errorf("creating request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/octet-stream")
+		req.Header.Set("X-Goog-Upload-File-Name", filename)
+		req.Header.Set("X-Goog-Upload-Protocol", "raw")
+		return req, nil
+	})
 	if err != nil {
 		return "", fmt.Errorf("upload request failed: %w", err)
 	}
@@ -178,7 +241,7 @@ func (c *Client) uploadBytes(filePath, filename string) (string, error) {
 }
 
 // createMediaItem creates a media item in Google Photos from an upload token.
-func (c *Client) createMediaItem(uploadToken, filename string) error {
+func (c *Client) createMediaItem(ctx context.Context, uploadToken, filename string) error {
 	payload := map[string]any{
 		"newMediaItems": []map[string]any{
 			{
@@ -196,14 +259,14 @@ func (c *Client) createMediaItem(uploadToken, filename string) error {
 		return fmt.Errorf("marshaling request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", batchCreateURL, bytes.NewReader(data))
-	if err != nil {
-		return fmt.Errorf("creating request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.retryableDo(ctx, func() (*http.Request, error) {
+		req, err := http.NewRequest("POST", batchCreateURL, bytes.NewReader(data))
+		if err != nil {
+			return nil, fmt.Errorf("creating request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		return req, nil
+	})
 	if err != nil {
 		return fmt.Errorf("create request failed: %w", err)
 	}
