@@ -1,12 +1,6 @@
-<div align="center">
-  <img src="photocopy.png" alt="photo copy logo"></h1>
-</div>
-
-# photo copy
-
-Copy photos and videos between Google Photos, Flickr, AWS S3, and local directories.<p>
-
-**DANGER: THIS REPO IS ACTIVELY BEING CLAUDE CODE DEVELOPED. USE WITH CAUTION UNTIL IT IS FURTHER ALONG**
+## Photo Copy
+Copy photos and videos between Google Photos, Flickr, AWS S3, and local directories.<br/>
+<img src="photocopy.png" alt="photo copy logo"><br/>
 
 ## Setup
 
@@ -60,7 +54,9 @@ setup.bat
 ./photo-copy s3 download ../photos --bucket my-bucket --prefix photos/
 ```
 
-## Resumable transfers
+## Features
+
+### Resumable transfers
 
 All transfers are resumable — if a download or upload is interrupted, re-running the same command picks up where it left off:
 
@@ -68,7 +64,7 @@ All transfers are resumable — if a download or upload is interrupted, re-runni
 - **Google Photos uploads** — An upload log file tracks completed uploads the same way.
 - **S3 uploads/downloads** — Handled by rclone, which compares source and destination and only transfers changed or missing files.
 
-## Rate limiting & retry
+### Rate limiting & retry
 
 - **Flickr** — Requests are throttled to 1/second (staying under Flickr's 3,600 requests/hour API limit). HTTP 429 and 5xx errors are retried up to 5 times with exponential backoff (2s, 4s, 8s, 16s, 32s), honoring the `Retry-After` header when present. This applies to both API calls and photo downloads.
 - **Google Photos** — Subject to a 10,000 uploads/day limit, enforced in code.
@@ -80,6 +76,10 @@ Add `--debug` to any command for verbose logging:
 ```bash
 ./photo-copy flickr download ../photos --debug
 ```
+
+### Supported file types
+
+JPEG, PNG, TIFF, GIF, HEIC, WebP, MP4, MOV, AVI, MKV
 
 ## Development
 
@@ -93,6 +93,3 @@ To update the bundled rclone binaries:
 ./scripts/update-rclone.sh v1.68.2
 ```
 
-## Supported file types
-
-JPEG, PNG, TIFF, GIF, HEIC, WebP, MP4, MOV, AVI, MKV
