@@ -162,9 +162,11 @@ func (c *Client) throttle() {
 
 // retryDelay calculates the backoff delay, honoring the Retry-After header if present.
 func (c *Client) retryDelay(attempt int, resp *http.Response) time.Duration {
-	if ra := resp.Header.Get("Retry-After"); ra != "" {
-		if seconds, err := strconv.Atoi(ra); err == nil {
-			return time.Duration(seconds) * time.Second
+	if resp != nil {
+		if ra := resp.Header.Get("Retry-After"); ra != "" {
+			if seconds, err := strconv.Atoi(ra); err == nil {
+				return time.Duration(seconds) * time.Second
+			}
 		}
 	}
 	return baseRetryDelay * (1 << uint(attempt))
@@ -183,7 +185,20 @@ func (c *Client) retryableDo(ctx context.Context, buildReq func() (*http.Request
 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
-			return nil, err
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			if attempt == maxRetries {
+				return nil, err
+			}
+			delay := c.retryDelay(attempt, nil)
+			c.log.Info("network error, retrying in %v (attempt %d/%d): %v", delay, attempt+1, maxRetries, err)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
+			continue
 		}
 
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
