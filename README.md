@@ -1,6 +1,6 @@
 ## Photo Copy
 Copy photos and videos between Google Photos, Flickr, AWS S3, and local directories.<br/>
-<img src="photocopy.png" alt="photo copy logo"><br/>
+<img src="photocopy.png" alt="photo copy logo">
 
 ## Setup
 
