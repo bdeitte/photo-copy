@@ -89,6 +89,7 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 			return fmt.Errorf("building file list for limit: %w", err)
 		}
 		defer os.Remove(filesFromPath)
+		// Replace include flags with --files-from (they're mutually exclusive in rclone)
 		args = buildDownloadArgs(configPath, bucket, prefix, outputDir)
 		args = append(args, "--files-from", filesFromPath)
 	}
@@ -153,7 +154,12 @@ func (c *Client) buildFilesFrom(ctx context.Context, rclonePath, configPath, sou
 		return "", fmt.Errorf("rclone lsf failed: %w", err)
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	trimmed := strings.TrimSpace(string(out))
+	if trimmed == "" {
+		c.log.Info("no files found to transfer")
+		return "", fmt.Errorf("no files found")
+	}
+	lines := strings.Split(trimmed, "\n")
 	if len(lines) > limit {
 		c.log.Info("limiting transfer to %d of %d files", limit, len(lines))
 		lines = lines[:limit]

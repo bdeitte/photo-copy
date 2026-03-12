@@ -255,7 +255,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) erro
 			totalDownloaded++
 			c.log.Info("[%d/%d] downloaded %s", totalDownloaded+totalSkipped+totalErrors, totalPhotos, filename)
 
-			if limit > 0 && totalDownloaded >= limit {
+			if limit > 0 && totalDownloaded+totalErrors >= limit {
 				c.log.Info("reached download limit of %d files", limit)
 				break
 			}
@@ -265,7 +265,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) erro
 			c.log.Info("[%d/%d] skipped %d already-downloaded photos on page %d", totalDownloaded+totalSkipped+totalErrors, totalPhotos, pageSkipped, page)
 		}
 
-		if limit > 0 && totalDownloaded >= limit {
+		if limit > 0 && totalDownloaded+totalErrors >= limit {
 			break
 		}
 
