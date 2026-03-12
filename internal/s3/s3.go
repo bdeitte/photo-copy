@@ -47,6 +47,9 @@ func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, me
 		if err != nil {
 			return fmt.Errorf("building file list for limit: %w", err)
 		}
+		if filesFromPath == "" {
+			return nil
+		}
 		defer os.Remove(filesFromPath)
 		// Replace include flags with --files-from (they're mutually exclusive in rclone)
 		args = buildUploadArgs(configPath, inputDir, bucket, prefix)
@@ -87,6 +90,9 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 		filesFromPath, err := c.buildFilesFrom(ctx, rclonePath, configPath, src, args, limit)
 		if err != nil {
 			return fmt.Errorf("building file list for limit: %w", err)
+		}
+		if filesFromPath == "" {
+			return nil
 		}
 		defer os.Remove(filesFromPath)
 		// Replace include flags with --files-from (they're mutually exclusive in rclone)
@@ -157,7 +163,7 @@ func (c *Client) buildFilesFrom(ctx context.Context, rclonePath, configPath, sou
 	trimmed := strings.TrimSpace(string(out))
 	if trimmed == "" {
 		c.log.Info("no files found to transfer")
-		return "", fmt.Errorf("no files found")
+		return "", nil
 	}
 	lines := strings.Split(trimmed, "\n")
 	if len(lines) > limit {

@@ -256,7 +256,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) erro
 			c.log.Info("[%d/%d] downloaded %s", totalDownloaded+totalSkipped+totalErrors, totalPhotos, filename)
 
 			if limit > 0 && totalDownloaded+totalErrors >= limit {
-				c.log.Info("reached download limit of %d files", limit)
+				c.log.Info("reached limit of %d files (%d downloaded, %d errors)", limit, totalDownloaded, totalErrors)
 				break
 			}
 		}
