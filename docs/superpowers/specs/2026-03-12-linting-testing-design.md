@@ -79,6 +79,13 @@ Add a section documenting:
 - Instruction to always run lint + tests after code changes, before committing
 - Note about the pre-commit hook
 
+### README.md updates
+
+Add linting and testing info to the Development section:
+- How to install golangci-lint
+- How to run linting: `golangci-lint run ./...`
+- How to run tests: `go test ./...`
+
 ## 3. Test Coverage Improvements
 
 ### Current state
@@ -133,6 +140,7 @@ Add a section documenting:
 | `internal/s3/rclone_test.go` | Modify — add config generation edge cases |
 | `internal/cli/cli_test.go` | Create — flag/arg validation tests |
 | `internal/config/config_test.go` | Modify — add edge case tests |
+| `README.md` | Modify — add linting/testing to Development section |
 
 ## 5. Implementation Order
 
