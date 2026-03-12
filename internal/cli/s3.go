@@ -40,7 +40,7 @@ func newS3UploadCmd() *cobra.Command {
 
 			log := logging.New(debug, nil)
 			client := s3.NewClient(cfg, log)
-			return client.Upload(context.Background(), args[0], bucket, prefix, true)
+			return client.Upload(context.Background(), args[0], bucket, prefix, true, limit)
 		},
 	}
 
@@ -68,7 +68,7 @@ func newS3DownloadCmd() *cobra.Command {
 
 			log := logging.New(debug, nil)
 			client := s3.NewClient(cfg, log)
-			return client.Download(context.Background(), bucket, prefix, args[0], true)
+			return client.Download(context.Background(), bucket, prefix, args[0], true, limit)
 		},
 	}
 

@@ -40,7 +40,7 @@ func newFlickrDownloadCmd() *cobra.Command {
 
 			log := logging.New(debug, nil)
 			client := flickr.NewClient(cfg, log)
-			return client.Download(context.Background(), outputDir)
+			return client.Download(context.Background(), outputDir, limit)
 		},
 	}
 
@@ -65,7 +65,7 @@ func newFlickrUploadCmd() *cobra.Command {
 
 			log := logging.New(debug, nil)
 			client := flickr.NewClient(cfg, log)
-			return client.Upload(context.Background(), inputDir)
+			return client.Upload(context.Background(), inputDir, limit)
 		},
 	}
 

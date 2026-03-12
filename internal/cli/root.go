@@ -8,6 +8,7 @@ import (
 )
 
 var debug bool
+var limit int
 
 func NewRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
@@ -16,6 +17,7 @@ func NewRootCmd() *cobra.Command {
 	}
 
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable verbose debug logging to stderr")
+	rootCmd.PersistentFlags().IntVar(&limit, "limit", 0, "Maximum number of files to upload/download (0 = no limit)")
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 
 	cobra.EnableCommandSorting = false

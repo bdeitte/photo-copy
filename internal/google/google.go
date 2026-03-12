@@ -74,7 +74,7 @@ func NewClient(ctx context.Context, cfg *config.GoogleConfig, configDir string, 
 }
 
 // Upload uploads all media files from inputDir to Google Photos.
-func (c *Client) Upload(ctx context.Context, inputDir string) error {
+func (c *Client) Upload(ctx context.Context, inputDir string, limit int) error {
 	files, err := collectMediaFiles(inputDir)
 	if err != nil {
 		return fmt.Errorf("collecting media files: %w", err)
@@ -104,6 +104,11 @@ func (c *Client) Upload(ctx context.Context, inputDir string) error {
 	if len(toUpload) > dailyLimit {
 		c.log.Info("limiting upload to %d files (daily limit)", dailyLimit)
 		toUpload = toUpload[:dailyLimit]
+	}
+
+	if limit > 0 && len(toUpload) > limit {
+		c.log.Info("limiting upload to %d files (--limit flag)", limit)
+		toUpload = toUpload[:limit]
 	}
 
 	c.log.Info("uploading %d files (%d already uploaded)", len(toUpload), len(uploaded))

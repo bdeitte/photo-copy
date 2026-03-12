@@ -171,7 +171,7 @@ type sizesResponse struct {
 }
 
 // Download fetches all photos from the authenticated user's Flickr account.
-func (c *Client) Download(ctx context.Context, outputDir string) error {
+func (c *Client) Download(ctx context.Context, outputDir string, limit int) error {
 	c.log.Debug("starting Flickr download to %s", outputDir)
 
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
@@ -254,9 +254,19 @@ func (c *Client) Download(ctx context.Context, outputDir string) error {
 
 			totalDownloaded++
 			c.log.Info("[%d/%d] downloaded %s", totalDownloaded+totalSkipped+totalErrors, totalPhotos, filename)
+
+			if limit > 0 && totalDownloaded >= limit {
+				c.log.Info("reached download limit of %d files", limit)
+				break
+			}
 		}
+
 		if pageSkipped > 0 {
 			c.log.Info("[%d/%d] skipped %d already-downloaded photos on page %d", totalDownloaded+totalSkipped+totalErrors, totalPhotos, pageSkipped, page)
+		}
+
+		if limit > 0 && totalDownloaded >= limit {
+			break
 		}
 
 		if page >= photosResp.Photos.Pages {
@@ -334,7 +344,7 @@ func (c *Client) downloadFile(ctx context.Context, fileURL, destPath string) err
 }
 
 // Upload uploads media files from inputDir to Flickr.
-func (c *Client) Upload(ctx context.Context, inputDir string) error {
+func (c *Client) Upload(ctx context.Context, inputDir string, limit int) error {
 	c.log.Debug("starting Flickr upload from %s", inputDir)
 
 	entries, err := os.ReadDir(inputDir)
@@ -352,6 +362,11 @@ func (c *Client) Upload(ctx context.Context, inputDir string) error {
 	if len(files) == 0 {
 		c.log.Info("no supported media files found in %s", inputDir)
 		return nil
+	}
+
+	if limit > 0 && len(files) > limit {
+		c.log.Info("limiting upload to %d of %d files", limit, len(files))
+		files = files[:limit]
 	}
 
 	c.log.Info("found %d media files to upload", len(files))
