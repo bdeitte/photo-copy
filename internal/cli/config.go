@@ -211,11 +211,11 @@ func readAWSCredentials(path string) (*config.S3Config, error) {
 func newConfigGoogleCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "google",
-		Short: "Set up Google OAuth credentials",
+		Short: "Set up Google OAuth credentials (required for uploads only)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			reader := bufio.NewReader(os.Stdin)
 
-			fmt.Println("Google OAuth Setup")
+			fmt.Println("Google OAuth Setup (for uploads to Google Photos)")
 			fmt.Println()
 			fmt.Println("Steps:")
 			fmt.Println("  1. Go to https://console.cloud.google.com/apis/credentials")
@@ -256,6 +256,8 @@ func newConfigGoogleCmd() *cobra.Command {
 			}
 
 			fmt.Printf("\nGoogle credentials saved to %s\n", configDir)
+			fmt.Println("These credentials are used for uploading to Google Photos.")
+			fmt.Println("To download photos, use Google Takeout and then 'photo-copy google import-takeout'.")
 			return nil
 		},
 	}

@@ -1,5 +1,7 @@
 ## Photo Copy
-Copy photos and videos between Google Photos, Flickr, AWS S3, and local directories.<br/>
+
+Copy photos and videos between Google Photos, Flickr, AWS S3, and local directories.
+
 <img src="photocopy.png" alt="photo copy logo">
 
 ## Setup
@@ -20,7 +22,7 @@ setup.bat
 
 ```bash
 ./photo-copy config flickr    # Flickr API key + OAuth
-./photo-copy config google    # Google OAuth credentials
+./photo-copy config google    # Google OAuth credentials for upload
 ./photo-copy config s3        # AWS credentials for S3
 ```
 
@@ -36,11 +38,13 @@ setup.bat
 
 ### Google Photos
 
+The Google Photos API only allows access to photos the app itself uploaded, so downloading your full library requires Google Takeout (a manual zip export from Google).
+
 ```bash
-# Upload local photos to Google Photos
+# Upload local photos to Google Photos (requires 'config google' setup)
 ./photo-copy google upload ../photos
 
-# Extract media from Google Takeout zips
+# Download: export your library via Google Takeout, then extract the zips
 ./photo-copy google import-takeout ../takeout-zips ../google-photos
 ```
 

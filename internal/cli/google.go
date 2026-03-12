@@ -14,7 +14,7 @@ import (
 func newGooglePhotosCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "google",
-		Short: "Google Photos upload and Takeout import commands",
+		Short: "Google Photos commands (upload via API, download via Takeout import)",
 	}
 
 	cmd.AddCommand(newGoogleUploadCmd())
@@ -33,7 +33,7 @@ func newGoogleUploadCmd() *cobra.Command {
 			cfg, err := config.LoadGoogleConfig(config.DefaultDir())
 			if err != nil {
 				if errors.Is(err, config.ErrNotConfigured) {
-					return fmt.Errorf("Google credentials not configured. Run 'photo-copy config google' to set up")
+					return fmt.Errorf("Google credentials not configured. Run 'photo-copy config google' to set up (required for uploads only; to download, use Google Takeout with 'photo-copy google import-takeout')")
 				}
 				return fmt.Errorf("loading Google config: %w", err)
 			}
