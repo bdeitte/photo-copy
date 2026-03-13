@@ -89,6 +89,21 @@ JPEG, PNG, TIFF, GIF, HEIC, WebP, MP4, MOV, AVI, MKV
 
 See [CLAUDE.md](CLAUDE.md) for some details on the project.
 
+### Linting & Testing
+
+Install golangci-lint:
+
+```bash
+brew install golangci-lint
+```
+
+Run linting and tests:
+
+```bash
+golangci-lint run ./...    # lint
+go test ./...              # test
+```
+
 ### Updating rclone
 
 To update the bundled rclone binaries:

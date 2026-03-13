@@ -1,0 +1,9 @@
+{
+  "hooks": {
+    "PreCommit": [
+      {
+        "command": "golangci-lint run ./... && go test ./..."
+      }
+    ]
+  }
+}

@@ -78,7 +78,7 @@ func (c *Client) retryableGet(ctx context.Context, url string) (*http.Response, 
 		}
 
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if attempt == maxRetries {
 				return nil, fmt.Errorf("HTTP %d after %d retries: %s", resp.StatusCode, maxRetries, url)
 			}
@@ -209,13 +209,13 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) erro
 
 		var photosResp photosResponse
 		if err := json.NewDecoder(resp.Body).Decode(&photosResp); err != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			return fmt.Errorf("decoding photos response: %w", err)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		if photosResp.Stat != "ok" {
-			return fmt.Errorf("Flickr API error on page %d: stat=%s", page, photosResp.Stat)
+			return fmt.Errorf("Flickr API error on page %d: stat=%s", page, photosResp.Stat) //nolint:staticcheck // proper noun
 		}
 
 		c.log.Debug("page %d/%d: %d photos", page, photosResp.Photos.Pages, len(photosResp.Photos.Photo))
@@ -294,7 +294,7 @@ func (c *Client) getOriginalURL(ctx context.Context, photoID string) (string, er
 	if err != nil {
 		return "", fmt.Errorf("fetching sizes: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var sizesResp sizesResponse
 	if err := json.NewDecoder(resp.Body).Decode(&sizesResp); err != nil {
@@ -302,7 +302,7 @@ func (c *Client) getOriginalURL(ctx context.Context, photoID string) (string, er
 	}
 
 	if sizesResp.Stat != "ok" {
-		return "", fmt.Errorf("Flickr API error: stat=%s", sizesResp.Stat)
+		return "", fmt.Errorf("Flickr API error: stat=%s", sizesResp.Stat) //nolint:staticcheck // proper noun
 	}
 
 	// Prefer "Original", fall back to "Large", then last available size.
@@ -322,12 +322,12 @@ func (c *Client) getOriginalURL(ctx context.Context, photoID string) (string, er
 }
 
 // downloadFile downloads a URL to a local file path with rate limiting and retry.
-func (c *Client) downloadFile(ctx context.Context, fileURL, destPath string) error {
+func (c *Client) downloadFile(ctx context.Context, fileURL, destPath string) (err error) {
 	resp, err := c.retryableGet(ctx, fileURL)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("HTTP %d downloading %s", resp.StatusCode, fileURL)
@@ -337,7 +337,11 @@ func (c *Client) downloadFile(ctx context.Context, fileURL, destPath string) err
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 
 	_, err = io.Copy(f, resp.Body)
 	return err
@@ -387,7 +391,7 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) error {
 		if err := c.uploadFile(ctx, filepath.Join(inputDir, filename)); err != nil {
 			return fmt.Errorf("uploading %s: %w", filename, err)
 		}
-		bar.Add(1)
+		_ = bar.Add(1)
 	}
 
 	fmt.Println()
@@ -400,7 +404,7 @@ func (c *Client) uploadFile(ctx context.Context, filePath string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -418,11 +422,15 @@ func (c *Client) uploadFile(ctx context.Context, filePath string) error {
 
 	for k, v := range params {
 		if strings.HasPrefix(k, "oauth_") {
-			writer.WriteField(k, v)
+			if err := writer.WriteField(k, v); err != nil {
+				return fmt.Errorf("writing form field %s: %w", k, err)
+			}
 		}
 	}
 
-	writer.Close()
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("closing multipart writer: %w", err)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", "https://up.flickr.com/services/upload/", body)
 	if err != nil {
@@ -434,7 +442,7 @@ func (c *Client) uploadFile(ctx context.Context, filePath string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
@@ -455,7 +463,7 @@ func loadTransferLog(path string) (map[string]bool, error) {
 		}
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
@@ -468,12 +476,16 @@ func loadTransferLog(path string) (map[string]bool, error) {
 }
 
 // appendTransferLog appends a filename to the transfer log.
-func appendTransferLog(path, filename string) error {
+func appendTransferLog(path, filename string) (err error) {
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 
 	_, err = fmt.Fprintln(f, filename)
 	return err

@@ -33,7 +33,7 @@ func newFlickrDownloadCmd() *cobra.Command {
 			cfg, err := config.LoadFlickrConfig(config.DefaultDir())
 			if err != nil {
 				if errors.Is(err, config.ErrNotConfigured) {
-					return fmt.Errorf("Flickr credentials not configured. Run 'photo-copy config flickr' to set up")
+					return fmt.Errorf("Flickr credentials not configured. Run 'photo-copy config flickr' to set up") //nolint:staticcheck // proper noun
 				}
 				return fmt.Errorf("loading Flickr config: %w", err)
 			}
@@ -58,7 +58,7 @@ func newFlickrUploadCmd() *cobra.Command {
 			cfg, err := config.LoadFlickrConfig(config.DefaultDir())
 			if err != nil {
 				if errors.Is(err, config.ErrNotConfigured) {
-					return fmt.Errorf("Flickr credentials not configured. Run 'photo-copy config flickr' to set up")
+					return fmt.Errorf("Flickr credentials not configured. Run 'photo-copy config flickr' to set up") //nolint:staticcheck // proper noun
 				}
 				return fmt.Errorf("loading Flickr config: %w", err)
 			}

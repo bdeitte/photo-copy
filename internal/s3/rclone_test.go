@@ -34,11 +34,11 @@ func TestRcloneBinaryName(t *testing.T) {
 func TestFindRcloneBinary(t *testing.T) {
 	tmpDir := t.TempDir()
 	binDir := filepath.Join(tmpDir, "rclone-bin")
-	os.MkdirAll(binDir, 0755)
+	_ = os.MkdirAll(binDir, 0755)
 
 	name := rcloneBinaryName(runtime.GOOS, runtime.GOARCH)
 	fakeBin := filepath.Join(binDir, name)
-	os.WriteFile(fakeBin, []byte("fake"), 0755)
+	_ = os.WriteFile(fakeBin, []byte("fake"), 0755)
 
 	got, err := findRcloneBinary(binDir)
 	if err != nil {
@@ -62,7 +62,7 @@ func TestWriteRcloneConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer os.Remove(tmpFile)
+	defer func() { _ = os.Remove(tmpFile) }()
 
 	data, err := os.ReadFile(tmpFile)
 	if err != nil {
@@ -78,5 +78,64 @@ func TestWriteRcloneConfig(t *testing.T) {
 	}
 	if !strings.Contains(content, "region = us-west-2") {
 		t.Fatal("missing region")
+	}
+}
+
+func TestWriteRcloneConfig_ContainsAllFields(t *testing.T) {
+	path, err := writeRcloneConfig("AKID", "SECRET", "eu-west-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer func() { _ = os.Remove(path) }()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading config: %v", err)
+	}
+
+	content := string(data)
+	checks := map[string]string{
+		"[s3]":                       "section header",
+		"type = s3":                  "type",
+		"provider = AWS":             "provider",
+		"access_key_id = AKID":       "access key",
+		"secret_access_key = SECRET": "secret key",
+		"region = eu-west-1":         "region",
+	}
+
+	for want, desc := range checks {
+		if !strings.Contains(content, want) {
+			t.Errorf("missing %s: %q", desc, want)
+		}
+	}
+}
+
+func TestWriteRcloneConfig_CreatesReadableFile(t *testing.T) {
+	path, err := writeRcloneConfig("A", "B", "us-east-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer func() { _ = os.Remove(path) }()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat failed: %v", err)
+	}
+	if info.Size() == 0 {
+		t.Error("config file is empty")
+	}
+}
+
+func TestRcloneBinaryName_Windows(t *testing.T) {
+	name := rcloneBinaryName("windows", "amd64")
+	if !strings.HasSuffix(name, ".exe") {
+		t.Errorf("windows binary should end in .exe, got %q", name)
+	}
+}
+
+func TestRcloneBinaryName_NonWindows(t *testing.T) {
+	name := rcloneBinaryName("linux", "arm64")
+	if strings.HasSuffix(name, ".exe") {
+		t.Errorf("linux binary should not end in .exe, got %q", name)
 	}
 }

@@ -23,15 +23,15 @@ func (l *Logger) Debug(format string, args ...any) {
 		return
 	}
 	msg := fmt.Sprintf(format, args...)
-	fmt.Fprintf(l.writer, "[DEBUG] %s\n", msg)
+	_, _ = fmt.Fprintf(l.writer, "[DEBUG] %s\n", msg)
 }
 
 func (l *Logger) Info(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
-	fmt.Fprintf(l.writer, "%s\n", msg)
+	_, _ = fmt.Fprintf(l.writer, "%s\n", msg)
 }
 
 func (l *Logger) Error(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
-	fmt.Fprintf(l.writer, "ERROR: %s\n", msg)
+	_, _ = fmt.Fprintf(l.writer, "ERROR: %s\n", msg)
 }

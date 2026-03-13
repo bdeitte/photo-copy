@@ -46,7 +46,7 @@ func newS3UploadCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&bucket, "bucket", "", "S3 bucket name")
 	cmd.Flags().StringVar(&prefix, "prefix", "", "S3 key prefix (optional)")
-	cmd.MarkFlagRequired("bucket")
+	_ = cmd.MarkFlagRequired("bucket")
 	return cmd
 }
 
@@ -74,6 +74,6 @@ func newS3DownloadCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&bucket, "bucket", "", "S3 bucket name")
 	cmd.Flags().StringVar(&prefix, "prefix", "", "S3 key prefix (optional)")
-	cmd.MarkFlagRequired("bucket")
+	_ = cmd.MarkFlagRequired("bucket")
 	return cmd
 }

@@ -11,6 +11,17 @@ go test ./internal/flickr/ -run TestBuildAPI  # run a single test
 
 Setup: `./setup.sh` (builds binary and verifies rclone binaries exist in `rclone-bin/`).
 
+## Linting & Testing
+
+```bash
+golangci-lint run ./...                       # run all linters
+go test ./...                                 # run all tests
+```
+
+Always run `golangci-lint run ./...` and `go test ./...` after making code changes, before committing. Fix any lint errors or test failures before proceeding.
+
+A Claude Code pre-commit hook (`.claude/settings.json`) enforces this — commits will be blocked if lint or tests fail.
+
 ## Architecture
 
 Go CLI app using [cobra](https://github.com/spf13/cobra) for command structure. Entry point: `cmd/photo-copy/main.go` calls `cli.Execute()`.
@@ -43,4 +54,4 @@ Go CLI app using [cobra](https://github.com/spf13/cobra) for command structure. 
 
 ### Design docs
 
-Detailed design and implementation plans live in `docs/plans/`.
+Detailed design and implementation plans live in `plans/`.

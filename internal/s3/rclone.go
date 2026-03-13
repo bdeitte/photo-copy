@@ -56,11 +56,11 @@ func writeRcloneConfig(accessKeyID, secretAccessKey, region string) (string, err
 	}
 
 	if _, err := f.WriteString(content); err != nil {
-		f.Close()
-		os.Remove(f.Name())
+		_ = f.Close()
+		_ = os.Remove(f.Name())
 		return "", fmt.Errorf("writing config: %w", err)
 	}
 
-	f.Close()
+	_ = f.Close()
 	return f.Name(), nil
 }

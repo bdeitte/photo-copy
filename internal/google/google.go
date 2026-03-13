@@ -207,7 +207,7 @@ func (c *Client) retryableDo(ctx context.Context, buildReq func() (*http.Request
 		}
 
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if attempt == maxRetries {
 				return nil, fmt.Errorf("HTTP %d after %d retries", resp.StatusCode, maxRetries)
 			}
@@ -246,7 +246,7 @@ func (c *Client) uploadBytes(ctx context.Context, filePath, filename string) (st
 	if err != nil {
 		return "", fmt.Errorf("upload request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -290,7 +290,7 @@ func (c *Client) createMediaItem(ctx context.Context, uploadToken, filename stri
 	if err != nil {
 		return fmt.Errorf("create request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -335,7 +335,7 @@ func loadUploadLog(path string) (map[string]bool, error) {
 		}
 		return nil, fmt.Errorf("opening upload log: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
@@ -349,12 +349,16 @@ func loadUploadLog(path string) (map[string]bool, error) {
 }
 
 // appendUploadLog adds a filename to the upload log.
-func appendUploadLog(path, filename string) error {
+func appendUploadLog(path, filename string) (err error) {
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("opening upload log: %w", err)
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 
 	_, err = fmt.Fprintln(f, filename)
 	return err

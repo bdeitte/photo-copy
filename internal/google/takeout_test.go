@@ -20,10 +20,10 @@ func createTestZip(t *testing.T, dir string, files map[string]string) string {
 		if err != nil {
 			t.Fatal(err)
 		}
-		fw.Write([]byte(content))
+		_, _ = fw.Write([]byte(content))
 	}
-	w.Close()
-	f.Close()
+	_ = w.Close()
+	_ = f.Close()
 	return zipPath
 }
 
@@ -82,12 +82,12 @@ func TestImportTakeout_MultipleZips(t *testing.T) {
 	createTestZip(t, takeoutDir, map[string]string{
 		"Google Photos/a.jpg": "data1",
 	})
-	os.Rename(filepath.Join(takeoutDir, "takeout.zip"), filepath.Join(takeoutDir, "takeout-001.zip"))
+	_ = os.Rename(filepath.Join(takeoutDir, "takeout.zip"), filepath.Join(takeoutDir, "takeout-001.zip"))
 
 	createTestZip(t, takeoutDir, map[string]string{
 		"Google Photos/b.png": "data2",
 	})
-	os.Rename(filepath.Join(takeoutDir, "takeout.zip"), filepath.Join(takeoutDir, "takeout-002.zip"))
+	_ = os.Rename(filepath.Join(takeoutDir, "takeout.zip"), filepath.Join(takeoutDir, "takeout-002.zip"))
 
 	count, err := ImportTakeout(takeoutDir, outputDir, nil)
 	if err != nil {

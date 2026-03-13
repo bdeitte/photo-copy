@@ -63,7 +63,7 @@ func extractMediaFromZip(zipPath, outputDir string, log *logging.Logger) (int, e
 	if err != nil {
 		return 0, fmt.Errorf("opening zip: %w", err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 
 	var mediaFiles []*zip.File
 	for _, f := range r.File {
@@ -105,29 +105,33 @@ func extractMediaFromZip(zipPath, outputDir string, log *logging.Logger) (int, e
 
 		if err := extractFile(f, destPath); err != nil {
 			log.Error("extracting %s: %v", f.Name, err)
-			bar.Add(1)
+			_ = bar.Add(1)
 			continue
 		}
 
 		extracted++
-		bar.Add(1)
+		_ = bar.Add(1)
 	}
 
 	return extracted, nil
 }
 
-func extractFile(f *zip.File, destPath string) error {
+func extractFile(f *zip.File, destPath string) (err error) {
 	rc, err := f.Open()
 	if err != nil {
 		return err
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	out, err := os.Create(destPath)
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() {
+		if cerr := out.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 
 	_, err = io.Copy(out, rc)
 	return err

@@ -78,7 +78,7 @@ func GetRequestToken(cfg *config.FlickrConfig) (string, string, string, error) {
 	if err != nil {
 		return "", "", "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 	vals, _ := url.ParseQuery(string(body))
@@ -114,7 +114,7 @@ func ExchangeToken(cfg *config.FlickrConfig, requestToken, requestTokenSecret, v
 	if err != nil {
 		return "", "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 	vals, _ := url.ParseQuery(string(body))

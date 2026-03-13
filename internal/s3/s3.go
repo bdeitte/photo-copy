@@ -35,7 +35,7 @@ func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, me
 	if err != nil {
 		return err
 	}
-	defer os.Remove(configPath)
+	defer func() { _ = os.Remove(configPath) }()
 
 	args := buildUploadArgs(configPath, inputDir, bucket, prefix)
 	if mediaOnly {
@@ -50,7 +50,7 @@ func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, me
 		if filesFromPath == "" {
 			return nil
 		}
-		defer os.Remove(filesFromPath)
+		defer func() { _ = os.Remove(filesFromPath) }()
 		// Replace include flags with --files-from (they're mutually exclusive in rclone)
 		args = buildUploadArgs(configPath, inputDir, bucket, prefix)
 		args = append(args, "--files-from", filesFromPath)
@@ -75,7 +75,7 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 	if err != nil {
 		return err
 	}
-	defer os.Remove(configPath)
+	defer func() { _ = os.Remove(configPath) }()
 
 	args := buildDownloadArgs(configPath, bucket, prefix, outputDir)
 	if mediaOnly {
@@ -94,7 +94,7 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 		if filesFromPath == "" {
 			return nil
 		}
-		defer os.Remove(filesFromPath)
+		defer func() { _ = os.Remove(filesFromPath) }()
 		// Replace include flags with --files-from (they're mutually exclusive in rclone)
 		args = buildDownloadArgs(configPath, bucket, prefix, outputDir)
 		args = append(args, "--files-from", filesFromPath)
@@ -178,9 +178,9 @@ func (c *Client) buildFilesFrom(ctx context.Context, rclonePath, configPath, sou
 		return "", err
 	}
 	_, err = f.WriteString(strings.Join(lines, "\n") + "\n")
-	f.Close()
+	_ = f.Close()
 	if err != nil {
-		os.Remove(f.Name())
+		_ = os.Remove(f.Name())
 		return "", err
 	}
 

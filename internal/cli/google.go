@@ -33,7 +33,7 @@ func newGoogleUploadCmd() *cobra.Command {
 			cfg, err := config.LoadGoogleConfig(config.DefaultDir())
 			if err != nil {
 				if errors.Is(err, config.ErrNotConfigured) {
-					return fmt.Errorf("Google credentials not configured. Run 'photo-copy config google' to set up (required for uploads only; to download, use Google Takeout with 'photo-copy google import-takeout')")
+					return fmt.Errorf("Google credentials not configured. Run 'photo-copy config google' to set up (required for uploads only; to download, use Google Takeout with 'photo-copy google import-takeout')") //nolint:staticcheck // proper noun
 				}
 				return fmt.Errorf("loading Google config: %w", err)
 			}

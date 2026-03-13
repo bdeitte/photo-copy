@@ -103,3 +103,56 @@ func TestConfigDir_CreatesDir(t *testing.T) {
 		t.Fatal("expected config dir to be created")
 	}
 }
+
+func TestLoadFlickrConfig_MalformedJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(tmpDir, "flickr.json"), []byte("{bad json"), 0644)
+
+	_, err := LoadFlickrConfig(tmpDir)
+	if err == nil {
+		t.Fatal("expected error for malformed JSON")
+	}
+}
+
+func TestLoadGoogleConfig_MalformedJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(tmpDir, "google_credentials.json"), []byte("not json"), 0644)
+
+	_, err := LoadGoogleConfig(tmpDir)
+	if err == nil {
+		t.Fatal("expected error for malformed JSON")
+	}
+}
+
+func TestLoadS3Config_MalformedJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(tmpDir, "s3.json"), []byte("{invalid"), 0644)
+
+	_, err := LoadS3Config(tmpDir)
+	if err == nil {
+		t.Fatal("expected error for malformed JSON")
+	}
+}
+
+func TestLoadS3Config_NotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	_, err := LoadS3Config(tmpDir)
+	if err == nil {
+		t.Fatal("expected error for missing config")
+	}
+}
+
+func TestLoadGoogleConfig_NotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	_, err := LoadGoogleConfig(tmpDir)
+	if err == nil {
+		t.Fatal("expected error for missing config")
+	}
+}
+
+func TestDefaultDir(t *testing.T) {
+	dir := DefaultDir()
+	if dir == "" {
+		t.Fatal("expected non-empty default dir")
+	}
+}
