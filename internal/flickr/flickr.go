@@ -208,11 +208,11 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) erro
 		}
 
 		var photosResp photosResponse
-		if err := json.NewDecoder(resp.Body).Decode(&photosResp); err != nil {
-			_ = resp.Body.Close()
-			return fmt.Errorf("decoding photos response: %w", err)
-		}
+		decodeErr := json.NewDecoder(resp.Body).Decode(&photosResp)
 		_ = resp.Body.Close()
+		if decodeErr != nil {
+			return fmt.Errorf("decoding photos response: %w", decodeErr)
+		}
 
 		if photosResp.Stat != "ok" {
 			return fmt.Errorf("Flickr API error on page %d: stat=%s", page, photosResp.Stat) //nolint:staticcheck // proper noun

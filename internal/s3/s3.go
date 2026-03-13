@@ -143,7 +143,7 @@ func buildDownloadArgs(configPath, bucket, prefix, outputDir string) []string {
 
 // buildFilesFrom runs "rclone lsf" on the source to list files, takes the first `limit` entries,
 // writes them to a temp file, and returns the path. The caller must remove the file when done.
-func (c *Client) buildFilesFrom(ctx context.Context, rclonePath, configPath, source string, copyArgs []string, limit int) (string, error) {
+func (c *Client) buildFilesFrom(ctx context.Context, rclonePath, configPath, source string, copyArgs []string, limit int) (_ string, err error) {
 	// Build lsf args, carrying over any --include filters from the copy args
 	lsfArgs := []string{"lsf", source, "--config", configPath, "--files-only", "-R"}
 	for i := 0; i < len(copyArgs); i++ {
@@ -178,7 +178,9 @@ func (c *Client) buildFilesFrom(ctx context.Context, rclonePath, configPath, sou
 		return "", err
 	}
 	_, err = f.WriteString(strings.Join(lines, "\n") + "\n")
-	_ = f.Close()
+	if cerr := f.Close(); cerr != nil && err == nil {
+		err = cerr
+	}
 	if err != nil {
 		_ = os.Remove(f.Name())
 		return "", err
