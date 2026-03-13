@@ -1102,7 +1102,8 @@ func TestFlickrDownload_HappyPath(t *testing.T) {
 		{"id": "3", "secret": "ccc", "server": "1", "title": "photo3"},
 	}
 
-	mock := mockserver.NewFlickr(t).
+	var mock *mockserver.FlickrMock
+	mock = mockserver.NewFlickr(t).
 		OnGetPhotos(mockserver.RespondJSON(200, flickrPhotosResponse(photos, 1, 1, 3))).
 		OnGetSizes(func(w http.ResponseWriter, r *http.Request) {
 			photoID := r.URL.Query().Get("photo_id")
@@ -1154,7 +1155,8 @@ func TestFlickrDownload_Pagination(t *testing.T) {
 		{"id": "3", "secret": "ccc", "server": "1", "title": "p3"},
 	}
 
-	mock := mockserver.NewFlickr(t).
+	var mock *mockserver.FlickrMock
+	mock = mockserver.NewFlickr(t).
 		OnGetPhotos(mockserver.RespondSequence(
 			mockserver.RespondJSON(200, flickrPhotosResponse(page1Photos, 1, 2, 3)),
 			mockserver.RespondJSON(200, flickrPhotosResponse(page2Photos, 2, 2, 3)),
@@ -1197,7 +1199,8 @@ func TestFlickrDownload_ResumesFromLog(t *testing.T) {
 		{"id": "2", "secret": "bbb", "server": "1", "title": "p2"},
 	}
 
-	mock := mockserver.NewFlickr(t).
+	var mock *mockserver.FlickrMock
+	mock = mockserver.NewFlickr(t).
 		OnGetPhotos(mockserver.RespondJSON(200, flickrPhotosResponse(photos, 1, 1, 2))).
 		OnGetSizes(func(w http.ResponseWriter, r *http.Request) {
 			photoID := r.URL.Query().Get("photo_id")
@@ -1244,7 +1247,8 @@ func TestFlickrDownload_RetryOn429(t *testing.T) {
 		{"id": "1", "secret": "aaa", "server": "1", "title": "p1"},
 	}
 
-	mock := mockserver.NewFlickr(t).
+	var mock *mockserver.FlickrMock
+	mock = mockserver.NewFlickr(t).
 		OnGetPhotos(mockserver.RespondJSON(200, flickrPhotosResponse(photos, 1, 1, 1))).
 		OnGetSizes(mockserver.RespondSequence(
 			mockserver.RespondStatus(429),
@@ -1280,7 +1284,8 @@ func TestFlickrDownload_RetryOn5xx(t *testing.T) {
 		{"id": "1", "secret": "aaa", "server": "1", "title": "p1"},
 	}
 
-	mock := mockserver.NewFlickr(t).
+	var mock *mockserver.FlickrMock
+	mock = mockserver.NewFlickr(t).
 		OnGetPhotos(mockserver.RespondJSON(200, flickrPhotosResponse(photos, 1, 1, 1))).
 		OnGetSizes(func(w http.ResponseWriter, r *http.Request) {
 			photoID := r.URL.Query().Get("photo_id")
@@ -1324,7 +1329,8 @@ func TestFlickrDownload_LimitFlag(t *testing.T) {
 		{"id": "5", "secret": "eee", "server": "1", "title": "p5"},
 	}
 
-	mock := mockserver.NewFlickr(t).
+	var mock *mockserver.FlickrMock
+	mock = mockserver.NewFlickr(t).
 		OnGetPhotos(mockserver.RespondJSON(200, flickrPhotosResponse(photos, 1, 1, 5))).
 		OnGetSizes(func(w http.ResponseWriter, r *http.Request) {
 			photoID := r.URL.Query().Get("photo_id")
@@ -1357,7 +1363,7 @@ func TestFlickrDownload_LimitFlag(t *testing.T) {
 }
 ```
 
-Note: The `mock` variable is used in closures passed to `OnGetSizes` before `Start()` is called. This works because closures capture the variable reference, and by the time the handler executes, `Start()` has already set `mock.Server`. However, this requires declaring the variable separately from the builder chain. The test code above uses this pattern correctly — `mock` is declared, the builder configures it, and `Start()` is called last.
+**IMPORTANT — closure variable capture**: The `OnGetSizes` closures reference `mock.Server.URL`. The variable MUST be declared separately with `var mock *mockserver.FlickrMock` before the builder chain, then assigned with `mock = ...`. Using `mock := ...` would fail to compile because `mock` is not in scope on the right side of `:=` when the closure is created. All 6 download tests above use the correct `var` + `=` pattern.
 
 - [ ] **Step 2: Run the integration tests**
 
@@ -1507,8 +1513,8 @@ func TestFlickrUpload_FailsOnError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error on upload failure")
 	}
-	if !strings.Contains(err.Error(), "500") {
-		t.Errorf("error should mention HTTP 500, got: %v", err)
+	if !strings.Contains(err.Error(), "upload failed HTTP 500") {
+		t.Errorf("error should mention upload failure, got: %v", err)
 	}
 }
 ```
@@ -1663,6 +1669,7 @@ func TestGoogleUpload_PartialFailure(t *testing.T) {
 	configDir := t.TempDir()
 	setupGoogleConfig(t, configDir)
 
+	// Filenames are alphabetically ordered so os.ReadDir processes a_good before b_bad
 	os.WriteFile(filepath.Join(inputDir, "a_good.jpg"), testImageData, 0644)
 	os.WriteFile(filepath.Join(inputDir, "b_bad.jpg"), []byte("data2"), 0644)
 
@@ -1913,9 +1920,13 @@ git commit -m "Document integration tests in README and CLAUDE.md"
 
 ## Implementation Notes
 
+### Security note on env var overrides
+
+The URL override env vars (`PHOTO_COPY_FLICKR_API_URL`, etc.) and OAuth bypass (`PHOTO_COPY_GOOGLE_TOKEN=skip`) are present in production binaries. This is an acceptable trade-off for this project because: (1) it's a personal CLI tool, not a server — only the local user can set env vars, (2) redirecting URLs to a malicious server would require the attacker to already have local access, and (3) gating behind build tags would require duplicating function signatures across build-tagged files, adding significant complexity. If this were a multi-user service, build-tag gating would be warranted.
+
 ### Key gotchas to watch for
 
-1. **Flickr mock variable capture**: In download tests, `OnGetSizes` closures reference `mock.Server.URL` to build download URLs. The `mock` variable must be declared before the builder chain so the closure captures the pointer. `Start()` populates `Server` before any handler is called.
+1. **Flickr mock variable capture**: In download tests, `OnGetSizes` closures reference `mock.Server.URL` to build download URLs. The `mock` variable MUST be declared with `var mock *mockserver.FlickrMock` before the builder chain, then assigned with `mock = ...`. Using `mock := ...` won't compile because the variable isn't in scope for the closure on the right side of `:=`. `Start()` populates `Server` before any handler is called.
 
 2. **recordRequest consumes r.Body**: The mock server's `recordRequest()` reads and closes `r.Body` before the handler runs. Handlers that need the body should use the recorded body from `mock.Requests()` after execution, not read `r.Body` directly.
 
