@@ -40,7 +40,28 @@ Tests need to redirect service URLs, config directory, and disable throttling. S
 
 ### Package-level variable reset
 
-The `debug` and `limit` variables in `internal/cli/root.go` are package-level vars bound via `PersistentFlags().BoolVar()`/`IntVar()`. Each test calls `cli.NewRootCmd()` which re-binds these flags to the same addresses. Since cobra parses flags fresh each time, the values get set correctly per test invocation. However, if a test does NOT pass `--limit`, the variable retains whatever value the previous test set. To avoid this, each integration test must explicitly pass the flags it needs (including `--limit 0` when the default is desired) or we reset the variables in a test helper. The simplest approach: create a `resetFlags()` helper called at the start of each test that sets `debug = false` and `limit = 0`. This requires exporting them or using a package-level `ResetForTest()` function.
+The `debug` and `limit` variables in `internal/cli/root.go` are package-level vars bound via `PersistentFlags().BoolVar()`/`IntVar()`. Each test calls `cli.NewRootCmd()` which re-binds these flags to the same addresses. Since cobra parses flags fresh each time, the values get set correctly per test invocation. However, if a test does NOT pass `--limit`, the variable retains whatever value the previous test set.
+
+**Solution**: Refactor `NewRootCmd()` to use a local struct that owns the flag state instead of package-level vars. The `RunE` closures already capture their enclosing scope, so the flags can live on a struct that `NewRootCmd()` creates and returns alongside the command. This eliminates shared mutable state entirely.
+
+```go
+type rootOpts struct {
+    debug bool
+    limit int
+}
+
+func NewRootCmd() *cobra.Command {
+    opts := &rootOpts{}
+    rootCmd := &cobra.Command{...}
+    rootCmd.PersistentFlags().BoolVar(&opts.debug, "debug", false, "...")
+    rootCmd.PersistentFlags().IntVar(&opts.limit, "limit", 0, "...")
+    // subcommand constructors receive opts
+    rootCmd.AddCommand(newFlickrCmd(opts))
+    // ...
+}
+```
+
+Each `NewRootCmd()` call gets its own `rootOpts`, so tests are fully isolated — no reset needed, safe with `t.Parallel()` if desired. Integration tests must NOT use `t.Parallel()` regardless, since they share env vars via `t.Setenv()`.
 
 ## Mock Server Package
 
@@ -264,7 +285,7 @@ func TestGoogleUpload_HappyPath(t *testing.T) {
 7. **TestFlickrUpload_HappyPath** — 2 media files in input dir, both uploaded. Mock verifies multipart POST received with correct file content.
 8. **TestFlickrUpload_SkipsNonMedia** — Directory with .jpg and .txt files. Only .jpg is uploaded.
 9. **TestFlickrUpload_LimitFlag** — 3 media files, `--limit 1`. Only 1 uploaded.
-10. **TestFlickrUpload_FailsOnError** — Upload returns HTTP 500. Verify command returns error immediately (Flickr upload fails fast, unlike Google which continues).
+10. **TestFlickrUpload_FailsOnError** — Upload returns HTTP 500. Verify command returns error immediately. Note: `uploadFile()` uses `c.http.Do()` directly (no retry logic), unlike `retryableGet()` used for downloads. This is an intentional asymmetry in the current code — uploads fail fast on any non-200 response, while downloads retry on 429/5xx.
 
 #### Google Upload (5 tests)
 
@@ -324,7 +345,11 @@ Add the integration test command to the Build & Run section.
 | `internal/config/config.go` | Modified | `DefaultDir()` checks `PHOTO_COPY_CONFIG_DIR` env var |
 | `internal/flickr/flickr.go` | Modified | URL helper funcs with env var override; throttle + retry delay test mode |
 | `internal/google/google.go` | Modified | URL helpers; OAuth bypass; throttle + retry delay test mode |
-| `internal/cli/root.go` | Modified | Add `ResetForTest()` to reset package-level `debug`/`limit` vars |
+| `internal/cli/root.go` | Modified | Refactor package-level `debug`/`limit` vars into `rootOpts` struct |
+| `internal/cli/flickr.go` | Modified | Accept `*rootOpts` parameter from `NewRootCmd()` |
+| `internal/cli/google.go` | Modified | Accept `*rootOpts` parameter from `NewRootCmd()` |
+| `internal/cli/s3.go` | Modified | Accept `*rootOpts` parameter from `NewRootCmd()` |
+| `internal/cli/config.go` | Modified | Accept `*rootOpts` parameter from `NewRootCmd()` (for debug flag) |
 | `internal/testutil/mockserver/helpers.go` | New | Shared types (`RecordedRequest`) and handler factories |
 | `internal/testutil/mockserver/flickr.go` | New | Configurable Flickr mock server with `t.Cleanup` auto-shutdown |
 | `internal/testutil/mockserver/google.go` | New | Configurable Google Photos mock server with `t.Cleanup` auto-shutdown |
