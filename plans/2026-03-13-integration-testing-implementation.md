@@ -1,6 +1,6 @@
 # Integration Testing Implementation Plan
 
-> **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add CLI-level integration tests that execute cobra commands against configurable mock HTTP servers for Flickr and Google Photos.
 
@@ -23,7 +23,7 @@
 - Modify: `internal/cli/s3.go`
 - Test: `internal/cli/cli_test.go` (existing, verify still passes)
 
-- [ ] **Step 1: Create rootOpts struct and refactor root.go**
+- [x] **Step 1: Create rootOpts struct and refactor root.go**
 
 Replace the package-level `debug` and `limit` vars with a struct, and thread it through subcommand constructors.
 
@@ -83,7 +83,7 @@ func Execute() {
 
 Note: `newConfigCmd()` does NOT receive `opts` because config commands don't use `debug` or `limit`.
 
-- [ ] **Step 2: Update flickr.go to accept opts**
+- [x] **Step 2: Update flickr.go to accept opts**
 
 Change function signatures to accept `*rootOpts`:
 
@@ -113,7 +113,7 @@ In each `RunE` closure, replace:
 - `client.Download(context.Background(), outputDir, limit)` → `client.Download(context.Background(), outputDir, opts.limit)`
 - `client.Upload(context.Background(), inputDir, limit)` → `client.Upload(context.Background(), inputDir, opts.limit)`
 
-- [ ] **Step 3: Update google.go to accept opts**
+- [x] **Step 3: Update google.go to accept opts**
 
 Same pattern:
 
@@ -133,7 +133,7 @@ func newGooglePhotosCmd(opts *rootOpts) *cobra.Command {
 In `newGoogleUploadCmd`: replace `debug` → `opts.debug`, `limit` → `opts.limit`.
 In `newGoogleImportTakeoutCmd`: replace `debug` → `opts.debug` (no `limit` used).
 
-- [ ] **Step 4: Update s3.go to accept opts**
+- [x] **Step 4: Update s3.go to accept opts**
 
 Same pattern:
 
@@ -153,13 +153,13 @@ func newS3Cmd(opts *rootOpts) *cobra.Command {
 In `newS3UploadCmd`: replace `debug` → `opts.debug`, `limit` → `opts.limit`.
 In `newS3DownloadCmd`: replace `debug` → `opts.debug`, `limit` → `opts.limit`.
 
-- [ ] **Step 5: Verify existing tests pass**
+- [x] **Step 5: Verify existing tests pass**
 
 Run: `go test ./internal/cli/ && golangci-lint run ./internal/cli/`
 
 Expected: All 9 existing CLI tests pass. Lint clean. The package-level `var debug bool` and `var limit int` lines should be removed — if lint reports unused vars, that confirms the refactor is complete.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/cli/root.go internal/cli/flickr.go internal/cli/google.go internal/cli/s3.go
@@ -174,7 +174,7 @@ git commit -m "Refactor CLI flags from package-level vars into rootOpts struct"
 - Modify: `internal/config/config.go`
 - Test: `internal/config/config_test.go`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `internal/config/config_test.go`:
 
@@ -187,13 +187,13 @@ func TestDefaultDir_EnvOverride(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/config/ -run TestDefaultDir_EnvOverride -v`
 
 Expected: FAIL — `DefaultDir()` returns `~/.config/photo-copy`, not `/tmp/test-config`.
 
-- [ ] **Step 3: Implement the env var check**
+- [x] **Step 3: Implement the env var check**
 
 In `internal/config/config.go`, modify `DefaultDir()`:
 
@@ -207,13 +207,13 @@ func DefaultDir() string {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `go test ./internal/config/ -v && golangci-lint run ./internal/config/`
 
 Expected: All config tests PASS including the new one. Lint clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/config/config.go internal/config/config_test.go
@@ -228,7 +228,7 @@ git commit -m "Add PHOTO_COPY_CONFIG_DIR env var override for DefaultDir()"
 - Modify: `internal/flickr/flickr.go`
 - Test: `internal/flickr/flickr_test.go`
 
-- [ ] **Step 1: Write failing tests for URL overrides and test mode**
+- [x] **Step 1: Write failing tests for URL overrides and test mode**
 
 Add to `internal/flickr/flickr_test.go`:
 
@@ -286,13 +286,13 @@ func TestRetryDelay_TestMode(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `go test ./internal/flickr/ -run "TestAPIURL|TestFlickrUploadURL|TestThrottle_TestMode|TestRetryDelay_TestMode" -v`
 
 Expected: FAIL — functions don't exist yet.
 
-- [ ] **Step 3: Implement URL helpers and test mode**
+- [x] **Step 3: Implement URL helpers and test mode**
 
 In `internal/flickr/flickr.go`:
 
@@ -403,13 +403,13 @@ func (c *Client) uploadFile(ctx context.Context, filePath string) error {
 }
 ```
 
-- [ ] **Step 4: Run all flickr tests to verify they pass**
+- [x] **Step 4: Run all flickr tests to verify they pass**
 
 Run: `go test ./internal/flickr/ -v && golangci-lint run ./internal/flickr/`
 
 Expected: All tests PASS. Lint clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/flickr/flickr.go internal/flickr/flickr_test.go
@@ -424,7 +424,7 @@ git commit -m "Add Flickr URL env var overrides and test mode for throttle/retry
 - Modify: `internal/google/google.go`
 - Test: `internal/google/google_test.go`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Add to `internal/google/google_test.go`:
 
@@ -493,13 +493,13 @@ func TestGoogleRetryDelay_TestMode(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `go test ./internal/google/ -run "TestGetUploadURL|TestGetBatchCreateURL|TestNewClient_SkipOAuth|TestGoogleThrottle_TestMode|TestGoogleRetryDelay_TestMode" -v`
 
 Expected: FAIL — functions don't exist yet.
 
-- [ ] **Step 3: Implement URL helpers, OAuth bypass, and test mode**
+- [x] **Step 3: Implement URL helpers, OAuth bypass, and test mode**
 
 In `internal/google/google.go`:
 
@@ -593,19 +593,19 @@ func (c *Client) createMediaItem(ctx context.Context, uploadToken, filename stri
 }
 ```
 
-- [ ] **Step 4: Run all google tests to verify they pass**
+- [x] **Step 4: Run all google tests to verify they pass**
 
 Run: `go test ./internal/google/ -v && golangci-lint run ./internal/google/`
 
 Expected: All tests PASS. Lint clean.
 
-- [ ] **Step 5: Run full test suite**
+- [x] **Step 5: Run full test suite**
 
 Run: `go test ./... && golangci-lint run ./...`
 
 Expected: All tests PASS across all packages. No regressions from production code changes.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/google/google.go internal/google/google_test.go
@@ -621,7 +621,7 @@ git commit -m "Add Google URL env var overrides, OAuth bypass, and test mode"
 **Files:**
 - Create: `internal/testutil/mockserver/helpers.go`
 
-- [ ] **Step 1: Create the helpers file**
+- [x] **Step 1: Create the helpers file**
 
 ```go
 // Package mockserver provides configurable mock HTTP servers for integration testing.
@@ -706,13 +706,13 @@ func RespondSequence(handlers ...HandlerFunc) HandlerFunc {
 }
 ```
 
-- [ ] **Step 2: Verify it compiles**
+- [x] **Step 2: Verify it compiles**
 
 Run: `go build ./internal/testutil/mockserver/`
 
 Expected: Compiles with no errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add internal/testutil/mockserver/helpers.go
@@ -726,7 +726,7 @@ git commit -m "Add mockserver package with shared types and handler factories"
 **Files:**
 - Create: `internal/testutil/mockserver/flickr.go`
 
-- [ ] **Step 1: Create the Flickr mock server**
+- [x] **Step 1: Create the Flickr mock server**
 
 ```go
 package mockserver
@@ -850,13 +850,13 @@ func (m *FlickrMock) Requests() []RecordedRequest {
 }
 ```
 
-- [ ] **Step 2: Verify it compiles**
+- [x] **Step 2: Verify it compiles**
 
 Run: `go build ./internal/testutil/mockserver/`
 
 Expected: Compiles with no errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add internal/testutil/mockserver/flickr.go
@@ -870,7 +870,7 @@ git commit -m "Add configurable Flickr mock server"
 **Files:**
 - Create: `internal/testutil/mockserver/google.go`
 
-- [ ] **Step 1: Create the Google mock server**
+- [x] **Step 1: Create the Google mock server**
 
 ```go
 package mockserver
@@ -955,13 +955,13 @@ func (m *GoogleMock) Requests() []RecordedRequest {
 }
 ```
 
-- [ ] **Step 2: Verify it compiles and full suite passes**
+- [x] **Step 2: Verify it compiles and full suite passes**
 
 Run: `go build ./internal/testutil/mockserver/ && go test ./... && golangci-lint run ./...`
 
 Expected: Compiles. All existing tests pass. Lint clean.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add internal/testutil/mockserver/google.go
@@ -979,7 +979,7 @@ git commit -m "Add configurable Google Photos mock server"
 
 All integration tests go in one file with the `//go:build integration` tag. This task creates the file with the Flickr download tests. Subsequent tasks append to it.
 
-- [ ] **Step 1: Create integration_test.go with test helpers and first 6 tests**
+- [x] **Step 1: Create integration_test.go with test helpers and first 6 tests**
 
 ```go
 //go:build integration
@@ -1365,19 +1365,19 @@ func TestFlickrDownload_LimitFlag(t *testing.T) {
 
 **IMPORTANT — closure variable capture**: The `OnGetSizes` closures reference `mock.Server.URL`. The variable MUST be declared separately with `var mock *mockserver.FlickrMock` before the builder chain, then assigned with `mock = ...`. Using `mock := ...` would fail to compile because `mock` is not in scope on the right side of `:=` when the closure is created. All 6 download tests above use the correct `var` + `=` pattern.
 
-- [ ] **Step 2: Run the integration tests**
+- [x] **Step 2: Run the integration tests**
 
 Run: `go test ./internal/cli/ -tags integration -v -count=1`
 
 Expected: All 6 Flickr download tests PASS.
 
-- [ ] **Step 3: Also verify unit tests still pass**
+- [x] **Step 3: Also verify unit tests still pass**
 
 Run: `go test ./... && golangci-lint run ./...`
 
 Expected: All tests PASS (unit tests unaffected by build tag). Lint clean.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add internal/cli/integration_test.go
@@ -1391,7 +1391,7 @@ git commit -m "Add Flickr download integration tests (6 tests)"
 **Files:**
 - Modify: `internal/cli/integration_test.go`
 
-- [ ] **Step 1: Append Flickr upload tests**
+- [x] **Step 1: Append Flickr upload tests**
 
 Add to `internal/cli/integration_test.go`:
 
@@ -1519,13 +1519,13 @@ func TestFlickrUpload_FailsOnError(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the Flickr upload integration tests**
+- [x] **Step 2: Run the Flickr upload integration tests**
 
 Run: `go test ./internal/cli/ -tags integration -run TestFlickrUpload -v -count=1`
 
 Expected: All 4 Flickr upload tests PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add internal/cli/integration_test.go
@@ -1539,7 +1539,7 @@ git commit -m "Add Flickr upload integration tests (4 tests)"
 **Files:**
 - Modify: `internal/cli/integration_test.go`
 
-- [ ] **Step 1: Append Google upload tests**
+- [x] **Step 1: Append Google upload tests**
 
 Add to `internal/cli/integration_test.go`:
 
@@ -1748,13 +1748,13 @@ func TestGoogleUpload_LimitFlag(t *testing.T) {
 
 Note: `recordRequest` in the mock consumes `r.Body` before the handler runs. Handlers that need request body data should not read `r.Body` — instead, assert via `mock.Requests()` after execution. The `OnBatchCreate` handler above just responds; the token handoff is verified via `mock.Requests()` in the assertions below.
 
-- [ ] **Step 2: Run the Google upload integration tests**
+- [x] **Step 2: Run the Google upload integration tests**
 
 Run: `go test ./internal/cli/ -tags integration -run TestGoogleUpload -v -count=1`
 
 Expected: All 5 Google upload tests PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add internal/cli/integration_test.go
@@ -1768,7 +1768,7 @@ git commit -m "Add Google upload integration tests (5 tests)"
 **Files:**
 - Modify: `internal/cli/integration_test.go`
 
-- [ ] **Step 1: Append import-takeout tests**
+- [x] **Step 1: Append import-takeout tests**
 
 Add to `internal/cli/integration_test.go`:
 
@@ -1846,25 +1846,25 @@ func TestGoogleImportTakeout_FiltersNonMedia(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the import-takeout integration tests**
+- [x] **Step 2: Run the import-takeout integration tests**
 
 Run: `go test ./internal/cli/ -tags integration -run TestGoogleImportTakeout -v -count=1`
 
 Expected: Both tests PASS.
 
-- [ ] **Step 3: Run all integration tests together**
+- [x] **Step 3: Run all integration tests together**
 
 Run: `go test ./internal/cli/ -tags integration -v -count=1`
 
 Expected: All 17 integration tests PASS.
 
-- [ ] **Step 4: Run full test suite (unit + lint)**
+- [x] **Step 4: Run full test suite (unit + lint)**
 
 Run: `go test ./... && golangci-lint run ./...`
 
 Expected: All unit tests PASS. Lint clean. Integration tests not executed (no build tag).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/cli/integration_test.go
@@ -1881,7 +1881,7 @@ git commit -m "Add Google import-takeout integration tests (2 tests)"
 - Modify: `README.md`
 - Modify: `CLAUDE.md`
 
-- [ ] **Step 1: Add integration test section to README.md**
+- [x] **Step 1: Add integration test section to README.md**
 
 After the existing "Linting & Testing" section in README.md (around line 105), add:
 
@@ -1901,7 +1901,7 @@ subprocess, and rclone's own test coverage handles that layer. S3 unit tests
 cover command arg building, config generation, and binary resolution.
 ```
 
-- [ ] **Step 2: Add integration test command to CLAUDE.md**
+- [x] **Step 2: Add integration test command to CLAUDE.md**
 
 In the "Linting & Testing" section of CLAUDE.md, add after the existing commands:
 
@@ -1909,7 +1909,7 @@ In the "Linting & Testing" section of CLAUDE.md, add after the existing commands
 go test ./internal/cli/ -tags integration    # run integration tests
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add README.md CLAUDE.md
