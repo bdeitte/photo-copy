@@ -22,13 +22,32 @@ import (
 )
 
 const (
-	uploadURL          = "https://photoslibrary.googleapis.com/v1/uploads"
-	batchCreateURL     = "https://photoslibrary.googleapis.com/v1/mediaItems:batchCreate"
-	dailyLimit         = 10000
-	maxRetries         = 5
-	baseRetryDelay     = 2 * time.Second
-	minUploadInterval  = 2 * time.Second // Throttle uploads to avoid rate limiting
+	defaultUploadURL     = "https://photoslibrary.googleapis.com/v1/uploads"
+	defaultBatchCreateURL = "https://photoslibrary.googleapis.com/v1/mediaItems:batchCreate"
+	defaultAPIBase       = "https://photoslibrary.googleapis.com"
+	dailyLimit           = 10000
+	maxRetries           = 5
+	baseRetryDelay       = 2 * time.Second
+	minUploadInterval    = 2 * time.Second // Throttle uploads to avoid rate limiting
 )
+
+func getUploadURL() string {
+	if base := os.Getenv("PHOTO_COPY_GOOGLE_API_URL"); base != "" {
+		return base + "/v1/uploads"
+	}
+	return defaultUploadURL
+}
+
+func getBatchCreateURL() string {
+	if base := os.Getenv("PHOTO_COPY_GOOGLE_API_URL"); base != "" {
+		return base + "/v1/mediaItems:batchCreate"
+	}
+	return defaultBatchCreateURL
+}
+
+func isTestMode() bool {
+	return os.Getenv("PHOTO_COPY_TEST_MODE") != ""
+}
 
 var oauthScopes = []string{
 	"https://www.googleapis.com/auth/photoslibrary.appendonly",
@@ -44,6 +63,14 @@ type Client struct {
 
 // NewClient creates a new Google Photos client with OAuth2 authentication.
 func NewClient(ctx context.Context, cfg *config.GoogleConfig, configDir string, log *logging.Logger) (*Client, error) {
+	if os.Getenv("PHOTO_COPY_GOOGLE_TOKEN") == "skip" {
+		return &Client{
+			httpClient: &http.Client{},
+			log:        log,
+			configDir:  configDir,
+		}, nil
+	}
+
 	oauthCfg := &oauth2.Config{
 		ClientID:     cfg.ClientID,
 		ClientSecret: cfg.ClientSecret,
@@ -156,6 +183,9 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) error {
 
 // throttle ensures we don't exceed Google Photos API rate limits.
 func (c *Client) throttle() {
+	if isTestMode() {
+		return
+	}
 	if !c.lastRequest.IsZero() {
 		elapsed := time.Since(c.lastRequest)
 		if elapsed < minUploadInterval {
@@ -167,6 +197,9 @@ func (c *Client) throttle() {
 
 // retryDelay calculates the backoff delay, honoring the Retry-After header if present.
 func (c *Client) retryDelay(attempt int, resp *http.Response) time.Duration {
+	if isTestMode() {
+		return 0
+	}
 	if resp != nil {
 		if ra := resp.Header.Get("Retry-After"); ra != "" {
 			if seconds, err := strconv.Atoi(ra); err == nil {
@@ -234,7 +267,7 @@ func (c *Client) uploadBytes(ctx context.Context, filePath, filename string) (st
 	}
 
 	resp, err := c.retryableDo(ctx, func() (*http.Request, error) {
-		req, err := http.NewRequest("POST", uploadURL, bytes.NewReader(data))
+		req, err := http.NewRequest("POST", getUploadURL(), bytes.NewReader(data))
 		if err != nil {
 			return nil, fmt.Errorf("creating request: %w", err)
 		}
@@ -280,7 +313,7 @@ func (c *Client) createMediaItem(ctx context.Context, uploadToken, filename stri
 	}
 
 	resp, err := c.retryableDo(ctx, func() (*http.Request, error) {
-		req, err := http.NewRequest("POST", batchCreateURL, bytes.NewReader(data))
+		req, err := http.NewRequest("POST", getBatchCreateURL(), bytes.NewReader(data))
 		if err != nil {
 			return nil, fmt.Errorf("creating request: %w", err)
 		}

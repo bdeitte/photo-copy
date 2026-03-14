@@ -1,12 +1,14 @@
 package google
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/briandeitte/photo-copy/internal/config"
 	"github.com/briandeitte/photo-copy/internal/logging"
 )
 
@@ -64,6 +66,69 @@ func newTestGoogleClient() *Client {
 	return &Client{
 		httpClient: &http.Client{},
 		log:        logging.New(false, nil),
+	}
+}
+
+func TestGetUploadURL_Default(t *testing.T) {
+	got := getUploadURL()
+	if got != "https://photoslibrary.googleapis.com/v1/uploads" {
+		t.Errorf("getUploadURL() = %q, want default", got)
+	}
+}
+
+func TestGetUploadURL_EnvOverride(t *testing.T) {
+	t.Setenv("PHOTO_COPY_GOOGLE_API_URL", "http://localhost:9999")
+	got := getUploadURL()
+	if got != "http://localhost:9999/v1/uploads" {
+		t.Errorf("getUploadURL() = %q, want override", got)
+	}
+}
+
+func TestGetBatchCreateURL_Default(t *testing.T) {
+	got := getBatchCreateURL()
+	if got != "https://photoslibrary.googleapis.com/v1/mediaItems:batchCreate" {
+		t.Errorf("getBatchCreateURL() = %q, want default", got)
+	}
+}
+
+func TestGetBatchCreateURL_EnvOverride(t *testing.T) {
+	t.Setenv("PHOTO_COPY_GOOGLE_API_URL", "http://localhost:9999")
+	got := getBatchCreateURL()
+	if got != "http://localhost:9999/v1/mediaItems:batchCreate" {
+		t.Errorf("getBatchCreateURL() = %q, want override", got)
+	}
+}
+
+func TestNewClient_SkipOAuth(t *testing.T) {
+	t.Setenv("PHOTO_COPY_GOOGLE_TOKEN", "skip")
+	cfg := &config.GoogleConfig{ClientID: "test", ClientSecret: "test"}
+	client, err := NewClient(context.Background(), cfg, t.TempDir(), nil)
+	if err != nil {
+		t.Fatalf("NewClient with skip token failed: %v", err)
+	}
+	if client == nil {
+		t.Fatal("expected non-nil client")
+	}
+}
+
+func TestGoogleThrottle_TestMode(t *testing.T) {
+	t.Setenv("PHOTO_COPY_TEST_MODE", "1")
+	c := newTestGoogleClient()
+	start := time.Now()
+	c.throttle()
+	c.throttle()
+	elapsed := time.Since(start)
+	if elapsed > 100*time.Millisecond {
+		t.Errorf("throttle in test mode took %v, expected near-zero", elapsed)
+	}
+}
+
+func TestGoogleRetryDelay_TestMode(t *testing.T) {
+	t.Setenv("PHOTO_COPY_TEST_MODE", "1")
+	c := newTestGoogleClient()
+	delay := c.retryDelay(3, nil)
+	if delay != 0 {
+		t.Errorf("retryDelay in test mode = %v, want 0", delay)
 	}
 }
 
