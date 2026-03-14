@@ -25,4 +25,10 @@ if ! go test ./... >&2; then
   exit 2
 fi
 
+# Run integration tests
+if ! go test ./internal/cli/ -tags integration -count=1 >&2; then
+  echo "Integration tests failed. Fix failures before committing." >&2
+  exit 2
+fi
+
 exit 0
