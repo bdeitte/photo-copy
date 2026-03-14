@@ -60,8 +60,11 @@ func TestBuildMediaIncludeFlags(t *testing.T) {
 	if len(flags) == 0 {
 		t.Fatal("expected include flags")
 	}
-	if flags[0] != "--include" {
-		t.Fatalf("expected --include, got %s", flags[0])
+	if flags[0] != "--ignore-case" {
+		t.Fatalf("expected --ignore-case first, got %s", flags[0])
+	}
+	if flags[1] != "--include" {
+		t.Fatalf("expected --include second, got %s", flags[1])
 	}
 }
 
@@ -80,12 +83,17 @@ func TestBuildDownloadArgs_NoPrefix(t *testing.T) {
 
 func TestBuildMediaIncludeFlags_HasPairs(t *testing.T) {
 	flags := buildMediaIncludeFlags()
-	if len(flags)%2 != 0 {
-		t.Fatalf("expected even number of flags (--include pairs), got %d", len(flags))
+	// First flag is --ignore-case, then --include/pattern pairs
+	if flags[0] != "--ignore-case" {
+		t.Fatalf("flags[0] = %q, want --ignore-case", flags[0])
 	}
-	for i := 0; i < len(flags); i += 2 {
-		if flags[i] != "--include" {
-			t.Errorf("flags[%d] = %q, want --include", i, flags[i])
+	rest := flags[1:]
+	if len(rest)%2 != 0 {
+		t.Fatalf("expected even number of flags after --ignore-case (--include pairs), got %d", len(rest))
+	}
+	for i := 0; i < len(rest); i += 2 {
+		if rest[i] != "--include" {
+			t.Errorf("flags[%d] = %q, want --include", i+1, rest[i])
 		}
 	}
 }
@@ -93,11 +101,14 @@ func TestBuildMediaIncludeFlags_HasPairs(t *testing.T) {
 func TestBuildMediaIncludeFlags_CoversExpectedExtensions(t *testing.T) {
 	flags := buildMediaIncludeFlags()
 	flagSet := make(map[string]bool)
-	for i := 1; i < len(flags); i += 2 {
-		flagSet[flags[i]] = true
+	for i := 1; i < len(flags); i++ {
+		if flags[i] != "--include" {
+			flagSet[flags[i]] = true
+		}
 	}
 
-	expected := []string{"*.jpg", "*.JPG", "*.mp4", "*.MP4", "*.heic", "*.HEIC"}
+	// With --ignore-case, only lowercase patterns are needed
+	expected := []string{"*.jpg", "*.mp4", "*.heic", "*.png", "*.mov"}
 	for _, ext := range expected {
 		if !flagSet[ext] {
 			t.Errorf("missing expected extension: %s", ext)

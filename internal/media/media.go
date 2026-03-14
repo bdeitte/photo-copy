@@ -24,3 +24,12 @@ func IsSupportedFile(filename string) bool {
 	ext := strings.ToLower(filepath.Ext(filename))
 	return supportedExtensions[ext]
 }
+
+// SupportedExtensions returns the set of supported file extensions (lowercase, with leading dot).
+func SupportedExtensions() []string {
+	exts := make([]string, 0, len(supportedExtensions))
+	for ext := range supportedExtensions {
+		exts = append(exts, ext)
+	}
+	return exts
+}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/briandeitte/photo-copy/internal/config"
 	"github.com/briandeitte/photo-copy/internal/logging"
+	"github.com/briandeitte/photo-copy/internal/media"
 )
 
 type Client struct {
@@ -190,16 +191,9 @@ func (c *Client) buildFilesFrom(ctx context.Context, rclonePath, configPath, sou
 }
 
 func buildMediaIncludeFlags() []string {
-	extensions := []string{
-		"*.jpg", "*.jpeg", "*.png", "*.tiff", "*.tif", "*.gif",
-		"*.heic", "*.webp", "*.mp4", "*.mov", "*.avi", "*.mkv",
-		"*.JPG", "*.JPEG", "*.PNG", "*.TIFF", "*.TIF", "*.GIF",
-		"*.HEIC", "*.WEBP", "*.MP4", "*.MOV", "*.AVI", "*.MKV",
-	}
-
-	var flags []string
-	for _, ext := range extensions {
-		flags = append(flags, "--include", ext)
+	flags := []string{"--ignore-case"}
+	for _, ext := range media.SupportedExtensions() {
+		flags = append(flags, "--include", "*"+ext)
 	}
 	return flags
 }
