@@ -103,6 +103,20 @@ golangci-lint run ./...    # lint
 go test ./...              # test
 ```
 
+### Integration Tests
+
+Integration tests exercise CLI commands end-to-end against mock HTTP servers
+for Flickr and Google Photos. They use a build tag and don't run with
+`go test ./...`:
+
+```bash
+go test ./internal/cli/ -tags integration
+```
+
+S3 integration testing is not included — S3 operations delegate to a rclone
+subprocess, and rclone's own test coverage handles that layer. S3 unit tests
+cover command arg building, config generation, and binary resolution.
+
 ### Updating rclone
 
 To update the bundled rclone binaries:

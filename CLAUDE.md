@@ -20,6 +20,7 @@ Setup: `./setup.sh` (builds binary and verifies rclone binaries exist in `rclone
 ```bash
 golangci-lint run ./...                       # run all linters
 go test ./...                                 # run all tests
+go test ./internal/cli/ -tags integration    # run integration tests
 ```
 
 Always run `golangci-lint run ./...` and `go test ./...` after making code changes, before committing. Fix any lint errors or test failures before proceeding.
