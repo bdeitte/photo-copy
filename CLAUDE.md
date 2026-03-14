@@ -1,5 +1,9 @@
 # CLAUDE.md
 
+## Always commit changes
+
+After any loop of work, always commit the changes. This allows usage of roborev to review the changes.
+
 ## Build & Run
 
 ```bash
