@@ -190,7 +190,6 @@ func TestWriteReport(t *testing.T) {
 	r := NewResult("flickr", "download", dir)
 	r.Expected = 5
 	r.Succeeded = 4
-	r.Failed = 1
 	r.TotalBytes = 1024
 	r.RecordError("bad.jpg", "HTTP 500")
 	r.Warnings = append(r.Warnings, ValidationWarning{File: "empty.jpg", Message: "zero-size file"})
