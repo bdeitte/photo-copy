@@ -31,6 +31,9 @@ type GoogleConfig struct {
 }
 
 func DefaultDir() string {
+	if dir := os.Getenv("PHOTO_COPY_CONFIG_DIR"); dir != "" {
+		return dir
+	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".config", "photo-copy")
 }

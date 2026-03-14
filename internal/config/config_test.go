@@ -156,3 +156,10 @@ func TestDefaultDir(t *testing.T) {
 		t.Fatal("expected non-empty default dir")
 	}
 }
+
+func TestDefaultDir_EnvOverride(t *testing.T) {
+	t.Setenv("PHOTO_COPY_CONFIG_DIR", "/tmp/test-config")
+	if got := DefaultDir(); got != "/tmp/test-config" {
+		t.Errorf("DefaultDir() = %q, want %q", got, "/tmp/test-config")
+	}
+}
