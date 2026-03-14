@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -253,28 +254,34 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) erro
 
 		pageSkipped := 0
 		for _, photo := range photosResp.Photos.Photo {
-			filename := fmt.Sprintf("%s_%s.jpg", photo.ID, photo.Secret)
-			if transferred[filename] {
+			if transferred[photo.ID] {
 				totalSkipped++
 				pageSkipped++
-				c.log.Debug("skipping already downloaded: %s", filename)
+				c.log.Debug("skipping already downloaded: %s", photo.ID)
 				continue
 			}
 
-			downloadURL, err := c.getOriginalURL(ctx, photo.ID)
+			result, err := c.getOriginalURL(ctx, photo.ID)
 			if err != nil {
 				totalErrors++
 				c.log.Error("[%d/%d] getting original URL for %s: %v", totalDownloaded+totalSkipped+totalErrors, totalPhotos, photo.ID, err)
 				continue
 			}
 
-			if err := c.downloadFile(ctx, downloadURL, filepath.Join(outputDir, filename)); err != nil {
+			if result.Label != "Original" && result.Label != "Video Original" {
+				c.log.Info("warning: original not available for %s, using %s", photo.ID, result.Label)
+			}
+
+			ext := extensionFromURL(result.URL)
+			filename := fmt.Sprintf("%s_%s%s", photo.ID, photo.Secret, ext)
+
+			if err := c.downloadFile(ctx, result.URL, filepath.Join(outputDir, filename)); err != nil {
 				totalErrors++
 				c.log.Error("[%d/%d] downloading %s: %v", totalDownloaded+totalSkipped+totalErrors, totalPhotos, filename, err)
 				continue
 			}
 
-			if err := appendTransferLog(logPath, filename); err != nil {
+			if err := appendTransferLog(logPath, photo.ID); err != nil {
 				c.log.Error("updating transfer log for %s: %v", filename, err)
 			}
 
@@ -312,39 +319,46 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) erro
 	return nil
 }
 
-// getOriginalURL retrieves the original-size URL for a photo.
-func (c *Client) getOriginalURL(ctx context.Context, photoID string) (string, error) {
+// originalResult holds the URL and metadata from getOriginalURL.
+type originalResult struct {
+	URL   string
+	Label string
+}
+
+// getOriginalURL retrieves the best available URL for a photo or video.
+func (c *Client) getOriginalURL(ctx context.Context, photoID string) (*originalResult, error) {
 	resp, err := c.signedAPIGet(ctx, "flickr.photos.getSizes", map[string]string{
 		"photo_id": photoID,
 	})
 	if err != nil {
-		return "", fmt.Errorf("fetching sizes: %w", err)
+		return nil, fmt.Errorf("fetching sizes: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	var sizesResp sizesResponse
 	if err := json.NewDecoder(resp.Body).Decode(&sizesResp); err != nil {
-		return "", fmt.Errorf("decoding sizes response: %w", err)
+		return nil, fmt.Errorf("decoding sizes response: %w", err)
 	}
 
 	if sizesResp.Stat != "ok" {
-		return "", fmt.Errorf("Flickr API error: stat=%s", sizesResp.Stat) //nolint:staticcheck // proper noun
+		return nil, fmt.Errorf("Flickr API error: stat=%s", sizesResp.Stat) //nolint:staticcheck // proper noun
 	}
 
-	// Prefer "Original", fall back to "Large", then last available size.
-	for _, pref := range []string{"Original", "Large"} {
+	// Prefer original sizes, then large fallbacks, then last available.
+	for _, pref := range []string{"Original", "Video Original", "Large", "Video Player"} {
 		for _, s := range sizesResp.Sizes.Size {
 			if s.Label == pref {
-				return s.Source, nil
+				return &originalResult{URL: s.Source, Label: s.Label}, nil
 			}
 		}
 	}
 
 	if len(sizesResp.Sizes.Size) > 0 {
-		return sizesResp.Sizes.Size[len(sizesResp.Sizes.Size)-1].Source, nil
+		last := sizesResp.Sizes.Size[len(sizesResp.Sizes.Size)-1]
+		return &originalResult{URL: last.Source, Label: last.Label}, nil
 	}
 
-	return "", fmt.Errorf("no sizes available for photo %s", photoID)
+	return nil, fmt.Errorf("no sizes available for photo %s", photoID)
 }
 
 // downloadFile downloads a URL to a local file path with rate limiting and retry.
@@ -479,11 +493,26 @@ func (c *Client) uploadFile(ctx context.Context, filePath string) error {
 	return nil
 }
 
-// loadTransferLog reads the transfer log and returns a set of transferred filenames.
-func loadTransferLog(path string) (map[string]bool, error) {
+// extensionFromURL extracts the file extension from a Flickr media URL.
+// Falls back to ".jpg" if the extension cannot be determined.
+func extensionFromURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err == nil {
+		ext := strings.ToLower(path.Ext(u.Path))
+		if ext != "" {
+			return ext
+		}
+	}
+	return ".jpg"
+}
+
+// loadTransferLog reads the transfer log and returns a set of photo IDs that
+// have been transferred. Handles both old format (filename like "ID_SECRET.jpg")
+// and new format (bare photo ID).
+func loadTransferLog(logPath string) (map[string]bool, error) {
 	result := make(map[string]bool)
 
-	f, err := os.Open(path)
+	f, err := os.Open(logPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return result, nil
@@ -495,7 +524,14 @@ func loadTransferLog(path string) (map[string]bool, error) {
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if line != "" {
+		if line == "" {
+			continue
+		}
+		// Old format: "12345_secret.jpg" → extract photo ID "12345"
+		// New format: "12345" → use as-is
+		if idx := strings.Index(line, "_"); idx > 0 {
+			result[line[:idx]] = true
+		} else {
 			result[line] = true
 		}
 	}

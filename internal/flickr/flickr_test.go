@@ -27,10 +27,10 @@ func TestTransferLog_SaveAndLoad(t *testing.T) {
 	tmpDir := t.TempDir()
 	logPath := filepath.Join(tmpDir, "transfer.log")
 
-	if err := appendTransferLog(logPath, "photo1.jpg"); err != nil {
+	if err := appendTransferLog(logPath, "111"); err != nil {
 		t.Fatalf("append failed: %v", err)
 	}
-	if err := appendTransferLog(logPath, "photo2.jpg"); err != nil {
+	if err := appendTransferLog(logPath, "222"); err != nil {
 		t.Fatalf("append failed: %v", err)
 	}
 
@@ -39,8 +39,59 @@ func TestTransferLog_SaveAndLoad(t *testing.T) {
 		t.Fatalf("load failed: %v", err)
 	}
 
-	if !log["photo1.jpg"] || !log["photo2.jpg"] {
-		t.Fatalf("expected both photos in log, got: %v", log)
+	if !log["111"] || !log["222"] {
+		t.Fatalf("expected both photo IDs in log, got: %v", log)
+	}
+}
+
+func TestTransferLog_BackwardCompatibility(t *testing.T) {
+	tmpDir := t.TempDir()
+	logPath := filepath.Join(tmpDir, "transfer.log")
+
+	// Old format: "ID_SECRET.jpg"
+	if err := appendTransferLog(logPath, "12345_abcdef.jpg"); err != nil {
+		t.Fatalf("append failed: %v", err)
+	}
+	// New format: bare ID
+	if err := appendTransferLog(logPath, "67890"); err != nil {
+		t.Fatalf("append failed: %v", err)
+	}
+
+	log, err := loadTransferLog(logPath)
+	if err != nil {
+		t.Fatalf("load failed: %v", err)
+	}
+
+	if !log["12345"] {
+		t.Fatalf("expected old-format entry to be parsed as photo ID '12345', got: %v", log)
+	}
+	if !log["67890"] {
+		t.Fatalf("expected new-format entry '67890' in log, got: %v", log)
+	}
+}
+
+func TestExtensionFromURL(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+		want string
+	}{
+		{"jpg photo", "https://farm1.staticflickr.com/server/12345_secret_o.jpg", ".jpg"},
+		{"png photo", "https://farm1.staticflickr.com/server/12345_secret_o.png", ".png"},
+		{"mp4 video", "https://www.flickr.com/photos/user/12345/play/orig/abcdef.mp4", ".mp4"},
+		{"mov video", "https://example.com/video.mov", ".mov"},
+		{"no extension", "https://example.com/file", ".jpg"},
+		{"empty url", "", ".jpg"},
+		{"query params", "https://example.com/photo.png?token=abc", ".png"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extensionFromURL(tt.url)
+			if got != tt.want {
+				t.Errorf("extensionFromURL(%q) = %q, want %q", tt.url, got, tt.want)
+			}
+		})
 	}
 }
 
