@@ -22,10 +22,9 @@ import (
 )
 
 const (
-	defaultUploadURL     = "https://photoslibrary.googleapis.com/v1/uploads"
+	defaultUploadURL      = "https://photoslibrary.googleapis.com/v1/uploads"
 	defaultBatchCreateURL = "https://photoslibrary.googleapis.com/v1/mediaItems:batchCreate"
-	defaultAPIBase       = "https://photoslibrary.googleapis.com"
-	dailyLimit           = 10000
+	dailyLimit            = 10000
 	maxRetries           = 5
 	baseRetryDelay       = 2 * time.Second
 	minUploadInterval    = 2 * time.Second // Throttle uploads to avoid rate limiting
