@@ -191,6 +191,7 @@ func (c *Client) buildFilesFrom(ctx context.Context, rclonePath, configPath, sou
 }
 
 func buildMediaIncludeFlags() []string {
+	// --ignore-case is a global rclone flag that applies to all --include patterns.
 	flags := []string{"--ignore-case"}
 	for _, ext := range media.SupportedExtensions() {
 		flags = append(flags, "--include", "*"+ext)
