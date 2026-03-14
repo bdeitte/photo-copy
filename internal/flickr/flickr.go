@@ -345,7 +345,9 @@ func (c *Client) getOriginalURL(ctx context.Context, photoID string) (*originalR
 	}
 
 	// Prefer original sizes, then large fallbacks, then last available.
-	for _, pref := range []string{"Original", "Video Original", "Large", "Video Player"} {
+	// Video sizes are checked first so that a video with both "Original" (photo
+	// thumbnail) and "Video Original" picks the actual video file.
+	for _, pref := range []string{"Video Original", "Original", "Video Player", "Large"} {
 		for _, s := range sizesResp.Sizes.Size {
 			if s.Label == pref {
 				return &originalResult{URL: s.Source, Label: s.Label}, nil
