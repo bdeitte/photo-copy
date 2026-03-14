@@ -19,6 +19,8 @@ setup.bat
 
 ### Configure credentials
 
+Each command will tell you what you need to do.
+
 ```bash
 ./photo-copy config flickr    # Flickr API key + OAuth
 ./photo-copy config google    # Google OAuth credentials for upload
@@ -96,11 +98,11 @@ Install golangci-lint:
 brew install golangci-lint
 ```
 
-Run linting and tests:
+Run linting and unit tests:
 
 ```bash
-golangci-lint run ./...    # lint
-go test ./...              # test
+golangci-lint run ./...
+go test ./...
 ```
 
 ### Integration Tests
