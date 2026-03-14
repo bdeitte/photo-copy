@@ -17,6 +17,7 @@ import (
 	"github.com/briandeitte/photo-copy/internal/config"
 	"github.com/briandeitte/photo-copy/internal/logging"
 	"github.com/briandeitte/photo-copy/internal/media"
+	"github.com/briandeitte/photo-copy/internal/transfer"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
@@ -100,10 +101,12 @@ func NewClient(ctx context.Context, cfg *config.GoogleConfig, configDir string, 
 }
 
 // Upload uploads all media files from inputDir to Google Photos.
-func (c *Client) Upload(ctx context.Context, inputDir string, limit int) error {
+func (c *Client) Upload(ctx context.Context, inputDir string, limit int) (*transfer.Result, error) {
+	result := transfer.NewResult("google-photos", "upload", inputDir)
+
 	files, err := collectMediaFiles(inputDir)
 	if err != nil {
-		return fmt.Errorf("collecting media files: %w", err)
+		return result, fmt.Errorf("collecting media files: %w", err)
 	}
 
 	c.log.Info("found %d media files in %s", len(files), inputDir)
@@ -111,7 +114,7 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) error {
 	logPath := filepath.Join(inputDir, ".photo-copy-upload.log")
 	uploaded, err := loadUploadLog(logPath)
 	if err != nil {
-		return fmt.Errorf("loading upload log: %w", err)
+		return result, fmt.Errorf("loading upload log: %w", err)
 	}
 
 	// Filter already uploaded files
@@ -124,7 +127,9 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) error {
 
 	if len(toUpload) == 0 {
 		c.log.Info("all files already uploaded")
-		return nil
+		result.RecordSkip(len(uploaded))
+		result.Finish()
+		return result, nil
 	}
 
 	if len(toUpload) > dailyLimit {
@@ -137,10 +142,10 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) error {
 		toUpload = toUpload[:limit]
 	}
 
-	c.log.Info("uploading %d files (%d already uploaded)", len(toUpload), len(uploaded))
+	result.Expected = len(toUpload)
+	result.RecordSkip(len(uploaded))
 
-	totalUploaded := 0
-	totalErrors := 0
+	c.log.Info("uploading %d files (%d already uploaded)", len(toUpload), len(uploaded))
 
 	for i, filePath := range toUpload {
 		filename := filepath.Base(filePath)
@@ -149,14 +154,14 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) error {
 
 		uploadToken, err := c.uploadBytes(ctx, filePath, filename)
 		if err != nil {
-			totalErrors++
+			result.RecordError(filename, err.Error())
 			c.log.Error("upload failed for %s: %v", filename, err)
 			continue
 		}
 
 		c.log.Debug("got upload token for %s, creating media item", filename)
 		if err := c.createMediaItem(ctx, uploadToken, filename); err != nil {
-			totalErrors++
+			result.RecordError(filename, err.Error())
 			c.log.Error("create media item failed for %s: %v", filename, err)
 			continue
 		}
@@ -165,19 +170,17 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) error {
 			c.log.Error("failed to update upload log: %v", err)
 		}
 
-		totalUploaded++
+		info, statErr := os.Stat(filePath)
+		if statErr == nil {
+			result.RecordSuccess(filename, info.Size())
+		} else {
+			result.RecordSuccess(filename, 0)
+		}
 		c.log.Debug("successfully uploaded %s", filename)
 	}
 
-	parts := []string{fmt.Sprintf("%d uploaded", totalUploaded)}
-	if len(uploaded) > 0 {
-		parts = append(parts, fmt.Sprintf("%d already existed", len(uploaded)))
-	}
-	if totalErrors > 0 {
-		parts = append(parts, fmt.Sprintf("%d failed", totalErrors))
-	}
-	c.log.Info("upload complete: %s", strings.Join(parts, ", "))
-	return nil
+	result.Finish()
+	return result, nil
 }
 
 // throttle ensures we don't exceed Google Photos API rate limits.

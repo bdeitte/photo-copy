@@ -8,6 +8,7 @@ import (
 	"github.com/briandeitte/photo-copy/internal/config"
 	"github.com/briandeitte/photo-copy/internal/google"
 	"github.com/briandeitte/photo-copy/internal/logging"
+	"github.com/briandeitte/photo-copy/internal/transfer"
 	"github.com/spf13/cobra"
 )
 
@@ -45,7 +46,9 @@ func newGoogleUploadCmd(opts *rootOpts) *cobra.Command {
 				return fmt.Errorf("creating Google Photos client: %w", err)
 			}
 
-			return client.Upload(ctx, inputDir, opts.limit)
+			result, err := client.Upload(ctx, inputDir, opts.limit)
+			transfer.HandleResult(result, log, inputDir)
+			return err
 		},
 	}
 
@@ -59,8 +62,12 @@ func newGoogleImportTakeoutCmd(opts *rootOpts) *cobra.Command {
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			log := logging.New(opts.debug, nil)
-			_, err := google.ImportTakeout(args[0], args[1], log)
-			return err
+			result, err := google.ImportTakeout(args[0], args[1], log)
+			transfer.HandleResult(result, log, args[1])
+			if err != nil {
+				return err
+			}
+			return nil
 		},
 	}
 

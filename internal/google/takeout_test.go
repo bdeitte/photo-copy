@@ -39,13 +39,13 @@ func TestImportTakeout_ExtractsMediaOnly(t *testing.T) {
 		"Google Photos/Trip/print-subscriptions.json":  `{}`,
 	})
 
-	count, err := ImportTakeout(takeoutDir, outputDir, nil)
+	result, err := ImportTakeout(takeoutDir, outputDir, nil)
 	if err != nil {
 		t.Fatalf("import failed: %v", err)
 	}
 
-	if count != 2 {
-		t.Fatalf("expected 2 files extracted, got %d", count)
+	if result.Succeeded != 2 {
+		t.Fatalf("expected 2 files extracted, got %d", result.Succeeded)
 	}
 
 	if _, err := os.Stat(filepath.Join(outputDir, "photo1.jpg")); err != nil {
@@ -65,13 +65,13 @@ func TestImportTakeout_SkipsNonMedia(t *testing.T) {
 		"Google Photos/data.json":   "{}",
 	})
 
-	count, err := ImportTakeout(takeoutDir, outputDir, nil)
+	result, err := ImportTakeout(takeoutDir, outputDir, nil)
 	if err != nil {
 		t.Fatalf("import failed: %v", err)
 	}
 
-	if count != 0 {
-		t.Fatalf("expected 0 files extracted, got %d", count)
+	if result.Succeeded != 0 {
+		t.Fatalf("expected 0 files extracted, got %d", result.Succeeded)
 	}
 }
 
@@ -89,12 +89,12 @@ func TestImportTakeout_MultipleZips(t *testing.T) {
 	})
 	_ = os.Rename(filepath.Join(takeoutDir, "takeout.zip"), filepath.Join(takeoutDir, "takeout-002.zip"))
 
-	count, err := ImportTakeout(takeoutDir, outputDir, nil)
+	result, err := ImportTakeout(takeoutDir, outputDir, nil)
 	if err != nil {
 		t.Fatalf("import failed: %v", err)
 	}
 
-	if count != 2 {
-		t.Fatalf("expected 2 files, got %d", count)
+	if result.Succeeded != 2 {
+		t.Fatalf("expected 2 files, got %d", result.Succeeded)
 	}
 }
