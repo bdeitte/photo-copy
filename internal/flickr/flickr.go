@@ -21,6 +21,7 @@ import (
 	"github.com/briandeitte/photo-copy/internal/config"
 	"github.com/briandeitte/photo-copy/internal/logging"
 	"github.com/briandeitte/photo-copy/internal/media"
+	"github.com/briandeitte/photo-copy/internal/transfer"
 	"github.com/schollz/progressbar/v3"
 )
 
@@ -198,29 +199,27 @@ type sizesResponse struct {
 }
 
 // Download fetches all photos from the authenticated user's Flickr account.
-func (c *Client) Download(ctx context.Context, outputDir string, limit int) error {
+func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*transfer.Result, error) {
 	c.log.Debug("starting Flickr download to %s", outputDir)
+	result := transfer.NewResult("flickr", "download", outputDir)
 
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return fmt.Errorf("creating output dir: %w", err)
+		return result, fmt.Errorf("creating output dir: %w", err)
 	}
 
 	logPath := filepath.Join(outputDir, transferLogFile)
 	transferred, err := loadTransferLog(logPath)
 	if err != nil {
-		return fmt.Errorf("loading transfer log: %w", err)
+		return result, fmt.Errorf("loading transfer log: %w", err)
 	}
 	c.log.Debug("loaded transfer log with %d entries", len(transferred))
 
 	page := 1
-	totalDownloaded := 0
-	totalSkipped := 0
-	totalErrors := 0
-	totalPhotos := 0
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			result.Finish()
+			return result, ctx.Err()
 		default:
 		}
 
@@ -231,53 +230,53 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) erro
 			"per_page": "500",
 		})
 		if err != nil {
-			return fmt.Errorf("fetching photos page %d: %w", page, err)
+			return result, fmt.Errorf("fetching photos page %d: %w", page, err)
 		}
 
 		var photosResp photosResponse
 		decodeErr := json.NewDecoder(resp.Body).Decode(&photosResp)
 		_ = resp.Body.Close()
 		if decodeErr != nil {
-			return fmt.Errorf("decoding photos response: %w", decodeErr)
+			return result, fmt.Errorf("decoding photos response: %w", decodeErr)
 		}
 
 		if photosResp.Stat != "ok" {
-			return fmt.Errorf("Flickr API error on page %d: stat=%s", page, photosResp.Stat) //nolint:staticcheck // proper noun
+			return result, fmt.Errorf("Flickr API error on page %d: stat=%s", page, photosResp.Stat) //nolint:staticcheck // proper noun
 		}
 
 		c.log.Debug("page %d/%d: %d photos", page, photosResp.Photos.Pages, len(photosResp.Photos.Photo))
 
 		if page == 1 {
-			totalPhotos = photosResp.Photos.Total
-			c.log.Info("found %d photos on Flickr", totalPhotos)
+			result.Expected = photosResp.Photos.Total
+			c.log.Info("found %d photos on Flickr", result.Expected)
 		}
 
 		pageSkipped := 0
 		for _, photo := range photosResp.Photos.Photo {
 			if transferred[photo.ID] {
-				totalSkipped++
+				result.RecordSkip(1)
 				pageSkipped++
 				c.log.Debug("skipping already downloaded: %s", photo.ID)
 				continue
 			}
 
-			result, err := c.getOriginalURL(ctx, photo.ID)
+			origResult, err := c.getOriginalURL(ctx, photo.ID)
 			if err != nil {
-				totalErrors++
-				c.log.Error("[%d/%d] getting original URL for %s: %v", totalDownloaded+totalSkipped+totalErrors, totalPhotos, photo.ID, err)
+				result.RecordError(photo.ID, err.Error())
+				c.log.Error("[%d/%d] getting original URL for %s: %v", result.Succeeded+result.Skipped+result.Failed, result.Expected, photo.ID, err)
 				continue
 			}
 
-			if result.Label != "Original" && result.Label != "Video Original" {
-				c.log.Info("warning: original not available for %s, using %s", photo.ID, result.Label)
+			if origResult.Label != "Original" && origResult.Label != "Video Original" {
+				c.log.Info("warning: original not available for %s, using %s", photo.ID, origResult.Label)
 			}
 
-			ext := extensionFromURL(result.URL)
+			ext := extensionFromURL(origResult.URL)
 			filename := fmt.Sprintf("%s_%s%s", photo.ID, photo.Secret, ext)
 
-			if err := c.downloadFile(ctx, result.URL, filepath.Join(outputDir, filename)); err != nil {
-				totalErrors++
-				c.log.Error("[%d/%d] downloading %s: %v", totalDownloaded+totalSkipped+totalErrors, totalPhotos, filename, err)
+			if err := c.downloadFile(ctx, origResult.URL, filepath.Join(outputDir, filename)); err != nil {
+				result.RecordError(filename, err.Error())
+				c.log.Error("[%d/%d] downloading %s: %v", result.Succeeded+result.Skipped+result.Failed, result.Expected, filename, err)
 				continue
 			}
 
@@ -285,20 +284,25 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) erro
 				c.log.Error("updating transfer log for %s: %v", filename, err)
 			}
 
-			totalDownloaded++
-			c.log.Info("[%d/%d] downloaded %s", totalDownloaded+totalSkipped+totalErrors, totalPhotos, filename)
+			info, statErr := os.Stat(filepath.Join(outputDir, filename))
+			if statErr != nil {
+				result.RecordSuccess(filename, 0)
+			} else {
+				result.RecordSuccess(filename, info.Size())
+			}
+			c.log.Info("[%d/%d] downloaded %s", result.Succeeded+result.Skipped+result.Failed, result.Expected, filename)
 
-			if limit > 0 && totalDownloaded+totalErrors >= limit {
-				c.log.Info("reached limit of %d files (%d downloaded, %d errors)", limit, totalDownloaded, totalErrors)
+			if limit > 0 && result.Succeeded+result.Failed >= limit {
+				c.log.Info("reached limit of %d files (%d downloaded, %d errors)", limit, result.Succeeded, result.Failed)
 				break
 			}
 		}
 
 		if pageSkipped > 0 {
-			c.log.Info("[%d/%d] skipped %d already-downloaded photos on page %d", totalDownloaded+totalSkipped+totalErrors, totalPhotos, pageSkipped, page)
+			c.log.Info("[%d/%d] skipped %d already-downloaded photos on page %d", result.Succeeded+result.Skipped+result.Failed, result.Expected, pageSkipped, page)
 		}
 
-		if limit > 0 && totalDownloaded+totalErrors >= limit {
+		if limit > 0 && result.Succeeded+result.Failed >= limit {
 			break
 		}
 
@@ -308,15 +312,8 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) erro
 		page++
 	}
 
-	parts := []string{fmt.Sprintf("%d downloaded", totalDownloaded)}
-	if totalSkipped > 0 {
-		parts = append(parts, fmt.Sprintf("%d already existed", totalSkipped))
-	}
-	if totalErrors > 0 {
-		parts = append(parts, fmt.Sprintf("%d failed", totalErrors))
-	}
-	c.log.Info("download complete: %s", strings.Join(parts, ", "))
-	return nil
+	result.Finish()
+	return result, nil
 }
 
 // originalResult holds the URL and metadata from getOriginalURL.
@@ -390,12 +387,13 @@ func (c *Client) downloadFile(ctx context.Context, fileURL, destPath string) (er
 }
 
 // Upload uploads media files from inputDir to Flickr.
-func (c *Client) Upload(ctx context.Context, inputDir string, limit int) error {
+func (c *Client) Upload(ctx context.Context, inputDir string, limit int) (*transfer.Result, error) {
 	c.log.Debug("starting Flickr upload from %s", inputDir)
+	result := transfer.NewResult("flickr", "upload", inputDir)
 
 	entries, err := os.ReadDir(inputDir)
 	if err != nil {
-		return fmt.Errorf("reading input dir: %w", err)
+		return result, fmt.Errorf("reading input dir: %w", err)
 	}
 
 	var files []string
@@ -407,7 +405,8 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) error {
 
 	if len(files) == 0 {
 		c.log.Info("no supported media files found in %s", inputDir)
-		return nil
+		result.Finish()
+		return result, nil
 	}
 
 	if limit > 0 && len(files) > limit {
@@ -415,6 +414,7 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) error {
 		files = files[:limit]
 	}
 
+	result.Expected = len(files)
 	c.log.Info("found %d media files to upload", len(files))
 
 	bar := progressbar.NewOptions(len(files),
@@ -426,18 +426,30 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) error {
 	for _, filename := range files {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			result.Finish()
+			return result, ctx.Err()
 		default:
 		}
 
 		if err := c.uploadFile(ctx, filepath.Join(inputDir, filename)); err != nil {
-			return fmt.Errorf("uploading %s: %w", filename, err)
+			result.RecordError(filename, err.Error())
+			c.log.Error("uploading %s: %v", filename, err)
+			_ = bar.Add(1)
+			continue
+		}
+
+		info, statErr := os.Stat(filepath.Join(inputDir, filename))
+		if statErr != nil {
+			result.RecordSuccess(filename, 0)
+		} else {
+			result.RecordSuccess(filename, info.Size())
 		}
 		_ = bar.Add(1)
 	}
 
 	fmt.Println()
-	return nil
+	result.Finish()
+	return result, nil
 }
 
 func (c *Client) uploadFile(ctx context.Context, filePath string) error {

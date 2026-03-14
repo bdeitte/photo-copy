@@ -364,11 +364,11 @@ func TestFlickrDownload_LimitFlag(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Count downloaded files (excluding transfer.log)
+	// Count downloaded files (excluding transfer.log and report files)
 	entries, _ := os.ReadDir(outputDir)
 	count := 0
 	for _, e := range entries {
-		if e.Name() != "transfer.log" {
+		if e.Name() != "transfer.log" && !strings.HasPrefix(e.Name(), "photo-copy-report-") {
 			count++
 		}
 	}
@@ -491,11 +491,28 @@ func TestFlickrUpload_FailsOnError(t *testing.T) {
 	t.Setenv("PHOTO_COPY_FLICKR_UPLOAD_URL", mock.UploadURL)
 
 	err := executeCmd(t, "flickr", "upload", inputDir)
-	if err == nil {
-		t.Fatal("expected error on upload failure")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "upload failed HTTP 500") {
-		t.Errorf("error should mention upload failure, got: %v", err)
+
+	// Upload now continues past failures and records them in the result.
+	// Verify that the report file was written and contains the failure.
+	entries, _ := os.ReadDir(inputDir)
+	var reportFound bool
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "photo-copy-report-") {
+			reportFound = true
+			data, _ := os.ReadFile(filepath.Join(inputDir, e.Name()))
+			if !strings.Contains(string(data), "failed:    1") {
+				t.Errorf("report should show 1 failed, got: %s", string(data))
+			}
+			if !strings.Contains(string(data), "upload failed HTTP 500") {
+				t.Errorf("report should mention upload failure, got: %s", string(data))
+			}
+		}
+	}
+	if !reportFound {
+		t.Error("expected a report file to be written")
 	}
 }
 

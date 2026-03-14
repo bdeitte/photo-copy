@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 
 	"github.com/briandeitte/photo-copy/internal/config"
 	"github.com/briandeitte/photo-copy/internal/flickr"
 	"github.com/briandeitte/photo-copy/internal/logging"
+	"github.com/briandeitte/photo-copy/internal/transfer"
 	"github.com/spf13/cobra"
 )
 
@@ -40,7 +42,19 @@ func newFlickrDownloadCmd(opts *rootOpts) *cobra.Command {
 
 			log := logging.New(opts.debug, nil)
 			client := flickr.NewClient(cfg, log)
-			return client.Download(context.Background(), outputDir, opts.limit)
+			result, err := client.Download(context.Background(), outputDir, opts.limit)
+			if result != nil {
+				logPath := filepath.Join(outputDir, "transfer.log")
+				result.ValidateTransferLog(logPath, func(entry string) string {
+					matches, _ := filepath.Glob(filepath.Join(outputDir, entry+"_*"))
+					if len(matches) > 0 {
+						return matches[0]
+					}
+					return ""
+				})
+				transfer.HandleResult(result, log, outputDir)
+			}
+			return err
 		},
 	}
 
@@ -65,7 +79,9 @@ func newFlickrUploadCmd(opts *rootOpts) *cobra.Command {
 
 			log := logging.New(opts.debug, nil)
 			client := flickr.NewClient(cfg, log)
-			return client.Upload(context.Background(), inputDir, opts.limit)
+			result, err := client.Upload(context.Background(), inputDir, opts.limit)
+			transfer.HandleResult(result, log, inputDir)
+			return err
 		},
 	}
 
