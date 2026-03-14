@@ -11,18 +11,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newGooglePhotosCmd() *cobra.Command {
+func newGooglePhotosCmd(opts *rootOpts) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "google",
 		Short: "Google Photos commands (upload via API, download via Takeout import)",
 	}
 
-	cmd.AddCommand(newGoogleUploadCmd())
-	cmd.AddCommand(newGoogleImportTakeoutCmd())
+	cmd.AddCommand(newGoogleUploadCmd(opts))
+	cmd.AddCommand(newGoogleImportTakeoutCmd(opts))
 	return cmd
 }
 
-func newGoogleUploadCmd() *cobra.Command {
+func newGoogleUploadCmd(opts *rootOpts) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "upload <input-dir>",
 		Short: "Upload photos to Google Photos",
@@ -38,27 +38,27 @@ func newGoogleUploadCmd() *cobra.Command {
 				return fmt.Errorf("loading Google config: %w", err)
 			}
 
-			log := logging.New(debug, nil)
+			log := logging.New(opts.debug, nil)
 			ctx := context.Background()
 			client, err := google.NewClient(ctx, cfg, config.DefaultDir(), log)
 			if err != nil {
 				return fmt.Errorf("creating Google Photos client: %w", err)
 			}
 
-			return client.Upload(ctx, inputDir, limit)
+			return client.Upload(ctx, inputDir, opts.limit)
 		},
 	}
 
 	return cmd
 }
 
-func newGoogleImportTakeoutCmd() *cobra.Command {
+func newGoogleImportTakeoutCmd(opts *rootOpts) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "import-takeout <takeout-dir> <output-dir>",
 		Short: "Import photos from Google Takeout zip files",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			log := logging.New(debug, nil)
+			log := logging.New(opts.debug, nil)
 			_, err := google.ImportTakeout(args[0], args[1], log)
 			return err
 		},

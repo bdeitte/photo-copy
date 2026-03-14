@@ -11,18 +11,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newFlickrCmd() *cobra.Command {
+func newFlickrCmd(opts *rootOpts) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "flickr",
 		Short: "Flickr upload and download commands",
 	}
 
-	cmd.AddCommand(newFlickrDownloadCmd())
-	cmd.AddCommand(newFlickrUploadCmd())
+	cmd.AddCommand(newFlickrDownloadCmd(opts))
+	cmd.AddCommand(newFlickrUploadCmd(opts))
 	return cmd
 }
 
-func newFlickrDownloadCmd() *cobra.Command {
+func newFlickrDownloadCmd(opts *rootOpts) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "download <output-dir>",
 		Short: "Download all photos from Flickr",
@@ -38,16 +38,16 @@ func newFlickrDownloadCmd() *cobra.Command {
 				return fmt.Errorf("loading Flickr config: %w", err)
 			}
 
-			log := logging.New(debug, nil)
+			log := logging.New(opts.debug, nil)
 			client := flickr.NewClient(cfg, log)
-			return client.Download(context.Background(), outputDir, limit)
+			return client.Download(context.Background(), outputDir, opts.limit)
 		},
 	}
 
 	return cmd
 }
 
-func newFlickrUploadCmd() *cobra.Command {
+func newFlickrUploadCmd(opts *rootOpts) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "upload <input-dir>",
 		Short: "Upload photos to Flickr",
@@ -63,9 +63,9 @@ func newFlickrUploadCmd() *cobra.Command {
 				return fmt.Errorf("loading Flickr config: %w", err)
 			}
 
-			log := logging.New(debug, nil)
+			log := logging.New(opts.debug, nil)
 			client := flickr.NewClient(cfg, log)
-			return client.Upload(context.Background(), inputDir, limit)
+			return client.Upload(context.Background(), inputDir, opts.limit)
 		},
 	}
 

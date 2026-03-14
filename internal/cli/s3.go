@@ -11,18 +11,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newS3Cmd() *cobra.Command {
+func newS3Cmd(opts *rootOpts) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "s3",
 		Short: "S3 upload and download commands",
 	}
 
-	cmd.AddCommand(newS3UploadCmd())
-	cmd.AddCommand(newS3DownloadCmd())
+	cmd.AddCommand(newS3UploadCmd(opts))
+	cmd.AddCommand(newS3DownloadCmd(opts))
 	return cmd
 }
 
-func newS3UploadCmd() *cobra.Command {
+func newS3UploadCmd(opts *rootOpts) *cobra.Command {
 	var bucket, prefix string
 
 	cmd := &cobra.Command{
@@ -38,9 +38,9 @@ func newS3UploadCmd() *cobra.Command {
 				return fmt.Errorf("loading S3 config: %w", err)
 			}
 
-			log := logging.New(debug, nil)
+			log := logging.New(opts.debug, nil)
 			client := s3.NewClient(cfg, log)
-			return client.Upload(context.Background(), args[0], bucket, prefix, true, limit)
+			return client.Upload(context.Background(), args[0], bucket, prefix, true, opts.limit)
 		},
 	}
 
@@ -50,7 +50,7 @@ func newS3UploadCmd() *cobra.Command {
 	return cmd
 }
 
-func newS3DownloadCmd() *cobra.Command {
+func newS3DownloadCmd(opts *rootOpts) *cobra.Command {
 	var bucket, prefix string
 
 	cmd := &cobra.Command{
@@ -66,9 +66,9 @@ func newS3DownloadCmd() *cobra.Command {
 				return fmt.Errorf("loading S3 config: %w", err)
 			}
 
-			log := logging.New(debug, nil)
+			log := logging.New(opts.debug, nil)
 			client := s3.NewClient(cfg, log)
-			return client.Download(context.Background(), bucket, prefix, args[0], true, limit)
+			return client.Download(context.Background(), bucket, prefix, args[0], true, opts.limit)
 		},
 	}
 
