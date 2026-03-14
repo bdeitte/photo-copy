@@ -123,7 +123,7 @@ func (c *Client) retryableGet(ctx context.Context, url string) (*http.Response, 
 // retryDelay calculates the backoff delay, honoring the Retry-After header if present.
 func (c *Client) retryDelay(attempt int, resp *http.Response) time.Duration {
 	if isTestMode() {
-		return 0
+		return time.Millisecond
 	}
 	if ra := resp.Header.Get("Retry-After"); ra != "" {
 		if seconds, err := strconv.Atoi(ra); err == nil {

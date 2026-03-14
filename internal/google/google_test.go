@@ -127,8 +127,8 @@ func TestGoogleRetryDelay_TestMode(t *testing.T) {
 	t.Setenv("PHOTO_COPY_TEST_MODE", "1")
 	c := newTestGoogleClient()
 	delay := c.retryDelay(3, nil)
-	if delay != 0 {
-		t.Errorf("retryDelay in test mode = %v, want 0", delay)
+	if delay != time.Millisecond {
+		t.Errorf("retryDelay in test mode = %v, want 1ms", delay)
 	}
 }
 

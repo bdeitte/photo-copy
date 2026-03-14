@@ -198,7 +198,7 @@ func (c *Client) throttle() {
 // retryDelay calculates the backoff delay, honoring the Retry-After header if present.
 func (c *Client) retryDelay(attempt int, resp *http.Response) time.Duration {
 	if isTestMode() {
-		return 0
+		return time.Millisecond
 	}
 	if resp != nil {
 		if ra := resp.Header.Get("Retry-After"); ra != "" {

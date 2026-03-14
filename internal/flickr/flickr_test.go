@@ -134,8 +134,8 @@ func TestRetryDelay_TestMode(t *testing.T) {
 	c := newTestClient()
 	resp := &http.Response{Header: http.Header{}}
 	delay := c.retryDelay(3, resp)
-	if delay != 0 {
-		t.Errorf("retryDelay in test mode = %v, want 0", delay)
+	if delay != time.Millisecond {
+		t.Errorf("retryDelay in test mode = %v, want 1ms", delay)
 	}
 }
 
