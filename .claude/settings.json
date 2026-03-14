@@ -1,8 +1,15 @@
 {
   "hooks": {
-    "PreCommit": [
+    "PreToolUse": [
       {
-        "command": "golangci-lint run ./... && go test ./..."
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre-commit.sh",
+            "statusMessage": "Running lint and tests before commit..."
+          }
+        ]
       }
     ]
   }
