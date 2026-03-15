@@ -1,7 +1,7 @@
 <p align="center">
   <img src="photocopy.png" alt="photo copy logo"><br>
-  <b>Copy and backup your photos.</b><br>
-  <b>Copy photos and videos between Google Photos, Flickr, AWS S3, and local directories.</b>
+  <b>Copy and backup your photos and videos.</b><br>
+  <b>Copy between Google Photos, Flickr, AWS S3, and local directories.</b>
 </p>
 
 ## Setup
