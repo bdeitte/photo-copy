@@ -11,7 +11,8 @@ mkdir -p "$BIN_DIR"
 CURRENT_VERSION=""
 for bin in "$BIN_DIR"/rclone-*; do
     [[ -x "$bin" && ! "$bin" == *.exe ]] || continue
-    ver=$("$bin" version 2>/dev/null | head -1 | awk '{print $2}') && break
+    ver=$("$bin" version 2>/dev/null | head -1 | awk '{print $2}') || continue
+    break
 done
 CURRENT_VERSION="${ver:-unknown}"
 
@@ -38,7 +39,7 @@ if [ "$CURRENT_VERSION" != "unknown" ]; then
 fi
 
 TMPDIR=$(mktemp -d)
-trap "rm -rf $TMPDIR" EXIT
+trap 'rm -rf "$TMPDIR"' EXIT
 
 download_rclone() {
     local platform="$1"
