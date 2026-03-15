@@ -21,7 +21,7 @@ setup.bat
 
 ### Configure credentials
 
-Each command will tell you what you need to do.
+Each command will tell you what you need to do. Credentials are saved to `~/.config/photo-copy/`.
 
 ```bash
 ./photo-copy config flickr    # Flickr API key + OAuth
