@@ -272,7 +272,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 				c.log.Info("warning: original not available for %s, using %s", photo.ID, origResult.Label)
 			}
 
-			ext := extensionFromURL(origResult.URL)
+			ext := extensionFromURL(origResult.URL, defaultExtForLabel(origResult.Label))
 			filename := fmt.Sprintf("%s_%s%s", photo.ID, photo.Secret, ext)
 
 			if err := c.downloadFile(ctx, origResult.URL, filepath.Join(outputDir, filename)); err != nil {
@@ -520,14 +520,23 @@ func (c *Client) uploadFile(ctx context.Context, filePath string) error {
 }
 
 // extensionFromURL extracts the file extension from a Flickr media URL.
-// Falls back to ".jpg" if the extension cannot be determined.
-func extensionFromURL(rawURL string) string {
+// Falls back to defaultExt if the extension cannot be determined.
+func extensionFromURL(rawURL, defaultExt string) string {
 	u, err := url.Parse(rawURL)
 	if err == nil {
 		ext := strings.ToLower(path.Ext(u.Path))
 		if ext != "" {
 			return ext
 		}
+	}
+	return defaultExt
+}
+
+// defaultExtForLabel returns the default file extension based on the Flickr
+// size label. Video labels default to ".mp4"; photo labels default to ".jpg".
+func defaultExtForLabel(label string) string {
+	if strings.HasPrefix(label, "Video") {
+		return ".mp4"
 	}
 	return ".jpg"
 }

@@ -72,24 +72,50 @@ func TestTransferLog_BackwardCompatibility(t *testing.T) {
 
 func TestExtensionFromURL(t *testing.T) {
 	tests := []struct {
-		name string
-		url  string
-		want string
+		name       string
+		url        string
+		defaultExt string
+		want       string
 	}{
-		{"jpg photo", "https://farm1.staticflickr.com/server/12345_secret_o.jpg", ".jpg"},
-		{"png photo", "https://farm1.staticflickr.com/server/12345_secret_o.png", ".png"},
-		{"mp4 video", "https://www.flickr.com/photos/user/12345/play/orig/abcdef.mp4", ".mp4"},
-		{"mov video", "https://example.com/video.mov", ".mov"},
-		{"no extension", "https://example.com/file", ".jpg"},
-		{"empty url", "", ".jpg"},
-		{"query params", "https://example.com/photo.png?token=abc", ".png"},
+		{"jpg photo", "https://farm1.staticflickr.com/server/12345_secret_o.jpg", ".jpg", ".jpg"},
+		{"png photo", "https://farm1.staticflickr.com/server/12345_secret_o.png", ".jpg", ".png"},
+		{"mp4 video with ext", "https://www.flickr.com/photos/user/12345/play/orig/abcdef.mp4", ".mp4", ".mp4"},
+		{"mov video", "https://example.com/video.mov", ".mp4", ".mov"},
+		{"no extension photo", "https://example.com/file", ".jpg", ".jpg"},
+		{"no extension video", "https://example.com/file", ".mp4", ".mp4"},
+		{"empty url photo", "", ".jpg", ".jpg"},
+		{"empty url video", "", ".mp4", ".mp4"},
+		{"query params", "https://example.com/photo.png?token=abc", ".jpg", ".png"},
+		{"video URL no ext (flickr style)", "https://www.flickr.com/photos/user/12345/play/orig/secret/", ".mp4", ".mp4"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := extensionFromURL(tt.url)
+			got := extensionFromURL(tt.url, tt.defaultExt)
 			if got != tt.want {
-				t.Errorf("extensionFromURL(%q) = %q, want %q", tt.url, got, tt.want)
+				t.Errorf("extensionFromURL(%q, %q) = %q, want %q", tt.url, tt.defaultExt, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDefaultExtForLabel(t *testing.T) {
+	tests := []struct {
+		label string
+		want  string
+	}{
+		{"Original", ".jpg"},
+		{"Large", ".jpg"},
+		{"Video Original", ".mp4"},
+		{"Video Player", ".mp4"},
+		{"Video Large", ".mp4"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			got := defaultExtForLabel(tt.label)
+			if got != tt.want {
+				t.Errorf("defaultExtForLabel(%q) = %q, want %q", tt.label, got, tt.want)
 			}
 		})
 	}
