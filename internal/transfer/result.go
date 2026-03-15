@@ -194,9 +194,13 @@ func (r *Result) PrintSummary(log *logging.Logger) {
 }
 
 // HandleResult runs validation, prints summary, and writes report.
+// If reportDir is empty, falls back to result.Dir.
 func HandleResult(result *Result, log *logging.Logger, reportDir string) {
 	if result == nil {
 		return
+	}
+	if reportDir == "" {
+		reportDir = result.Dir
 	}
 	result.Validate()
 	result.PrintSummary(log)
