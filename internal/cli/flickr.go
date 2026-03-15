@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/briandeitte/photo-copy/internal/config"
 	"github.com/briandeitte/photo-copy/internal/flickr"
@@ -46,9 +48,12 @@ func newFlickrDownloadCmd(opts *rootOpts) *cobra.Command {
 			if result != nil {
 				logPath := filepath.Join(outputDir, "transfer.log")
 				result.ValidateTransferLog(logPath, func(entry string) string {
-					matches, _ := filepath.Glob(filepath.Join(outputDir, entry+"_*"))
-					if len(matches) > 0 {
-						return matches[0]
+					prefix := entry + "_"
+					entries, _ := os.ReadDir(outputDir)
+					for _, e := range entries {
+						if strings.HasPrefix(e.Name(), prefix) {
+							return filepath.Join(outputDir, e.Name())
+						}
 					}
 					return ""
 				})

@@ -26,9 +26,10 @@ import (
 )
 
 const (
-	maxRetries       = 5
-	baseRetryDelay   = 2 * time.Second
-	minRequestInterval = time.Second // Stay under 3,600 requests/hour
+	maxRetries             = 5
+	baseRetryDelay         = 2 * time.Second
+	minRequestInterval     = time.Second // Stay under 3,600 requests/hour
+	maxConsecutiveFailures = 10          // Abort upload after this many consecutive failures
 )
 
 const (
@@ -286,6 +287,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 
 			info, statErr := os.Stat(filepath.Join(outputDir, filename))
 			if statErr != nil {
+				c.log.Error("stat after download for %s: %v", filename, statErr)
 				result.RecordSuccess(filename, 0)
 			} else {
 				result.RecordSuccess(filename, info.Size())
@@ -423,6 +425,7 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) (*trans
 		progressbar.OptionSetWidth(40),
 	)
 
+	consecutiveFailures := 0
 	for _, filename := range files {
 		select {
 		case <-ctx.Done():
@@ -435,11 +438,18 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) (*trans
 			result.RecordError(filename, err.Error())
 			c.log.Error("uploading %s: %v", filename, err)
 			_ = bar.Add(1)
+			consecutiveFailures++
+			if consecutiveFailures >= maxConsecutiveFailures {
+				c.log.Error("aborting: %d consecutive upload failures", consecutiveFailures)
+				break
+			}
 			continue
 		}
 
+		consecutiveFailures = 0
 		info, statErr := os.Stat(filepath.Join(inputDir, filename))
 		if statErr != nil {
+			c.log.Error("stat after upload for %s: %v", filename, statErr)
 			result.RecordSuccess(filename, 0)
 		} else {
 			result.RecordSuccess(filename, info.Size())
