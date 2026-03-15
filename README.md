@@ -102,7 +102,7 @@ JPEG, PNG, TIFF, GIF, HEIC, WebP, MP4, MOV, AVI, MKV
 
 ## Development
 
-See [CLAUDE.md](CLAUDE.md) for some details on the project.
+See [CLAUDE.md](CLAUDE.md#architecture) for some details on the project.
 
 ### Linting & Testing
 
