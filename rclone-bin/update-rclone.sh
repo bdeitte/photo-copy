@@ -1,11 +1,41 @@
 #!/usr/bin/env bash
 set -e
 
-RCLONE_VERSION="${1:-v1.68.2}"
+RCLONE_VERSION="${1:-v1.73.2}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BIN_DIR="$SCRIPT_DIR/../rclone-bin"
 
 mkdir -p "$BIN_DIR"
+
+# Detect current version from an existing binary
+CURRENT_VERSION=""
+for bin in "$BIN_DIR"/rclone-*; do
+    [[ -x "$bin" && ! "$bin" == *.exe ]] || continue
+    ver=$("$bin" version 2>/dev/null | head -1 | awk '{print $2}') && break
+done
+CURRENT_VERSION="${ver:-unknown}"
+
+if [ "$CURRENT_VERSION" = "$RCLONE_VERSION" ]; then
+    echo "Already at rclone $RCLONE_VERSION — nothing to do."
+    exit 0
+fi
+
+echo "=== Rclone Update: $CURRENT_VERSION -> $RCLONE_VERSION ==="
+echo ""
+echo "Full changelog: https://rclone.org/changelog/"
+if [ "$CURRENT_VERSION" != "unknown" ]; then
+    echo ""
+    echo "New versions included in this update:"
+    # Fetch version headers from the changelog, show versions after current up to target
+    curl -sL "https://rclone.org/changelog/" | \
+        sed -n 's/.*<h2 id="[^"]*">\(v[0-9][0-9.]*\) - \([0-9-]*\)<.*/\1 (\2)/p' | \
+        awk -v cur="$CURRENT_VERSION" '
+            { ver = $1 }
+            ver == cur { exit }
+            { print "  "$0 }
+        '
+    echo ""
+fi
 
 TMPDIR=$(mktemp -d)
 trap "rm -rf $TMPDIR" EXIT
