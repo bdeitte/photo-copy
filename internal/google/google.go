@@ -142,7 +142,7 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) (*trans
 		toUpload = toUpload[:limit]
 	}
 
-	result.Expected = len(toUpload)
+	result.Expected = len(toUpload) + len(uploaded)
 	result.RecordSkip(len(uploaded))
 
 	c.log.Info("uploading %d files (%d already uploaded)", len(toUpload), len(uploaded))

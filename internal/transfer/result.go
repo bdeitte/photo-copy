@@ -195,8 +195,12 @@ func (r *Result) PrintSummary(log *logging.Logger) {
 
 // HandleResult runs validation, prints summary, and writes report.
 // If reportDir is empty, falls back to result.Dir.
+// Skips validation and reporting when no files were processed (e.g., fatal error before transfer started).
 func HandleResult(result *Result, log *logging.Logger, reportDir string) {
 	if result == nil {
+		return
+	}
+	if result.Succeeded+result.Failed+result.Skipped == 0 {
 		return
 	}
 	if reportDir == "" {

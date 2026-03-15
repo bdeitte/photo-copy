@@ -64,10 +64,7 @@ func newGoogleImportTakeoutCmd(opts *rootOpts) *cobra.Command {
 			log := logging.New(opts.debug, nil)
 			result, err := google.ImportTakeout(args[0], args[1], log)
 			transfer.HandleResult(result, log, args[1])
-			if err != nil {
-				return err
-			}
-			return nil
+			return err
 		},
 	}
 
