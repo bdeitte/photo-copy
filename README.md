@@ -74,6 +74,18 @@ All transfers are resumable — if a download or upload is interrupted, re-runni
 - **Flickr** — Requests are throttled to 1/second (staying under Flickr's 3,600 requests/hour API limit). HTTP 429 and 5xx errors are retried up to 5 times with exponential backoff (2s, 4s, 8s, 16s, 32s), honoring the `Retry-After` header when present. This applies to both API calls and photo downloads.
 - **Google Photos** — Subject to a 10,000 uploads/day limit, enforced in code.
 
+### Transfer summary & validation
+
+Every transfer automatically prints a summary and writes a detailed report file when it finishes. The summary includes file counts (succeeded, skipped, failed), total size transferred, and elapsed time. Any errors are re-listed so they're easy to spot.
+
+Post-transfer validation checks for potential issues:
+
+- **Count verification** — Compares the expected file count (from the service API) against the actual number of files succeeded, skipped, and failed. A mismatch means some files were unaccounted for.
+- **Zero-size file detection** — Scans the output directory after downloads for empty files that may indicate incomplete transfers.
+- **Transfer log consistency** (Flickr) — Verifies that every entry in `transfer.log` has a corresponding file on disk, catching orphaned log entries from interrupted downloads.
+
+A report file (`photo-copy-report-{service}-{operation}-{timestamp}.txt`) is written to the transfer directory with the full breakdown of counts, errors, and validation warnings.
+
 ### Debug mode
 
 Add `--debug` to any command for verbose logging:
