@@ -10,6 +10,7 @@ import (
 	"github.com/briandeitte/photo-copy/internal/config"
 	"github.com/briandeitte/photo-copy/internal/logging"
 	"github.com/briandeitte/photo-copy/internal/media"
+	"github.com/briandeitte/photo-copy/internal/transfer"
 )
 
 type Client struct {
@@ -21,20 +22,22 @@ func NewClient(cfg *config.S3Config, log *logging.Logger) *Client {
 	return &Client{cfg: cfg, log: log}
 }
 
-func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, mediaOnly bool, limit int) error {
+func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, mediaOnly bool, limit int) (*transfer.Result, error) {
+	result := transfer.NewResult("s3", "upload", inputDir)
+
 	binDir, err := rcloneBinDir()
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	rclonePath, err := findRcloneBinary(binDir)
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	configPath, err := writeRcloneConfig(c.cfg.AccessKeyID, c.cfg.SecretAccessKey, c.cfg.Region)
 	if err != nil {
-		return err
+		return result, err
 	}
 	defer func() { _ = os.Remove(configPath) }()
 
@@ -46,10 +49,11 @@ func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, me
 	if limit > 0 {
 		filesFromPath, err := c.buildFilesFrom(ctx, rclonePath, configPath, inputDir, args, limit)
 		if err != nil {
-			return fmt.Errorf("building file list for limit: %w", err)
+			return result, fmt.Errorf("building file list for limit: %w", err)
 		}
 		if filesFromPath == "" {
-			return nil
+			result.Finish()
+			return result, nil
 		}
 		defer func() { _ = os.Remove(filesFromPath) }()
 		// Replace include flags with --files-from (they're mutually exclusive in rclone)
@@ -58,23 +62,27 @@ func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, me
 	}
 
 	c.log.Debug("running: %s %s", rclonePath, strings.Join(args, " "))
-	return c.runRclone(ctx, rclonePath, args)
+	err = c.runRclone(ctx, rclonePath, args)
+	result.Finish()
+	return result, err
 }
 
-func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string, mediaOnly bool, limit int) error {
+func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string, mediaOnly bool, limit int) (*transfer.Result, error) {
+	result := transfer.NewResult("s3", "download", outputDir)
+
 	binDir, err := rcloneBinDir()
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	rclonePath, err := findRcloneBinary(binDir)
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	configPath, err := writeRcloneConfig(c.cfg.AccessKeyID, c.cfg.SecretAccessKey, c.cfg.Region)
 	if err != nil {
-		return err
+		return result, err
 	}
 	defer func() { _ = os.Remove(configPath) }()
 
@@ -90,10 +98,11 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 		}
 		filesFromPath, err := c.buildFilesFrom(ctx, rclonePath, configPath, src, args, limit)
 		if err != nil {
-			return fmt.Errorf("building file list for limit: %w", err)
+			return result, fmt.Errorf("building file list for limit: %w", err)
 		}
 		if filesFromPath == "" {
-			return nil
+			result.Finish()
+			return result, nil
 		}
 		defer func() { _ = os.Remove(filesFromPath) }()
 		// Replace include flags with --files-from (they're mutually exclusive in rclone)
@@ -102,7 +111,12 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 	}
 
 	c.log.Debug("running: %s %s", rclonePath, strings.Join(args, " "))
-	return c.runRclone(ctx, rclonePath, args)
+	err = c.runRclone(ctx, rclonePath, args)
+	result.Finish()
+	if scanErr := result.ScanDir(); scanErr != nil {
+		c.log.Debug("scanning directory: %v", scanErr)
+	}
+	return result, err
 }
 
 func (c *Client) runRclone(ctx context.Context, rclonePath string, args []string) error {
