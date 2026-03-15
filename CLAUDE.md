@@ -60,3 +60,7 @@ Go CLI app using [cobra](https://github.com/spf13/cobra) for command structure. 
 ### Design docs
 
 Detailed design and implementation plans live in `plans/`.
+
+## Feature overview
+
+Details on the features can be found in README.md
