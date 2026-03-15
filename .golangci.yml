@@ -2,8 +2,6 @@ version: "2"
 
 run:
   timeout: 3m
-  exclude-dirs:
-    - rclone-bin
 
 linters:
   enable:
@@ -13,3 +11,6 @@ linters:
     - unused
     - ineffassign
     - gocritic
+  exclusions:
+    paths:
+      - rclone-bin
