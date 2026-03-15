@@ -200,7 +200,7 @@ func HandleResult(result *Result, log *logging.Logger, reportDir string) {
 	if result == nil {
 		return
 	}
-	if result.Succeeded+result.Failed+result.Skipped == 0 {
+	if result.Succeeded+result.Failed+result.Skipped == 0 && result.Expected == 0 {
 		return
 	}
 	if reportDir == "" {
