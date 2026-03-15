@@ -39,15 +39,20 @@ Go CLI app using [cobra](https://github.com/spf13/cobra) for command structure. 
 - **google/** - Google Photos API client with OAuth2 flow. `takeout.go` handles extracting media from Google Takeout zip archives. Uses upload log files for resumable uploads.
 - **s3/** - S3 operations via bundled rclone binary subprocess. `rclone.go` handles binary resolution (checks next to executable, then cwd) and temp config generation. `s3.go` builds rclone command args and runs them.
 - **media/** - Shared `IsSupportedFile()` filter for supported photo/video extensions.
+- **transfer/** - Shared `Result` struct for tracking transfer statistics (succeeded/failed/skipped counts, bytes, errors). `Validate()` checks for count mismatches, zero-size files, and transfer log consistency. `PrintSummary()` writes a human-readable summary to stderr. `WriteReport()` writes a detailed report file. `HandleResult()` is the standard CLI handler that runs all three.
 - **logging/** - Simple leveled logger (Debug/Info/Error) writing to stderr with timestamps.
+- **testutil/mockserver/** - Configurable mock HTTP servers for Flickr and Google Photos, used by integration tests. Builder API with `OnGetPhotos()`, `OnGetSizes()`, etc. Shared handler factories (`RespondJSON`, `RespondSequence`).
 
 ### Key patterns
 
 - All service clients follow the same pattern: `NewClient(config, logger)` returning a `*Client` with `Upload`/`Download` methods taking `context.Context`.
-- Resumable transfers: Flickr and Google Photos use append-only log files (`transfer.log`) to track completed files, skipping them on restart. S3 relies on rclone's built-in diffing.
+- Resumable transfers: Flickr and Google Photos use append-only log files (`transfer.log`) to track completed files, skipping them on restart. Failed files are not logged, so re-running retries them automatically. S3 relies on rclone's built-in diffing.
+- Transfer results: All Download/Upload methods return `*transfer.Result`. The CLI calls `transfer.HandleResult(result, log, dir)` which runs validation, prints a summary, and writes a report file. S3 uses `ScanDir()` after rclone completes since it can't track per-file results.
 - Flickr rate limiting: Requests are throttled to 1/second (3,600/hour API limit). HTTP 429 and 5xx responses trigger exponential backoff retry (up to 5 attempts), honoring `Retry-After` headers. Implemented in `retryableGet()` and `throttle()` in `flickr.go`.
+- Uploads continue past failures: Both Flickr and Google uploads continue on per-file errors (logging them) rather than failing fast, with an abort threshold of 10 consecutive failures for Flickr.
 - S3 delegates to rclone subprocess rather than using the AWS SDK directly. Platform-specific rclone binaries live in `rclone-bin/` (Git LFS, downloaded via `rclone-bin/update-rclone.sh`). 6 platforms: linux/darwin/windows x amd64/arm64.
-- The `--debug` flag on the root command enables verbose logging across all subcommands.
+- The `--debug` flag on the root command enables verbose logging across all subcommands. CLI flags (`debug`, `limit`) are owned by a `rootOpts` struct (not package-level vars) for test isolation.
+- Integration tests use env var overrides (`PHOTO_COPY_CONFIG_DIR`, `PHOTO_COPY_FLICKR_API_URL`, `PHOTO_COPY_GOOGLE_API_URL`, `PHOTO_COPY_TEST_MODE`, etc.) to redirect service URLs to mock servers and disable throttling.
 - No album/metadata management — raw media files only.
 
 ### Design constraints
