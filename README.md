@@ -71,6 +71,8 @@ All transfers are resumable — if a download or upload is interrupted, re-runni
 - **Google Photos uploads** — An upload log file tracks completed uploads the same way.
 - **S3 uploads/downloads** — Handled by rclone, which compares source and destination and only transfers changed or missing files.
 
+Files that fail during transfer are not marked as completed in the log, so re-running the same command will automatically retry them while skipping files that already succeeded.
+
 ### Rate limiting & retry
 
 - **Flickr** — Requests are throttled to 1/second (staying under Flickr's 3,600 requests/hour API limit). HTTP 429 and 5xx errors are retried up to 5 times with exponential backoff (2s, 4s, 8s, 16s, 32s), honoring the `Retry-After` header when present. This applies to both API calls and photo downloads.
