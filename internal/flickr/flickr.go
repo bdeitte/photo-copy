@@ -441,7 +441,9 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) (*trans
 			consecutiveFailures++
 			if consecutiveFailures >= maxConsecutiveFailures {
 				c.log.Error("aborting: %d consecutive upload failures", consecutiveFailures)
-				break
+				fmt.Println()
+				result.Finish()
+				return result, fmt.Errorf("aborted after %d consecutive upload failures", consecutiveFailures)
 			}
 			continue
 		}
