@@ -17,7 +17,7 @@ echo "Built ./photo-copy"
 if [ ! -d "rclone-bin" ] || [ -z "$(ls rclone-bin/rclone-* 2>/dev/null)" ]; then
     echo ""
     echo "Warning: rclone binaries not found in rclone-bin/"
-    echo "Run: ./scripts/update-rclone.sh"
+    echo "Run: ./rclone-bin/update-rclone.sh"
     echo "(S3 commands will not work without rclone binaries)"
 fi
 

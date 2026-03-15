@@ -124,6 +124,6 @@ cover command arg building, config generation, and binary resolution.
 To update the bundled rclone binaries:
 
 ```bash
-./scripts/update-rclone.sh v1.68.2
+./rclone-bin/update-rclone.sh v1.68.2
 ```
 

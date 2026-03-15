@@ -46,7 +46,7 @@ Go CLI app using [cobra](https://github.com/spf13/cobra) for command structure. 
 - All service clients follow the same pattern: `NewClient(config, logger)` returning a `*Client` with `Upload`/`Download` methods taking `context.Context`.
 - Resumable transfers: Flickr and Google Photos use append-only log files (`transfer.log`) to track completed files, skipping them on restart. S3 relies on rclone's built-in diffing.
 - Flickr rate limiting: Requests are throttled to 1/second (3,600/hour API limit). HTTP 429 and 5xx responses trigger exponential backoff retry (up to 5 attempts), honoring `Retry-After` headers. Implemented in `retryableGet()` and `throttle()` in `flickr.go`.
-- S3 delegates to rclone subprocess rather than using the AWS SDK directly. Platform-specific rclone binaries live in `rclone-bin/` (Git LFS, downloaded via `scripts/update-rclone.sh`). 6 platforms: linux/darwin/windows x amd64/arm64.
+- S3 delegates to rclone subprocess rather than using the AWS SDK directly. Platform-specific rclone binaries live in `rclone-bin/` (Git LFS, downloaded via `rclone-bin/update-rclone.sh`). 6 platforms: linux/darwin/windows x amd64/arm64.
 - The `--debug` flag on the root command enables verbose logging across all subcommands.
 - No album/metadata management — raw media files only.
 
