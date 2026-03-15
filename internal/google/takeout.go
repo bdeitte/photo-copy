@@ -10,21 +10,24 @@ import (
 
 	"github.com/briandeitte/photo-copy/internal/logging"
 	"github.com/briandeitte/photo-copy/internal/media"
+	"github.com/briandeitte/photo-copy/internal/transfer"
 	"github.com/schollz/progressbar/v3"
 )
 
-func ImportTakeout(takeoutDir, outputDir string, log *logging.Logger) (int, error) {
+func ImportTakeout(takeoutDir, outputDir string, log *logging.Logger) (*transfer.Result, error) {
 	if log == nil {
 		log = logging.New(false, nil)
 	}
 
+	result := transfer.NewResult("google-takeout", "import", outputDir)
+
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return 0, fmt.Errorf("creating output dir: %w", err)
+		return result, fmt.Errorf("creating output dir: %w", err)
 	}
 
 	entries, err := os.ReadDir(takeoutDir)
 	if err != nil {
-		return 0, fmt.Errorf("reading takeout dir: %w", err)
+		return result, fmt.Errorf("reading takeout dir: %w", err)
 	}
 
 	var zipFiles []string
@@ -35,33 +38,28 @@ func ImportTakeout(takeoutDir, outputDir string, log *logging.Logger) (int, erro
 	}
 
 	if len(zipFiles) == 0 {
-		return 0, fmt.Errorf("no zip files found in %s", takeoutDir)
+		return result, fmt.Errorf("no zip files found in %s", takeoutDir)
 	}
 
 	log.Debug("found %d zip files", len(zipFiles))
 
-	totalExtracted := 0
-
 	for _, zipPath := range zipFiles {
 		log.Debug("processing %s", zipPath)
 
-		count, err := extractMediaFromZip(zipPath, outputDir, log)
-		if err != nil {
+		if err := extractMediaFromZip(zipPath, outputDir, log, result); err != nil {
 			log.Error("processing %s: %v", zipPath, err)
 			continue
 		}
-
-		totalExtracted += count
 	}
 
-	fmt.Fprintf(os.Stderr, "Extracted %d media files\n", totalExtracted)
-	return totalExtracted, nil
+	result.Finish()
+	return result, nil
 }
 
-func extractMediaFromZip(zipPath, outputDir string, log *logging.Logger) (int, error) {
+func extractMediaFromZip(zipPath, outputDir string, log *logging.Logger, result *transfer.Result) error {
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
-		return 0, fmt.Errorf("opening zip: %w", err)
+		return fmt.Errorf("opening zip: %w", err)
 	}
 	defer func() { _ = r.Close() }()
 
@@ -79,11 +77,10 @@ func extractMediaFromZip(zipPath, outputDir string, log *logging.Logger) (int, e
 	}
 
 	if len(mediaFiles) == 0 {
-		return 0, nil
+		return nil
 	}
 
 	bar := progressbar.Default(int64(len(mediaFiles)), filepath.Base(zipPath))
-	extracted := 0
 
 	for _, f := range mediaFiles {
 		name := filepath.Base(f.Name)
@@ -105,15 +102,21 @@ func extractMediaFromZip(zipPath, outputDir string, log *logging.Logger) (int, e
 
 		if err := extractFile(f, destPath); err != nil {
 			log.Error("extracting %s: %v", f.Name, err)
+			result.RecordError(name, err.Error())
 			_ = bar.Add(1)
 			continue
 		}
 
-		extracted++
+		info, statErr := os.Stat(destPath)
+		if statErr == nil {
+			result.RecordSuccess(name, info.Size())
+		} else {
+			result.RecordSuccess(name, 0)
+		}
 		_ = bar.Add(1)
 	}
 
-	return extracted, nil
+	return nil
 }
 
 func extractFile(f *zip.File, destPath string) (err error) {
