@@ -8,6 +8,7 @@ import (
 	"github.com/briandeitte/photo-copy/internal/config"
 	"github.com/briandeitte/photo-copy/internal/logging"
 	"github.com/briandeitte/photo-copy/internal/s3"
+	"github.com/briandeitte/photo-copy/internal/transfer"
 	"github.com/spf13/cobra"
 )
 
@@ -40,7 +41,9 @@ func newS3UploadCmd(opts *rootOpts) *cobra.Command {
 
 			log := logging.New(opts.debug, nil)
 			client := s3.NewClient(cfg, log)
-			return client.Upload(context.Background(), args[0], bucket, prefix, true, opts.limit)
+			result, err := client.Upload(context.Background(), args[0], bucket, prefix, true, opts.limit)
+			transfer.HandleResult(result, log, args[0])
+			return err
 		},
 	}
 
@@ -68,7 +71,9 @@ func newS3DownloadCmd(opts *rootOpts) *cobra.Command {
 
 			log := logging.New(opts.debug, nil)
 			client := s3.NewClient(cfg, log)
-			return client.Download(context.Background(), bucket, prefix, args[0], true, opts.limit)
+			result, err := client.Download(context.Background(), bucket, prefix, args[0], true, opts.limit)
+			transfer.HandleResult(result, log, args[0])
+			return err
 		},
 	}
 
