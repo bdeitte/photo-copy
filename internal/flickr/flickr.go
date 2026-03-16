@@ -421,7 +421,7 @@ func (c *Client) getOriginalURLs(ctx context.Context, photoID string) ([]origina
 	// Build ordered list: preferred sizes first, then any remaining as fallbacks.
 	// Video sizes are checked first so that a video with both "Original" (photo
 	// thumbnail) and "Video Original" picks the actual video file.
-	preferred := []string{"Video Original", "Original", "Video Player", "Large"}
+	preferred := []string{"Video Original", "Video Player", "Original", "Large"}
 	seen := make(map[string]bool)
 	var results []originalResult
 
