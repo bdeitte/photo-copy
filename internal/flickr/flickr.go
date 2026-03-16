@@ -187,12 +187,32 @@ type photosResponse struct {
 	Stat string `json:"stat"`
 }
 
+// flexString handles JSON fields that may be a string or a number.
+// The Flickr API sometimes returns numeric labels (e.g. 75 instead of "Square").
+type flexString string
+
+func (f *flexString) UnmarshalJSON(data []byte) error {
+	// Try string first
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		*f = flexString(s)
+		return nil
+	}
+	// Fall back to number
+	var n json.Number
+	if err := json.Unmarshal(data, &n); err != nil {
+		return fmt.Errorf("flexString: cannot unmarshal %s", string(data))
+	}
+	*f = flexString(n.String())
+	return nil
+}
+
 // sizesResponse represents the Flickr getSizes API response.
 type sizesResponse struct {
 	Sizes struct {
 		Size []struct {
-			Label  string `json:"label"`
-			Source string `json:"source"`
+			Label  flexString `json:"label"`
+			Source string     `json:"source"`
 		} `json:"size"`
 	} `json:"sizes"`
 	Stat string `json:"stat"`
@@ -354,15 +374,15 @@ func (c *Client) getOriginalURL(ctx context.Context, photoID string) (*originalR
 	// thumbnail) and "Video Original" picks the actual video file.
 	for _, pref := range []string{"Video Original", "Original", "Video Player", "Large"} {
 		for _, s := range sizesResp.Sizes.Size {
-			if s.Label == pref {
-				return &originalResult{URL: s.Source, Label: s.Label}, nil
+			if string(s.Label) == pref {
+				return &originalResult{URL: s.Source, Label: string(s.Label)}, nil
 			}
 		}
 	}
 
 	if len(sizesResp.Sizes.Size) > 0 {
 		last := sizesResp.Sizes.Size[len(sizesResp.Sizes.Size)-1]
-		return &originalResult{URL: last.Source, Label: last.Label}, nil
+		return &originalResult{URL: last.Source, Label: string(last.Label)}, nil
 	}
 
 	return nil, fmt.Errorf("no sizes available for photo %s", photoID)
