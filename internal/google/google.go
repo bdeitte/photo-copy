@@ -147,16 +147,18 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) (*trans
 	result.RecordSkip(len(uploaded))
 
 	c.log.Info("uploading %d files (%d already uploaded)", len(toUpload), len(uploaded))
+	estimator := transfer.NewEstimator()
 
 	for i, filePath := range toUpload {
 		filename := filepath.Base(filePath)
-		c.log.Info("[%d/%d] uploading %s", i+1, len(toUpload), filename)
+		c.log.Info("[%d/%d] %suploading %s", i+1, len(toUpload), estimator.Estimate(len(toUpload)-(i+1)), filename)
 		c.log.Debug("reading file: %s", filePath)
 
 		uploadToken, err := c.uploadBytes(ctx, filePath, filename)
 		if err != nil {
 			result.RecordError(filename, err.Error())
 			c.log.Error("upload failed for %s: %v", filename, err)
+			estimator.Tick()
 			continue
 		}
 
@@ -164,6 +166,7 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) (*trans
 		if err := c.createMediaItem(ctx, uploadToken, filename); err != nil {
 			result.RecordError(filename, err.Error())
 			c.log.Error("create media item failed for %s: %v", filename, err)
+			estimator.Tick()
 			continue
 		}
 
@@ -178,6 +181,7 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) (*trans
 			result.RecordSuccess(filename, 0)
 		}
 		c.log.Debug("successfully uploaded %s", filename)
+		estimator.Tick()
 	}
 
 	result.Finish()

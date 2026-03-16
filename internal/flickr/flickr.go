@@ -214,6 +214,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 		return result, fmt.Errorf("loading transfer log: %w", err)
 	}
 	c.log.Debug("loaded transfer log with %d entries", len(transferred))
+	estimator := transfer.NewEstimator()
 
 	page := 1
 	for {
@@ -264,7 +265,9 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 			origResult, err := c.getOriginalURL(ctx, photo.ID)
 			if err != nil {
 				result.RecordError(photo.ID, err.Error())
-				c.log.Error("[%d/%d] getting original URL for %s: %v", result.Succeeded+result.Skipped+result.Failed, result.Expected, photo.ID, err)
+				estimator.Tick()
+				processed := result.Succeeded + result.Skipped + result.Failed
+				c.log.Error("[%d/%d] %sgetting original URL for %s: %v", processed, result.Expected, estimator.Estimate(result.Expected-processed), photo.ID, err)
 				continue
 			}
 
@@ -277,7 +280,9 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 
 			if err := c.downloadFile(ctx, origResult.URL, filepath.Join(outputDir, filename)); err != nil {
 				result.RecordError(filename, err.Error())
-				c.log.Error("[%d/%d] downloading %s: %v", result.Succeeded+result.Skipped+result.Failed, result.Expected, filename, err)
+				estimator.Tick()
+				processed := result.Succeeded + result.Skipped + result.Failed
+				c.log.Error("[%d/%d] %sdownloading %s: %v", processed, result.Expected, estimator.Estimate(result.Expected-processed), filename, err)
 				continue
 			}
 
@@ -292,7 +297,9 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 			} else {
 				result.RecordSuccess(filename, info.Size())
 			}
-			c.log.Info("[%d/%d] downloaded %s", result.Succeeded+result.Skipped+result.Failed, result.Expected, filename)
+			estimator.Tick()
+			processed := result.Succeeded + result.Skipped + result.Failed
+			c.log.Info("[%d/%d] %sdownloaded %s", processed, result.Expected, estimator.Estimate(result.Expected-processed), filename)
 
 			if limit > 0 && result.Succeeded+result.Failed >= limit {
 				c.log.Info("reached limit of %d files (%d downloaded, %d errors)", limit, result.Succeeded, result.Failed)
