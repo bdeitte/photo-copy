@@ -68,4 +68,11 @@ Detailed design and implementation plans live in `plans/`.
 
 ## Feature overview
 
-Details on the features can be found in README.md
+Details on the features can be read in README.md
+
+## API documents that can be helpful
+
+rclone documentation: https://rclone.org/
+Flickr API documentation: https://www.flickr.com/services/api/
+Google API documentation: https://developers.google.com/photos/library/reference/rest
+
