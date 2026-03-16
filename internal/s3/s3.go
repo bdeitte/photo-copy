@@ -1,10 +1,13 @@
 package s3
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/briandeitte/photo-copy/internal/config"
@@ -61,8 +64,9 @@ func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, me
 		args = append(args, "--files-from", filesFromPath)
 	}
 
+	total := c.countFiles(ctx, rclonePath, configPath, inputDir, args)
 	c.log.Debug("running: %s %s", rclonePath, strings.Join(args, " "))
-	err = c.runRclone(ctx, rclonePath, args)
+	err = c.runRcloneWithProgress(ctx, rclonePath, args, total, "uploaded")
 	result.Finish()
 	return result, err
 }
@@ -86,16 +90,17 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 	}
 	defer func() { _ = os.Remove(configPath) }()
 
+	src := "s3:" + bucket
+	if prefix != "" {
+		src += "/" + prefix
+	}
+
 	args := buildDownloadArgs(configPath, bucket, prefix, outputDir)
 	if mediaOnly {
 		args = append(args, buildMediaIncludeFlags()...)
 	}
 
 	if limit > 0 {
-		src := "s3:" + bucket
-		if prefix != "" {
-			src += "/" + prefix
-		}
 		filesFromPath, err := c.buildFilesFrom(ctx, rclonePath, configPath, src, args, limit)
 		if err != nil {
 			return result, fmt.Errorf("building file list for limit: %w", err)
@@ -110,8 +115,9 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 		args = append(args, "--files-from", filesFromPath)
 	}
 
+	total := c.countFiles(ctx, rclonePath, configPath, src, args)
 	c.log.Debug("running: %s %s", rclonePath, strings.Join(args, " "))
-	err = c.runRclone(ctx, rclonePath, args)
+	err = c.runRcloneWithProgress(ctx, rclonePath, args, total, "downloaded")
 	result.Finish()
 	if scanErr := result.ScanDir(); scanErr != nil {
 		c.log.Debug("scanning directory: %v", scanErr)
@@ -119,15 +125,96 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 	return result, err
 }
 
-func (c *Client) runRclone(ctx context.Context, rclonePath string, args []string) error {
+// rcloneLogEntry represents a single JSON log line from rclone --use-json-log.
+type rcloneLogEntry struct {
+	Level  string `json:"level"`
+	Msg    string `json:"msg"`
+	Object string `json:"object"`
+}
+
+func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, args []string, total int, verb string) error {
 	cmd := exec.CommandContext(ctx, rclonePath, args...)
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("creating stderr pipe: %w", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("starting rclone: %w", err)
+	}
+
+	estimator := transfer.NewEstimator()
+	copied := 0
+	scanner := bufio.NewScanner(stderr)
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		var entry rcloneLogEntry
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			// Not JSON — pass through as-is
+			c.log.Debug("rclone: %s", line)
+			continue
+		}
+
+		if entry.Level == "error" {
+			c.log.Error("rclone: %s", entry.Msg)
+			continue
+		}
+
+		if !strings.HasPrefix(entry.Msg, "Copied") {
+			c.log.Debug("rclone: %s", entry.Msg)
+			continue
+		}
+
+		copied++
+		estimator.Tick()
+		filename := filepath.Base(entry.Object)
+		if total > 0 {
+			remaining := total - copied
+			c.log.Info("[%d/%d] %s%s %s", copied, total, estimator.Estimate(remaining), verb, filename)
+		} else {
+			c.log.Info("[%d] %s%s %s", copied, estimator.Estimate(0), verb, filename)
+		}
+	}
+
+	if err := cmd.Wait(); err != nil {
 		return fmt.Errorf("rclone failed: %w", err)
 	}
 	return nil
+}
+
+// countFiles runs "rclone lsf" to count source files, returning 0 on error.
+func (c *Client) countFiles(ctx context.Context, rclonePath, configPath, source string, copyArgs []string) int {
+	lsfArgs := []string{"lsf", source, "--config", configPath, "--files-only", "-R"}
+	for i := 0; i < len(copyArgs); i++ {
+		if copyArgs[i] == "--include" && i+1 < len(copyArgs) {
+			lsfArgs = append(lsfArgs, "--include", copyArgs[i+1])
+			i++
+		}
+		if copyArgs[i] == "--ignore-case" {
+			lsfArgs = append(lsfArgs, "--ignore-case")
+		}
+		if copyArgs[i] == "--files-from" && i+1 < len(copyArgs) {
+			lsfArgs = append(lsfArgs, "--files-from", copyArgs[i+1])
+			i++
+		}
+	}
+
+	c.log.Debug("counting files: %s %s", rclonePath, strings.Join(lsfArgs, " "))
+	cmd := exec.CommandContext(ctx, rclonePath, lsfArgs...)
+	out, err := cmd.Output()
+	if err != nil {
+		c.log.Debug("counting files failed: %v", err)
+		return 0
+	}
+
+	trimmed := strings.TrimSpace(string(out))
+	if trimmed == "" {
+		return 0
+	}
+	return len(strings.Split(trimmed, "\n"))
 }
 
 func buildUploadArgs(configPath, inputDir, bucket, prefix string) []string {
@@ -139,7 +226,7 @@ func buildUploadArgs(configPath, inputDir, bucket, prefix string) []string {
 	return []string{
 		"copy", inputDir, dest,
 		"--config", configPath,
-		"--progress",
+		"-v", "--use-json-log", "--stats", "0",
 	}
 }
 
@@ -152,7 +239,7 @@ func buildDownloadArgs(configPath, bucket, prefix, outputDir string) []string {
 	return []string{
 		"copy", src, outputDir,
 		"--config", configPath,
-		"--progress",
+		"-v", "--use-json-log", "--stats", "0",
 	}
 }
 

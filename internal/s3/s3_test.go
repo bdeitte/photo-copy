@@ -9,7 +9,7 @@ func TestBuildUploadArgs(t *testing.T) {
 	expected := []string{
 		"copy", "/path/to/photos", "s3:my-bucket/backup/",
 		"--config", "/tmp/config.conf",
-		"--progress",
+		"-v", "--use-json-log", "--stats", "0",
 	}
 
 	if len(args) != len(expected) {
@@ -41,7 +41,7 @@ func TestBuildDownloadArgs(t *testing.T) {
 	expected := []string{
 		"copy", "s3:my-bucket/photos/", "/path/to/output",
 		"--config", "/tmp/config.conf",
-		"--progress",
+		"-v", "--use-json-log", "--stats", "0",
 	}
 
 	if len(args) != len(expected) {
