@@ -22,7 +22,6 @@ import (
 	"github.com/briandeitte/photo-copy/internal/logging"
 	"github.com/briandeitte/photo-copy/internal/media"
 	"github.com/briandeitte/photo-copy/internal/transfer"
-	"github.com/schollz/progressbar/v3"
 )
 
 const (
@@ -425,15 +424,10 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) (*trans
 
 	result.Expected = len(files)
 	c.log.Info("found %d media files to upload", len(files))
-
-	bar := progressbar.NewOptions(len(files),
-		progressbar.OptionSetDescription("Uploading"),
-		progressbar.OptionShowCount(),
-		progressbar.OptionSetWidth(40),
-	)
+	estimator := transfer.NewEstimator()
 
 	consecutiveFailures := 0
-	for _, filename := range files {
+	for i, filename := range files {
 		select {
 		case <-ctx.Done():
 			result.Finish()
@@ -443,12 +437,12 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) (*trans
 
 		if err := c.uploadFile(ctx, filepath.Join(inputDir, filename)); err != nil {
 			result.RecordError(filename, err.Error())
-			c.log.Error("uploading %s: %v", filename, err)
-			_ = bar.Add(1)
+			estimator.Tick()
+			remaining := len(files) - (i + 1)
+			c.log.Error("[%d/%d] %suploading %s: %v", i+1, len(files), estimator.Estimate(remaining), filename, err)
 			consecutiveFailures++
 			if consecutiveFailures >= maxConsecutiveFailures {
 				c.log.Error("aborting: %d consecutive upload failures", consecutiveFailures)
-				fmt.Println()
 				result.Finish()
 				return result, fmt.Errorf("aborted after %d consecutive upload failures", consecutiveFailures)
 			}
@@ -463,10 +457,11 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) (*trans
 		} else {
 			result.RecordSuccess(filename, info.Size())
 		}
-		_ = bar.Add(1)
+		estimator.Tick()
+		remaining := len(files) - (i + 1)
+		c.log.Info("[%d/%d] %suploaded %s", i+1, len(files), estimator.Estimate(remaining), filename)
 	}
 
-	fmt.Println()
 	result.Finish()
 	return result, nil
 }
