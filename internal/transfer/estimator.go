@@ -13,21 +13,23 @@ type Estimator struct {
 	processed int
 }
 
-// NewEstimator creates a new time estimator.
+// NewEstimator creates a new time estimator. The clock starts immediately
+// so the first item's processing time is included in the average.
 func NewEstimator() *Estimator {
-	return &Estimator{}
+	return &Estimator{start: time.Now()}
 }
 
 // Tick records that one work item (download/upload) has completed.
 func (e *Estimator) Tick() {
-	if e.processed == 0 {
-		e.start = time.Now()
-	}
 	e.processed++
 }
 
 // Estimate returns a formatted estimate string like "[Estimated 5 min. 23 sec. left] "
 // or empty string if not enough data yet.
+//
+// Callers may call Estimate before or after Tick for a given item:
+//   - Tick-then-Estimate (Flickr download): estimate shown on the completion log line
+//   - Estimate-then-Tick (Google upload): estimate shown before work starts
 func (e *Estimator) Estimate(remaining int) string {
 	if e.processed < estimateThreshold || remaining <= 0 {
 		return ""
