@@ -151,24 +151,55 @@ func buildAPIURL(method, apiKey string, params map[string]string) string {
 }
 
 // signedAPIGet makes an OAuth-signed GET request to the Flickr REST API with rate limiting and retry.
+// It retries when the API returns non-JSON responses (e.g. HTML error pages with 200 status).
 func (c *Client) signedAPIGet(ctx context.Context, method string, extra map[string]string) (*http.Response, error) {
 	baseURL := apiURL()
-	params := map[string]string{
-		"method":         method,
-		"format":         "json",
-		"nojsoncallback": "1",
-	}
-	for k, v := range extra {
-		params[k] = v
-	}
 
-	oauthSign("GET", baseURL, params, c.cfg)
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		params := map[string]string{
+			"method":         method,
+			"format":         "json",
+			"nojsoncallback": "1",
+		}
+		for k, v := range extra {
+			params[k] = v
+		}
 
-	v := url.Values{}
-	for k, val := range params {
-		v.Set(k, val)
+		oauthSign("GET", baseURL, params, c.cfg)
+
+		v := url.Values{}
+		for k, val := range params {
+			v.Set(k, val)
+		}
+		resp, err := c.retryableGet(ctx, baseURL+"?"+v.Encode())
+		if err != nil {
+			return nil, err
+		}
+
+		// Flickr sometimes returns HTML error pages with a 200 status.
+		// Detect this by checking Content-Type and retry.
+		ct := resp.Header.Get("Content-Type")
+		if ct != "" && !strings.Contains(ct, "json") && !strings.Contains(ct, "javascript") {
+			_ = resp.Body.Close()
+			if attempt == maxRetries {
+				return nil, fmt.Errorf("API returned non-JSON response (Content-Type: %s) after %d retries", ct, maxRetries)
+			}
+			delay := baseRetryDelay * time.Duration(math.Pow(2, float64(attempt)))
+			if isTestMode() {
+				delay = time.Millisecond
+			}
+			c.log.Info("API returned non-JSON response (Content-Type: %s), retrying in %v (attempt %d/%d)", ct, delay, attempt+1, maxRetries)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
+			continue
+		}
+
+		return resp, nil
 	}
-	return c.retryableGet(ctx, baseURL+"?"+v.Encode())
+	return nil, fmt.Errorf("retries exhausted for %s API call", method)
 }
 
 // photosResponse represents the Flickr getPhotos API response.
@@ -281,7 +312,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 				continue
 			}
 
-			origResult, err := c.getOriginalURL(ctx, photo.ID)
+			candidates, err := c.getOriginalURLs(ctx, photo.ID)
 			if err != nil {
 				result.RecordError(photo.ID, err.Error())
 				estimator.Tick()
@@ -290,6 +321,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 				continue
 			}
 
+			origResult := candidates[0]
 			if origResult.Label != "Original" && origResult.Label != "Video Original" {
 				c.log.Info("warning: original not available for %s, using %s", photo.ID, origResult.Label)
 			}
@@ -297,11 +329,25 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 			ext := extensionFromURL(origResult.URL, defaultExtForLabel(origResult.Label))
 			filename := fmt.Sprintf("%s_%s%s", photo.ID, photo.Secret, ext)
 
-			if err := c.downloadFile(ctx, origResult.URL, filepath.Join(outputDir, filename)); err != nil {
-				result.RecordError(filename, err.Error())
+			// Try downloading with fallback to alternative sizes on 404.
+			downloadErr := c.downloadFile(ctx, origResult.URL, filepath.Join(outputDir, filename))
+			if downloadErr != nil && len(candidates) > 1 && strings.Contains(downloadErr.Error(), "HTTP 404") {
+				for i := 1; i < len(candidates); i++ {
+					alt := candidates[i]
+					c.log.Info("download 404 for %s (%s), trying fallback: %s", photo.ID, origResult.Label, alt.Label)
+					ext = extensionFromURL(alt.URL, defaultExtForLabel(alt.Label))
+					filename = fmt.Sprintf("%s_%s%s", photo.ID, photo.Secret, ext)
+					downloadErr = c.downloadFile(ctx, alt.URL, filepath.Join(outputDir, filename))
+					if downloadErr == nil || !strings.Contains(downloadErr.Error(), "HTTP 404") {
+						break
+					}
+				}
+			}
+			if downloadErr != nil {
+				result.RecordError(filename, downloadErr.Error())
 				estimator.Tick()
 				processed := result.Succeeded + result.Skipped + result.Failed
-				c.log.Error("[%d/%d] %sdownloading %s: %v", processed, result.Expected, estimator.Estimate(result.Expected-processed), filename, err)
+				c.log.Error("[%d/%d] %sdownloading %s: %v", processed, result.Expected, estimator.Estimate(result.Expected-processed), filename, downloadErr)
 				continue
 			}
 
@@ -344,14 +390,15 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 	return result, nil
 }
 
-// originalResult holds the URL and metadata from getOriginalURL.
+// originalResult holds the URL and metadata from getOriginalURLs.
 type originalResult struct {
 	URL   string
 	Label string
 }
 
-// getOriginalURL retrieves the best available URL for a photo or video.
-func (c *Client) getOriginalURL(ctx context.Context, photoID string) (*originalResult, error) {
+// getOriginalURLs retrieves available URLs for a photo or video in preference order.
+// Returns multiple candidates so the caller can fall back on download errors (e.g. 404).
+func (c *Client) getOriginalURLs(ctx context.Context, photoID string) ([]originalResult, error) {
 	resp, err := c.signedAPIGet(ctx, "flickr.photos.getSizes", map[string]string{
 		"photo_id": photoID,
 	})
@@ -369,23 +416,34 @@ func (c *Client) getOriginalURL(ctx context.Context, photoID string) (*originalR
 		return nil, fmt.Errorf("Flickr API error: stat=%s", sizesResp.Stat) //nolint:staticcheck // proper noun
 	}
 
-	// Prefer original sizes, then large fallbacks, then last available.
+	// Build ordered list: preferred sizes first, then any remaining as fallbacks.
 	// Video sizes are checked first so that a video with both "Original" (photo
 	// thumbnail) and "Video Original" picks the actual video file.
-	for _, pref := range []string{"Video Original", "Original", "Video Player", "Large"} {
+	preferred := []string{"Video Original", "Original", "Video Player", "Large"}
+	seen := make(map[string]bool)
+	var results []originalResult
+
+	for _, pref := range preferred {
 		for _, s := range sizesResp.Sizes.Size {
 			if string(s.Label) == pref {
-				return &originalResult{URL: s.Source, Label: string(s.Label)}, nil
+				results = append(results, originalResult{URL: s.Source, Label: string(s.Label)})
+				seen[s.Source] = true
 			}
 		}
 	}
 
-	if len(sizesResp.Sizes.Size) > 0 {
-		last := sizesResp.Sizes.Size[len(sizesResp.Sizes.Size)-1]
-		return &originalResult{URL: last.Source, Label: string(last.Label)}, nil
+	// Add any remaining sizes not already included as last-resort fallbacks.
+	for _, s := range sizesResp.Sizes.Size {
+		if !seen[s.Source] {
+			results = append(results, originalResult{URL: s.Source, Label: string(s.Label)})
+		}
 	}
 
-	return nil, fmt.Errorf("no sizes available for photo %s", photoID)
+	if len(results) == 0 {
+		return nil, fmt.Errorf("no sizes available for photo %s", photoID)
+	}
+
+	return results, nil
 }
 
 // downloadFile downloads a URL to a local file path with rate limiting and retry.
