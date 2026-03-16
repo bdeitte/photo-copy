@@ -45,8 +45,10 @@ func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, me
 	defer func() { _ = os.Remove(configPath) }()
 
 	args := buildUploadArgs(configPath, inputDir, bucket, prefix)
+	var filterFlags []string
 	if mediaOnly {
-		args = append(args, buildMediaIncludeFlags()...)
+		filterFlags = buildMediaIncludeFlags()
+		args = append(args, filterFlags...)
 	}
 
 	if limit > 0 {
@@ -62,9 +64,10 @@ func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, me
 		// Replace include flags with --files-from (they're mutually exclusive in rclone)
 		args = buildUploadArgs(configPath, inputDir, bucket, prefix)
 		args = append(args, "--files-from", filesFromPath)
+		filterFlags = []string{"--files-from", filesFromPath}
 	}
 
-	total := c.countFiles(ctx, rclonePath, configPath, inputDir, args)
+	total := c.countFiles(ctx, rclonePath, configPath, inputDir, filterFlags)
 	c.log.Debug("running: %s %s", rclonePath, strings.Join(args, " "))
 	err = c.runRcloneWithProgress(ctx, rclonePath, args, total, "uploaded")
 	result.Finish()
@@ -96,8 +99,10 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 	}
 
 	args := buildDownloadArgs(configPath, bucket, prefix, outputDir)
+	var filterFlags []string
 	if mediaOnly {
-		args = append(args, buildMediaIncludeFlags()...)
+		filterFlags = buildMediaIncludeFlags()
+		args = append(args, filterFlags...)
 	}
 
 	if limit > 0 {
@@ -113,9 +118,10 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 		// Replace include flags with --files-from (they're mutually exclusive in rclone)
 		args = buildDownloadArgs(configPath, bucket, prefix, outputDir)
 		args = append(args, "--files-from", filesFromPath)
+		filterFlags = []string{"--files-from", filesFromPath}
 	}
 
-	total := c.countFiles(ctx, rclonePath, configPath, src, args)
+	total := c.countFiles(ctx, rclonePath, configPath, src, filterFlags)
 	c.log.Debug("running: %s %s", rclonePath, strings.Join(args, " "))
 	err = c.runRcloneWithProgress(ctx, rclonePath, args, total, "downloaded")
 	result.Finish()
@@ -148,6 +154,7 @@ func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, a
 	estimator := transfer.NewEstimator()
 	copied := 0
 	scanner := bufio.NewScanner(stderr)
+	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), 1024*1024) // 1MB max line
 	for scanner.Scan() {
 		line := scanner.Text()
 
@@ -185,22 +192,20 @@ func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, a
 	return nil
 }
 
-// countFiles runs "rclone lsf" to count source files, returning 0 on error.
-func (c *Client) countFiles(ctx context.Context, rclonePath, configPath, source string, copyArgs []string) int {
-	lsfArgs := []string{"lsf", source, "--config", configPath, "--files-only", "-R"}
-	for i := 0; i < len(copyArgs); i++ {
-		if copyArgs[i] == "--include" && i+1 < len(copyArgs) {
-			lsfArgs = append(lsfArgs, "--include", copyArgs[i+1])
-			i++
-		}
-		if copyArgs[i] == "--ignore-case" {
-			lsfArgs = append(lsfArgs, "--ignore-case")
-		}
-		if copyArgs[i] == "--files-from" && i+1 < len(copyArgs) {
-			lsfArgs = append(lsfArgs, "--files-from", copyArgs[i+1])
-			i++
+// countFiles counts source files for progress tracking.
+// When a files-from path is present in the args, it counts lines in that file directly.
+// Otherwise it runs "rclone lsf" with the appropriate filter flags.
+// Returns 0 on error (progress will show [X] instead of [X/Total]).
+func (c *Client) countFiles(ctx context.Context, rclonePath, configPath, source string, filterFlags []string) int {
+	// If we have a --files-from file, count its lines directly
+	for i, f := range filterFlags {
+		if f == "--files-from" && i+1 < len(filterFlags) {
+			return countLinesInFile(filterFlags[i+1])
 		}
 	}
+
+	lsfArgs := []string{"lsf", source, "--config", configPath, "--files-only", "-R"}
+	lsfArgs = append(lsfArgs, filterFlags...)
 
 	c.log.Debug("counting files: %s %s", rclonePath, strings.Join(lsfArgs, " "))
 	cmd := exec.CommandContext(ctx, rclonePath, lsfArgs...)
@@ -215,6 +220,21 @@ func (c *Client) countFiles(ctx context.Context, rclonePath, configPath, source 
 		return 0
 	}
 	return len(strings.Split(trimmed, "\n"))
+}
+
+// countLinesInFile counts non-empty lines in a file.
+func countLinesInFile(path string) int {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	count := 0
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if line != "" {
+			count++
+		}
+	}
+	return count
 }
 
 func buildUploadArgs(configPath, inputDir, bucket, prefix string) []string {
