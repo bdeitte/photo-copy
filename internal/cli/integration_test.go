@@ -377,6 +377,108 @@ func TestFlickrDownload_LimitFlag(t *testing.T) {
 	}
 }
 
+// flickrMultiSizesResponse builds a Flickr getSizes JSON response with multiple sizes.
+func flickrMultiSizesResponse(sizes []map[string]string) map[string]any {
+	return map[string]any{
+		"sizes": map[string]any{
+			"size": sizes,
+		},
+		"stat": "ok",
+	}
+}
+
+func TestFlickrDownload_RetryOnHTMLResponse(t *testing.T) {
+	outputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	photos := []map[string]string{
+		{"id": "1", "secret": "aaa", "server": "1", "title": "p1"},
+	}
+
+	var mock *mockserver.FlickrMock
+	mock = mockserver.NewFlickr(t).
+		OnGetPhotos(mockserver.RespondJSON(200, flickrPhotosResponse(photos, 1, 1, 1))).
+		OnGetSizes(mockserver.RespondSequence(
+			// First call returns HTML (simulating Flickr error page with 200 status)
+			func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.WriteHeader(200)
+				_, _ = w.Write([]byte("<html><body>Error</body></html>"))
+			},
+			// Second call returns valid JSON
+			func(w http.ResponseWriter, r *http.Request) {
+				photoID := r.URL.Query().Get("photo_id")
+				mockserver.RespondJSON(200, flickrSizesResponse(
+					mock.Server.URL+"/download/"+photoID+".jpg",
+				))(w, r)
+			},
+		)).
+		OnDownload(mockserver.RespondBytes(200, testImageData)).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_API_URL", mock.APIURL)
+
+	err := executeCmd(t, "flickr", "download", outputDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(outputDir, "1_aaa.jpg")); err != nil {
+		t.Error("photo should have been downloaded after HTML retry")
+	}
+}
+
+func TestFlickrDownload_VideoFallbackOn404(t *testing.T) {
+	outputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	photos := []map[string]string{
+		{"id": "1", "secret": "aaa", "server": "1", "title": "video1"},
+	}
+
+	var mock *mockserver.FlickrMock
+	mock = mockserver.NewFlickr(t).
+		OnGetPhotos(mockserver.RespondJSON(200, flickrPhotosResponse(photos, 1, 1, 1))).
+		OnGetSizes(func(w http.ResponseWriter, r *http.Request) {
+			// Return multiple sizes: Video Original (will 404) and Video Player (fallback)
+			mockserver.RespondJSON(200, flickrMultiSizesResponse([]map[string]string{
+				{"label": "Video Original", "source": mock.Server.URL + "/download/orig.mp4"},
+				{"label": "Video Player", "source": mock.Server.URL + "/download/player.mp4"},
+			}))(w, r)
+		}).
+		OnDownload(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "orig.mp4") {
+				w.WriteHeader(404)
+				return
+			}
+			// Fallback URL succeeds
+			mockserver.RespondBytes(200, testImageData)(w, r)
+		}).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_API_URL", mock.APIURL)
+
+	err := executeCmd(t, "flickr", "download", outputDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// File should have been downloaded using the fallback URL
+	if _, err := os.Stat(filepath.Join(outputDir, "1_aaa.mp4")); err != nil {
+		t.Error("video should have been downloaded via fallback URL")
+	}
+
+	// Verify transfer log has the entry
+	logLines := readLines(t, filepath.Join(outputDir, "transfer.log"))
+	if len(logLines) != 1 {
+		t.Errorf("transfer log has %d entries, want 1", len(logLines))
+	}
+}
+
 // --- Flickr Upload Tests ---
 
 func TestFlickrUpload_HappyPath(t *testing.T) {
