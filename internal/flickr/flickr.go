@@ -152,6 +152,8 @@ func buildAPIURL(method, apiKey string, params map[string]string) string {
 
 // signedAPIGet makes an OAuth-signed GET request to the Flickr REST API with rate limiting and retry.
 // It retries when the API returns non-JSON responses (e.g. HTML error pages with 200 status).
+// Note: each iteration calls retryableGet which has its own retry loop for 429/5xx, so in the
+// worst case a single signedAPIGet call may make up to (maxRetries+1)^2 HTTP requests.
 func (c *Client) signedAPIGet(ctx context.Context, method string, extra map[string]string) (*http.Response, error) {
 	baseURL := apiURL()
 
