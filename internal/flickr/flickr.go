@@ -21,6 +21,7 @@ import (
 	"github.com/briandeitte/photo-copy/internal/config"
 	"github.com/briandeitte/photo-copy/internal/logging"
 	"github.com/briandeitte/photo-copy/internal/media"
+	"github.com/briandeitte/photo-copy/internal/mp4meta"
 	"github.com/briandeitte/photo-copy/internal/transfer"
 )
 
@@ -211,10 +212,12 @@ type photosResponse struct {
 		Pages   int `json:"pages"`
 		Total   int `json:"total"`
 		Photo   []struct {
-			ID     string `json:"id"`
-			Secret string `json:"secret"`
-			Server string `json:"server"`
-			Title  string `json:"title"`
+			ID         string `json:"id"`
+			Secret     string `json:"secret"`
+			Server     string `json:"server"`
+			Title      string `json:"title"`
+			DateTaken  string `json:"datetaken"`
+			DateUpload string `json:"dateupload"`
 		} `json:"photo"`
 	} `json:"photos"`
 	Stat string `json:"stat"`
@@ -282,6 +285,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 			"user_id":  "me",
 			"page":     strconv.Itoa(page),
 			"per_page": "500",
+			"extras":   "date_taken,date_upload",
 		})
 		if err != nil {
 			return result, fmt.Errorf("fetching photos page %d: %w", page, err)
@@ -364,6 +368,23 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 			} else {
 				result.RecordSuccess(filename, info.Size())
 			}
+
+			// Set original dates on downloaded file.
+			photoDate := resolvePhotoDate(photo.DateTaken, photo.DateUpload)
+			if !photoDate.IsZero() {
+				filePath := filepath.Join(outputDir, filename)
+				if ext == ".mp4" || ext == ".mov" {
+					if err := mp4meta.SetCreationTime(filePath, photoDate); err != nil {
+						c.log.Error("setting MP4 metadata for %s: %v", filename, err)
+					}
+				}
+				if err := os.Chtimes(filePath, photoDate, photoDate); err != nil {
+					c.log.Error("setting file time for %s: %v", filename, err)
+				}
+			} else {
+				c.log.Info("no date available for %s, skipping date metadata", photo.ID)
+			}
+
 			estimator.Tick()
 			processed := result.Succeeded + result.Skipped + result.Failed
 			c.log.Info("[%d/%d] %sdownloaded %s", processed, result.Expected, estimator.Estimate(result.Expected-processed), filename)
