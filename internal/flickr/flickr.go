@@ -183,15 +183,21 @@ func (c *Client) signedAPIGet(ctx context.Context, method string, extra map[stri
 		// Detect this by checking Content-Type and retry.
 		ct := resp.Header.Get("Content-Type")
 		if ct != "" && !strings.Contains(ct, "json") && !strings.Contains(ct, "javascript") {
+			// Read body to log the error details from Flickr
+			bodyBytes, readErr := io.ReadAll(io.LimitReader(resp.Body, 1024))
 			_ = resp.Body.Close()
+			bodySnippet := ""
+			if readErr == nil && len(bodyBytes) > 0 {
+				bodySnippet = string(bodyBytes)
+			}
 			if attempt == maxRetries {
-				return nil, fmt.Errorf("API returned non-JSON response (Content-Type: %s) after %d retries", ct, maxRetries)
+				return nil, fmt.Errorf("API returned non-JSON response (Content-Type: %s, status: %d, body: %s) after %d retries", ct, resp.StatusCode, bodySnippet, maxRetries)
 			}
 			delay := baseRetryDelay * time.Duration(math.Pow(2, float64(attempt)))
 			if isTestMode() {
 				delay = time.Millisecond
 			}
-			c.log.Info("API returned non-JSON response (Content-Type: %s), retrying in %v (attempt %d/%d)", ct, delay, attempt+1, maxRetries)
+			c.log.Info("API returned non-JSON response (Content-Type: %s, status: %d, body: %s), retrying in %v (attempt %d/%d)", ct, resp.StatusCode, bodySnippet, delay, attempt+1, maxRetries)
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
