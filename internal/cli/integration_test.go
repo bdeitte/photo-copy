@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/briandeitte/photo-copy/internal/config"
 	"github.com/briandeitte/photo-copy/internal/testutil/mockserver"
@@ -476,6 +477,51 @@ func TestFlickrDownload_VideoFallbackOn404(t *testing.T) {
 	logLines := readLines(t, filepath.Join(outputDir, "transfer.log"))
 	if len(logLines) != 1 {
 		t.Errorf("transfer log has %d entries, want 1", len(logLines))
+	}
+}
+
+func TestFlickrDownload_PreservesOriginalDates(t *testing.T) {
+	outputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	photos := []map[string]string{
+		{
+			"id": "1", "secret": "aaa", "server": "1", "title": "photo1",
+			"datetaken": "2020-06-15 14:30:00", "dateupload": "1592234567",
+		},
+	}
+
+	var mock *mockserver.FlickrMock
+	mock = mockserver.NewFlickr(t).
+		OnGetPhotos(mockserver.RespondJSON(200, flickrPhotosResponse(photos, 1, 1, 1))).
+		OnGetSizes(func(w http.ResponseWriter, r *http.Request) {
+			photoID := r.URL.Query().Get("photo_id")
+			mockserver.RespondJSON(200, flickrSizesResponse(
+				mock.Server.URL+"/download/"+photoID+".jpg",
+			))(w, r)
+		}).
+		OnDownload(mockserver.RespondBytes(200, testImageData)).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_API_URL", mock.APIURL)
+
+	err := executeCmd(t, "flickr", "download", outputDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify file system timestamp was set to the date_taken value
+	filePath := filepath.Join(outputDir, "1_aaa.jpg")
+	info, err := os.Stat(filePath)
+	if err != nil {
+		t.Fatalf("file not found: %v", err)
+	}
+	expectedTime := time.Date(2020, 6, 15, 14, 30, 0, 0, time.UTC)
+	modTime := info.ModTime().UTC()
+	if !modTime.Equal(expectedTime) {
+		t.Errorf("file mod time = %v, want %v", modTime, expectedTime)
 	}
 }
 
