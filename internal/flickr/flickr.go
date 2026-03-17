@@ -382,7 +382,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 					c.log.Error("setting file time for %s: %v", filename, err)
 				}
 			} else {
-				c.log.Info("no date available for %s, skipping date metadata", photo.ID)
+				c.log.Info("no date available for %s, skipping date metadata", filename)
 			}
 
 			estimator.Tick()
