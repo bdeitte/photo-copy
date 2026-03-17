@@ -38,6 +38,7 @@ Go CLI app using [cobra](https://github.com/spf13/cobra) for command structure. 
 - **flickr/** - Flickr API client with OAuth 1.0a signing (`oauth.go`). Uses transfer log files (`transfer.log`) for resumable downloads.
 - **google/** - Google Photos API client with OAuth2 flow. `takeout.go` handles extracting media from Google Takeout zip archives. Uses upload log files for resumable uploads.
 - **s3/** - S3 operations via bundled rclone binary subprocess. `rclone.go` handles binary resolution (checks next to executable, then cwd) and temp config generation. `s3.go` builds rclone command args and runs them.
+- **mp4meta/** - Sets creation/modification timestamps in MP4/MOV container metadata (`mvhd`/`tkhd`/`mdhd` boxes) using `abema/go-mp4`. Used by Flickr downloads to preserve original capture dates in video files.
 - **media/** - Shared `IsSupportedFile()` filter for supported photo/video extensions.
 - **transfer/** - Shared `Result` struct for tracking transfer statistics (succeeded/failed/skipped counts, bytes, errors). `Validate()` checks for count mismatches, zero-size files, and transfer log consistency. `PrintSummary()` writes a human-readable summary to stderr. `WriteReport()` writes a detailed report file. `HandleResult()` is the standard CLI handler that runs all three.
 - **logging/** - Simple leveled logger (Debug/Info/Error) writing to stderr with timestamps.
@@ -53,6 +54,7 @@ Go CLI app using [cobra](https://github.com/spf13/cobra) for command structure. 
 - S3 delegates to rclone subprocess rather than using the AWS SDK directly. Platform-specific rclone binaries live in `rclone-bin/` (Git LFS, downloaded via `rclone-bin/update-rclone.sh`). 6 platforms: linux/darwin/windows x amd64/arm64.
 - The `--debug` flag on the root command enables verbose logging across all subcommands. CLI flags (`debug`, `limit`) are owned by a `rootOpts` struct (not package-level vars) for test isolation.
 - Integration tests use env var overrides (`PHOTO_COPY_CONFIG_DIR`, `PHOTO_COPY_FLICKR_API_URL`, `PHOTO_COPY_GOOGLE_API_URL`, `PHOTO_COPY_TEST_MODE`, etc.) to redirect service URLs to mock servers and disable throttling.
+- Flickr downloads preserve original dates: `date_taken` (preferred) or `date_upload` (fallback) from the API. Video files (`.mp4`, `.mov`) get MP4 container metadata updated via the `mp4meta` package; all files get file system timestamps set via `os.Chtimes`.
 - No album/metadata management — raw media files only.
 
 ### Design constraints

@@ -90,6 +90,14 @@ Post-transfer validation checks for potential issues:
 
 A report file (`photo-copy-report-{service}-{operation}-{timestamp}.txt`) is written to the transfer directory with the full breakdown of counts, errors, and validation warnings.
 
+### Media date preservation
+
+Flickr downloads automatically preserve original capture dates:
+
+- **Video files** (`.mp4`, `.mov`) — The original capture date from Flickr is written into the MP4/QuickTime container metadata (`mvhd`/`tkhd`/`mdhd` creation times), and the file system modification time is set to match.
+- **Photo files** — The file system modification time is set to the original capture date. Photos typically already contain EXIF dates.
+- **Date source** — Uses Flickr's `date_taken` (original camera date) when available, falling back to `date_upload` (when the file was uploaded to Flickr).
+
 ### Debug mode
 
 Add `--debug` to any command for verbose logging:
