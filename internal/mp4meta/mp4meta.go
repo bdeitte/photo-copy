@@ -3,7 +3,9 @@ package mp4meta
 
 import (
 	"fmt"
+	"math"
 	"os"
+	"path/filepath"
 	"time"
 
 	gomp4 "github.com/abema/go-mp4"
@@ -17,7 +19,11 @@ const mp4Epoch = 2082844800
 // mvhd, tkhd, and mdhd boxes of an MP4 or MOV file. It writes to a temp
 // file and renames over the original on success.
 func SetCreationTime(filePath string, t time.Time) error {
-	mp4Time := uint64(t.Unix()) + mp4Epoch
+	mp4Seconds := t.Unix() + mp4Epoch
+	if mp4Seconds < 0 {
+		return fmt.Errorf("date %v is before MP4 epoch (1904-01-01)", t)
+	}
+	mp4Time := uint64(mp4Seconds)
 
 	in, err := os.Open(filePath)
 	if err != nil {
@@ -25,11 +31,11 @@ func SetCreationTime(filePath string, t time.Time) error {
 	}
 	defer func() { _ = in.Close() }()
 
-	tmpPath := filePath + ".tmp"
-	out, err := os.Create(tmpPath)
+	out, err := os.CreateTemp(filepath.Dir(filePath), "*.tmp")
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
 	}
+	tmpPath := out.Name()
 
 	w := gomp4.NewWriter(out)
 
@@ -88,6 +94,9 @@ func rewriteMvhd(h *gomp4.ReadHandle, w *gomp4.Writer, mp4Time uint64) error {
 	mvhd := box.(*gomp4.Mvhd)
 
 	if mvhd.GetVersion() == 0 {
+		if mp4Time > math.MaxUint32 {
+			return fmt.Errorf("timestamp overflows version 0 mvhd (32-bit)")
+		}
 		mvhd.CreationTimeV0 = uint32(mp4Time)
 		mvhd.ModificationTimeV0 = uint32(mp4Time)
 	} else {
@@ -114,6 +123,9 @@ func rewriteTkhd(h *gomp4.ReadHandle, w *gomp4.Writer, mp4Time uint64) error {
 	tkhd := box.(*gomp4.Tkhd)
 
 	if tkhd.GetVersion() == 0 {
+		if mp4Time > math.MaxUint32 {
+			return fmt.Errorf("timestamp overflows version 0 tkhd (32-bit)")
+		}
 		tkhd.CreationTimeV0 = uint32(mp4Time)
 		tkhd.ModificationTimeV0 = uint32(mp4Time)
 	} else {
@@ -140,6 +152,9 @@ func rewriteMdhd(h *gomp4.ReadHandle, w *gomp4.Writer, mp4Time uint64) error {
 	mdhd := box.(*gomp4.Mdhd)
 
 	if mdhd.GetVersion() == 0 {
+		if mp4Time > math.MaxUint32 {
+			return fmt.Errorf("timestamp overflows version 0 mdhd (32-bit)")
+		}
 		mdhd.CreationTimeV0 = uint32(mp4Time)
 		mdhd.ModificationTimeV0 = uint32(mp4Time)
 	} else {

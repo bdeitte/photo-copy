@@ -170,6 +170,54 @@ func TestSetCreationTime_NonMP4(t *testing.T) {
 	}
 }
 
+func TestSetCreationTime_NonexistentFile(t *testing.T) {
+	err := SetCreationTime("/nonexistent/path/test.mp4", time.Now())
+	if err == nil {
+		t.Fatal("expected error for nonexistent file")
+	}
+}
+
+func TestSetCreationTime_PreEpochDate(t *testing.T) {
+	preEpoch := time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	mp4Path := filepath.Join(dir, "test.mp4")
+	writeMinimalMP4(t, mp4Path, 0)
+
+	err := SetCreationTime(mp4Path, preEpoch)
+	if err == nil {
+		t.Fatal("expected error for pre-epoch date")
+	}
+}
+
+func TestSetCreationTime_V0Overflow(t *testing.T) {
+	// A date far enough in the future to overflow uint32 MP4 time.
+	// uint32 max = 4294967295 seconds from 1904 ≈ year 2040.
+	futureDate := time.Date(2050, 1, 1, 0, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	mp4Path := filepath.Join(dir, "test.mp4")
+	writeMinimalMP4(t, mp4Path, 0)
+
+	err := SetCreationTime(mp4Path, futureDate)
+	if err == nil {
+		t.Fatal("expected error for V0 overflow")
+	}
+}
+
+func TestSetCreationTime_V1NoOverflow(t *testing.T) {
+	// Same future date should succeed with V1 (64-bit) boxes.
+	futureDate := time.Date(2050, 1, 1, 0, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	mp4Path := filepath.Join(dir, "test.mp4")
+	writeMinimalMP4(t, mp4Path, 1)
+
+	if err := SetCreationTime(mp4Path, futureDate); err != nil {
+		t.Fatalf("V1 should handle future dates: %v", err)
+	}
+
+	expectedMP4Time := uint64(futureDate.Unix()) + mp4Epoch
+	verifyTimestampsV1(t, mp4Path, expectedMP4Time)
+}
+
 // verifyTimestampsV0 reads the MP4 and checks all version 0 (32-bit) timestamps.
 func verifyTimestampsV0(t *testing.T, path string, expected uint32) {
 	t.Helper()
