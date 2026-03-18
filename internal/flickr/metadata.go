@@ -7,6 +7,35 @@ import (
 	xhtml "golang.org/x/net/html"
 )
 
+// flickrDescription handles Flickr's {"_content": "text"} description format.
+type flickrDescription struct {
+	Content string `json:"_content"`
+}
+
+// photoMeta holds parsed metadata for a Flickr photo.
+type photoMeta struct {
+	Title       string
+	Description string
+	Tags        []string
+}
+
+// isEmpty returns true if all fields are empty.
+func (m photoMeta) isEmpty() bool {
+	return m.Title == "" && m.Description == "" && len(m.Tags) == 0
+}
+
+// buildPhotoMeta constructs a photoMeta from raw Flickr API fields.
+// descriptionHTML is stripped of HTML tags, tagsStr is split on whitespace.
+func buildPhotoMeta(title, descriptionHTML, tagsStr string) photoMeta {
+	desc := stripHTML(descriptionHTML)
+	tags := strings.Fields(tagsStr)
+	return photoMeta{
+		Title:       title,
+		Description: desc,
+		Tags:        tags,
+	}
+}
+
 // stripHTML extracts plain text from an HTML string using the x/net/html
 // tokenizer. It decodes HTML entities, collapses whitespace, and trims.
 func stripHTML(s string) string {
