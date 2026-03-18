@@ -1133,7 +1133,12 @@ func insertOrReplaceUUIDBox(data []byte, xmpPayload []byte) ([]byte, error) {
 				result.Write(data[pos:])
 				break
 			}
-			boxSize = int(binary.BigEndian.Uint64(data[pos+8 : pos+16]))
+			extSize := binary.BigEndian.Uint64(data[pos+8 : pos+16])
+			if extSize > uint64(len(data)) {
+				result.Write(data[pos:])
+				break
+			}
+			boxSize = int(extSize)
 		}
 
 		if boxSize < 8 || pos+boxSize > len(data) {
@@ -1388,14 +1393,6 @@ func TestFlickrDownload_EmbedsJPEGMetadata(t *testing.T) {
 	configDir := t.TempDir()
 	setupFlickrConfig(t, configDir)
 
-	photos := []map[string]string{
-		{
-			"id": "1", "secret": "aaa", "server": "1", "title": "Sunset Photo",
-			"datetaken": "2020-06-15 14:30:00", "dateupload": "1592234567",
-			"tags": "sunset beach ocean",
-		},
-	}
-	// Description is a nested object in Flickr API
 	photosWithDesc := []map[string]any{
 		{
 			"id": "1", "secret": "aaa", "server": "1", "title": "Sunset Photo",
