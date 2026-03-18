@@ -382,9 +382,21 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 
 			filePath := filepath.Join(outputDir, filename)
 
+			// Set original dates in MP4 container metadata. This must run
+			// before XMP embedding because gomp4 cannot parse UUID boxes and
+			// would hang if SetXMPMetadata appended one first.
+			photoDate := resolvePhotoDate(photo.DateTaken, photo.DateUpload)
+			if !photoDate.IsZero() {
+				if ext == ".mp4" || ext == ".mov" {
+					if err := mp4meta.SetCreationTime(filePath, photoDate); err != nil {
+						c.log.Error("setting MP4 metadata for %s: %v", filename, err)
+					}
+				}
+			}
+
 			// Embed title, description, and tags as XMP metadata.
-			// This must happen before date-setting since the temp-file-rename
-			// in the XMP writers would overwrite timestamps set by os.Chtimes.
+			// For MP4/MOV this appends a UUID box at EOF which gomp4 cannot
+			// parse, so it must happen after SetCreationTime.
 			meta := buildPhotoMeta(photo.Title, photo.Description.Content, photo.Tags)
 			if !meta.isEmpty() {
 				switch ext {
@@ -407,15 +419,9 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 				}
 			}
 
-			// Set original dates on downloaded file. This runs after XMP
-			// embedding so that os.Chtimes is the final timestamp write.
-			photoDate := resolvePhotoDate(photo.DateTaken, photo.DateUpload)
+			// Set filesystem timestamps last since temp-file-rename in both
+			// SetCreationTime and SetXMPMetadata resets mtime.
 			if !photoDate.IsZero() {
-				if ext == ".mp4" || ext == ".mov" {
-					if err := mp4meta.SetCreationTime(filePath, photoDate); err != nil {
-						c.log.Error("setting MP4 metadata for %s: %v", filename, err)
-					}
-				}
 				if err := os.Chtimes(filePath, photoDate, photoDate); err != nil {
 					c.log.Error("setting file time for %s: %v", filename, err)
 				}
