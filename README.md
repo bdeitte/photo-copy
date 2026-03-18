@@ -90,13 +90,18 @@ Post-transfer validation checks for potential issues:
 
 A report file (`photo-copy-report-{service}-{operation}-{timestamp}.txt`) is written to the transfer directory with the full breakdown of counts, errors, and validation warnings.
 
-### Media date preservation
+### Media metadata preservation
 
-Flickr downloads automatically preserve original capture dates:
+Flickr downloads automatically preserve original capture dates and embed Flickr metadata:
 
-- **Video files** (`.mp4`, `.mov`) — The original capture date from Flickr is written into the MP4/QuickTime container metadata (`mvhd`/`tkhd`/`mdhd` creation times), and the file system modification time is set to match.
-- **Photo files** — The file system modification time is set to the original capture date. Photos typically already contain EXIF dates.
-- **Date source** — Uses Flickr's `date_taken` (original camera date) when available, falling back to `date_upload` (when the file was uploaded to Flickr).
+- **Date preservation** — Original capture dates are set on all downloaded files:
+  - Video files (`.mp4`, `.mov`) get the date written into MP4/QuickTime container metadata (`mvhd`/`tkhd`/`mdhd` creation times) plus file system modification time.
+  - Photo files get the file system modification time set. Photos typically already contain EXIF dates.
+  - Uses Flickr's `date_taken` (original camera date) when available, falling back to `date_upload`.
+- **XMP metadata embedding** — Title, description, and tags from Flickr are embedded as XMP metadata (Dublin Core namespace) into downloaded files:
+  - JPEG files (`.jpg`, `.jpeg`) get an XMP APP1 segment inserted.
+  - Video files (`.mp4`, `.mov`) get an XMP UUID box inserted in the MP4 container.
+  - HTML in Flickr descriptions is stripped to plain text. Tags are split into individual keywords.
 
 ### Debug mode
 
