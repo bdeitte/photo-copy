@@ -525,6 +525,115 @@ func TestFlickrDownload_PreservesOriginalDates(t *testing.T) {
 	}
 }
 
+func TestFlickrDownload_EmbedsXMPMetadata(t *testing.T) {
+	outputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	// Build a minimal valid JPEG to serve as download content.
+	jpegData := buildMinimalJPEG()
+
+	photos := []map[string]any{
+		{
+			"id": "1", "secret": "aaa", "server": "1",
+			"title":       "Sunset <Photo>",
+			"datetaken":   "2020-06-15 14:30:00",
+			"dateupload":  "1592234567",
+			"description": map[string]string{"_content": "<b>A beautiful</b> sunset"},
+			"tags":        "nature sunset sky",
+		},
+	}
+
+	var mock *mockserver.FlickrMock
+	mock = mockserver.NewFlickr(t).
+		OnGetPhotos(mockserver.RespondJSON(200, map[string]any{
+			"photos": map[string]any{
+				"page":  1,
+				"pages": 1,
+				"total": 1,
+				"photo": photos,
+			},
+			"stat": "ok",
+		})).
+		OnGetSizes(func(w http.ResponseWriter, r *http.Request) {
+			photoID := r.URL.Query().Get("photo_id")
+			mockserver.RespondJSON(200, flickrSizesResponse(
+				mock.Server.URL+"/download/"+photoID+".jpg",
+			))(w, r)
+		}).
+		OnDownload(mockserver.RespondBytes(200, jpegData)).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_API_URL", mock.APIURL)
+
+	err := executeCmd(t, "flickr", "download", outputDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Read the downloaded file and verify XMP metadata was embedded.
+	filePath := filepath.Join(outputDir, "1_aaa.jpg")
+	xmp := readXMPFromJPEG(t, filePath)
+	if xmp == "" {
+		t.Fatal("no XMP metadata found in downloaded JPEG")
+	}
+	if !strings.Contains(xmp, "Sunset &lt;Photo&gt;") {
+		t.Errorf("XMP should contain escaped title, got: %s", xmp)
+	}
+	if !strings.Contains(xmp, "A beautiful sunset") {
+		t.Errorf("XMP should contain stripped description, got: %s", xmp)
+	}
+	if !strings.Contains(xmp, "<rdf:li>nature</rdf:li>") {
+		t.Errorf("XMP should contain tags, got: %s", xmp)
+	}
+}
+
+// buildMinimalJPEG constructs a minimal valid JPEG file in memory.
+func buildMinimalJPEG() []byte {
+	soi := []byte{0xFF, 0xD8}
+	app0Payload := []byte("JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00")
+	app0Len := uint16(len(app0Payload) + 2)
+	app0 := []byte{0xFF, 0xE0, byte(app0Len >> 8), byte(app0Len)}
+	app0 = append(app0, app0Payload...)
+	sos := []byte{0xFF, 0xDA, 0x00, 0x0C, 0x03, 0x01, 0x00, 0x02, 0x11, 0x03, 0x11, 0x00, 0x3F, 0x00}
+	eoi := []byte{0xFF, 0xD9}
+
+	var data []byte
+	data = append(data, soi...)
+	data = append(data, app0...)
+	data = append(data, sos...)
+	data = append(data, eoi...)
+	return data
+}
+
+// readXMPFromJPEG extracts XMP content from a JPEG file's APP1 segment.
+func readXMPFromJPEG(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const xmpNS = "http://ns.adobe.com/xap/1.0/\x00"
+	i := 2 // skip SOI
+	for i+4 <= len(data) {
+		if data[i] != 0xFF {
+			break
+		}
+		marker := data[i+1]
+		if marker == 0xD9 || marker == 0xDA {
+			break
+		}
+		segLen := int(data[i+2])<<8 | int(data[i+3])
+		payload := data[i+4 : i+2+segLen]
+		if marker == 0xE1 && strings.HasPrefix(string(payload), xmpNS) {
+			return string(payload[len(xmpNS):])
+		}
+		i += 2 + segLen
+	}
+	return ""
+}
+
 // --- Flickr Upload Tests ---
 
 func TestFlickrUpload_HappyPath(t *testing.T) {
