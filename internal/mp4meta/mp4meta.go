@@ -81,11 +81,14 @@ func buildUUIDBox(payload []byte) []byte {
 }
 
 // insertOrReplaceUUIDBox walks the top-level MP4 boxes in data, skipping any
-// existing XMP UUID box, and inserts a new one after the "moov" box (or at EOF).
+// existing XMP UUID box, and appends a new one at the end of the file.
+//
+// The UUID box is always appended at EOF rather than inserted after moov to
+// avoid shifting the mdat box. Inserting between moov and mdat would break
+// the absolute byte offsets in stco/co64 sample tables, corrupting playback.
 func insertOrReplaceUUIDBox(data []byte, xmpPayload []byte) ([]byte, error) {
 	out := make([]byte, 0, len(data)+8+16+len(xmpPayload))
 	pos := 0
-	moovFound := false
 
 	for pos+8 <= len(data) {
 		boxSize := int(binary.BigEndian.Uint32(data[pos : pos+4]))
@@ -101,12 +104,14 @@ func insertOrReplaceUUIDBox(data []byte, xmpPayload []byte) ([]byte, error) {
 			if pos+16 > len(data) {
 				// Malformed: copy remaining and stop.
 				out = append(out, data[pos:]...)
+				out = append(out, buildUUIDBox(xmpPayload)...)
 				return out, nil
 			}
 			extSize := binary.BigEndian.Uint64(data[pos+8 : pos+16])
 			if extSize > uint64(len(data)) {
 				// Invalid: copy remaining and stop.
 				out = append(out, data[pos:]...)
+				out = append(out, buildUUIDBox(xmpPayload)...)
 				return out, nil
 			}
 			boxSize = int(extSize)
@@ -116,7 +121,7 @@ func insertOrReplaceUUIDBox(data []byte, xmpPayload []byte) ([]byte, error) {
 		if boxSize < headerSize || pos+boxSize > len(data) {
 			// Malformed box: copy remaining and stop.
 			out = append(out, data[pos:]...)
-			return out, nil
+			break
 		}
 
 		// Skip existing XMP UUID box.
@@ -130,19 +135,10 @@ func insertOrReplaceUUIDBox(data []byte, xmpPayload []byte) ([]byte, error) {
 		// Copy this box through.
 		out = append(out, data[pos:pos+boxSize]...)
 		pos += boxSize
-
-		// After moov, insert the new XMP UUID box.
-		if boxType == "moov" {
-			out = append(out, buildUUIDBox(xmpPayload)...)
-			moovFound = true
-		}
 	}
 
-	// If no moov found, append at end.
-	if !moovFound {
-		out = append(out, buildUUIDBox(xmpPayload)...)
-	}
-
+	// Always append UUID box at EOF to avoid shifting mdat.
+	out = append(out, buildUUIDBox(xmpPayload)...)
 	return out, nil
 }
 
