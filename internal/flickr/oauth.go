@@ -80,8 +80,14 @@ func GetRequestToken(cfg *config.FlickrConfig) (string, string, string, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, _ := io.ReadAll(resp.Body)
-	vals, _ := url.ParseQuery(string(body))
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", "", "", fmt.Errorf("reading token response: %w", err)
+	}
+	vals, err := url.ParseQuery(string(body))
+	if err != nil {
+		return "", "", "", fmt.Errorf("parsing token response: %w", err)
+	}
 
 	token := vals.Get("oauth_token")
 	tokenSecret := vals.Get("oauth_token_secret")
@@ -116,8 +122,14 @@ func ExchangeToken(cfg *config.FlickrConfig, requestToken, requestTokenSecret, v
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, _ := io.ReadAll(resp.Body)
-	vals, _ := url.ParseQuery(string(body))
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", "", fmt.Errorf("reading token response: %w", err)
+	}
+	vals, err := url.ParseQuery(string(body))
+	if err != nil {
+		return "", "", fmt.Errorf("parsing token response: %w", err)
+	}
 
 	return vals.Get("oauth_token"), vals.Get("oauth_token_secret"), nil
 }

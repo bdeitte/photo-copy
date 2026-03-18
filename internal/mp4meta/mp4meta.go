@@ -224,6 +224,12 @@ func SetCreationTime(filePath string, t time.Time) error {
 	}
 	mp4Time := uint64(mp4Seconds)
 
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return fmt.Errorf("stat %s: %w", filePath, err)
+	}
+	perm := info.Mode().Perm()
+
 	in, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("opening %s: %w", filePath, err)
@@ -267,7 +273,6 @@ func SetCreationTime(filePath string, t time.Time) error {
 	})
 
 	closeErr := out.Close()
-	_ = in.Close()
 
 	if err != nil {
 		_ = os.Remove(tmpPath)
@@ -276,6 +281,11 @@ func SetCreationTime(filePath string, t time.Time) error {
 	if closeErr != nil {
 		_ = os.Remove(tmpPath)
 		return fmt.Errorf("closing temp file: %w", closeErr)
+	}
+
+	if err := os.Chmod(tmpPath, perm); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("chmod temp file: %w", err)
 	}
 
 	if renameErr := os.Rename(tmpPath, filePath); renameErr != nil {

@@ -301,8 +301,10 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 		}
 
 		var photosResp photosResponse
-		decodeErr := json.NewDecoder(resp.Body).Decode(&photosResp)
-		_ = resp.Body.Close()
+		decodeErr := func() error {
+			defer func() { _ = resp.Body.Close() }()
+			return json.NewDecoder(resp.Body).Decode(&photosResp)
+		}()
 		if decodeErr != nil {
 			return result, fmt.Errorf("decoding photos response: %w", decodeErr)
 		}

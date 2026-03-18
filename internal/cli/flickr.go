@@ -48,7 +48,10 @@ func newFlickrDownloadCmd(opts *rootOpts) *cobra.Command {
 			if result != nil {
 				logPath := filepath.Join(outputDir, "transfer.log")
 				// Build lookup map once instead of reading directory per log entry.
-				dirEntries, _ := os.ReadDir(outputDir)
+				dirEntries, readDirErr := os.ReadDir(outputDir)
+				if readDirErr != nil {
+					log.Error("reading output dir for validation: %v", readDirErr)
+				}
 				filesByPrefix := make(map[string]string, len(dirEntries))
 				for _, e := range dirEntries {
 					if idx := strings.Index(e.Name(), "_"); idx > 0 {

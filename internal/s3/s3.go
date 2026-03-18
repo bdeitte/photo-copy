@@ -186,6 +186,11 @@ func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, a
 		}
 	}
 
+	if err := scanner.Err(); err != nil {
+		_ = cmd.Wait()
+		return fmt.Errorf("reading rclone output: %w", err)
+	}
+
 	if err := cmd.Wait(); err != nil {
 		return fmt.Errorf("rclone failed: %w", err)
 	}

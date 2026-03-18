@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -130,25 +131,12 @@ func TestBuildAPIURL(t *testing.T) {
 	if url == "" {
 		t.Fatal("expected non-empty URL")
 	}
-	if !containsSubstr(url, "flickr.people.getPhotos") {
+	if !strings.Contains(url, "flickr.people.getPhotos") {
 		t.Fatalf("URL missing method: %s", url)
 	}
-	if !containsSubstr(url, "testkey") {
+	if !strings.Contains(url, "testkey") {
 		t.Fatalf("URL missing API key: %s", url)
 	}
-}
-
-func containsSubstr(s, substr string) bool {
-	return len(s) >= len(substr) && searchStr(s, substr)
-}
-
-func searchStr(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 func newTestClient() *Client {

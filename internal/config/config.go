@@ -108,10 +108,13 @@ func loadJSON(configDir, filename string, v any) error {
 	path := filepath.Join(configDir, filename)
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return ErrNotConfigured
 		}
 		return fmt.Errorf("reading %s: %w", filename, err)
 	}
-	return json.Unmarshal(data, v)
+	if err := json.Unmarshal(data, v); err != nil {
+		return fmt.Errorf("parsing %s: %w", filename, err)
+	}
+	return nil
 }

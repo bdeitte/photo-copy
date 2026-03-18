@@ -91,7 +91,7 @@ func extractMediaFromZip(zipPath, outputDir string, log *logging.Logger, result 
 			ext := filepath.Ext(name)
 			for i := 1; ; i++ {
 				destPath = filepath.Join(outputDir, fmt.Sprintf("%s_%d%s", base, i, ext))
-				if _, err := os.Stat(destPath); os.IsNotExist(err) {
+				if _, err := os.Stat(destPath); err != nil {
 					break
 				}
 			}
@@ -122,13 +122,13 @@ func extractMediaFromZip(zipPath, outputDir string, log *logging.Logger, result 
 func extractFile(f *zip.File, destPath string) (err error) {
 	rc, err := f.Open()
 	if err != nil {
-		return err
+		return fmt.Errorf("opening zip entry: %w", err)
 	}
 	defer func() { _ = rc.Close() }()
 
 	out, err := os.Create(destPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("creating %s: %w", destPath, err)
 	}
 	defer func() {
 		if cerr := out.Close(); cerr != nil && err == nil {
