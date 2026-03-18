@@ -425,7 +425,16 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 
 			estimator.Tick()
 			processed := result.Succeeded + result.Skipped + result.Failed
-			c.log.Info("[%d/%d] %sdownloaded %s", processed, result.Expected, estimator.Estimate(result.Expected-processed), filename)
+			detail := ""
+			switch {
+			case photo.Title != "" && !photoDate.IsZero():
+				detail = fmt.Sprintf(" %q (%s)", photo.Title, photoDate.Format("2006-01-02"))
+			case photo.Title != "":
+				detail = fmt.Sprintf(" %q", photo.Title)
+			case !photoDate.IsZero():
+				detail = fmt.Sprintf(" (%s)", photoDate.Format("2006-01-02"))
+			}
+			c.log.Info("[%d/%d] %sdownloaded %s%s", processed, result.Expected, estimator.Estimate(result.Expected-processed), filename, detail)
 
 			if limit > 0 && result.Succeeded+result.Failed >= limit {
 				c.log.Info("reached limit of %d files (%d downloaded, %d errors)", limit, result.Succeeded, result.Failed)
