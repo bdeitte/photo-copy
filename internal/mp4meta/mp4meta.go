@@ -120,8 +120,8 @@ func insertOrReplaceUUIDBox(data []byte, xmpPayload []byte) ([]byte, error) {
 		}
 
 		// Skip existing XMP UUID box.
-		if boxType == "uuid" && pos+8+16 <= pos+boxSize {
-			if string(data[pos+8:pos+24]) == string(xmpUUID) {
+		if boxType == "uuid" && pos+headerSize+16 <= pos+boxSize {
+			if string(data[pos+headerSize:pos+headerSize+16]) == string(xmpUUID) {
 				pos += boxSize
 				continue
 			}

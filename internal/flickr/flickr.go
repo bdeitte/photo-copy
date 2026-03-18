@@ -378,26 +378,13 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 				result.RecordSuccess(filename, info.Size())
 			}
 
-			// Set original dates on downloaded file.
-			photoDate := resolvePhotoDate(photo.DateTaken, photo.DateUpload)
-			if !photoDate.IsZero() {
-				filePath := filepath.Join(outputDir, filename)
-				if ext == ".mp4" || ext == ".mov" {
-					if err := mp4meta.SetCreationTime(filePath, photoDate); err != nil {
-						c.log.Error("setting MP4 metadata for %s: %v", filename, err)
-					}
-				}
-				if err := os.Chtimes(filePath, photoDate, photoDate); err != nil {
-					c.log.Error("setting file time for %s: %v", filename, err)
-				}
-			} else {
-				c.log.Info("no date available for %s, skipping date metadata", filename)
-			}
+			filePath := filepath.Join(outputDir, filename)
 
 			// Embed title, description, and tags as XMP metadata.
+			// This must happen before date-setting since the temp-file-rename
+			// in the XMP writers would overwrite timestamps set by os.Chtimes.
 			meta := buildPhotoMeta(photo.Title, photo.Description.Content, photo.Tags)
 			if !meta.isEmpty() {
-				filePath := filepath.Join(outputDir, filename)
 				switch ext {
 				case ".jpg", ".jpeg":
 					if err := jpegmeta.SetMetadata(filePath, jpegmeta.Metadata{
@@ -416,6 +403,22 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 						c.log.Error("setting MP4 XMP metadata for %s: %v", filename, err)
 					}
 				}
+			}
+
+			// Set original dates on downloaded file. This runs after XMP
+			// embedding so that os.Chtimes is the final timestamp write.
+			photoDate := resolvePhotoDate(photo.DateTaken, photo.DateUpload)
+			if !photoDate.IsZero() {
+				if ext == ".mp4" || ext == ".mov" {
+					if err := mp4meta.SetCreationTime(filePath, photoDate); err != nil {
+						c.log.Error("setting MP4 metadata for %s: %v", filename, err)
+					}
+				}
+				if err := os.Chtimes(filePath, photoDate, photoDate); err != nil {
+					c.log.Error("setting file time for %s: %v", filename, err)
+				}
+			} else {
+				c.log.Info("no date available for %s, skipping date metadata", filename)
 			}
 
 			estimator.Tick()

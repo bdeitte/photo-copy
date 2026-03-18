@@ -234,6 +234,7 @@ func readXMPFromMP4(t *testing.T, path string) string {
 		boxSize := int(data[pos])<<24 | int(data[pos+1])<<16 | int(data[pos+2])<<8 | int(data[pos+3])
 		boxType := string(data[pos+4 : pos+8])
 
+		headerSize := 8
 		if boxSize == 0 {
 			// extends to EOF
 			boxSize = len(data) - pos
@@ -245,16 +246,17 @@ func readXMPFromMP4(t *testing.T, path string) string {
 			extSize := int(data[pos+8])<<56 | int(data[pos+9])<<48 | int(data[pos+10])<<40 | int(data[pos+11])<<32 |
 				int(data[pos+12])<<24 | int(data[pos+13])<<16 | int(data[pos+14])<<8 | int(data[pos+15])
 			boxSize = extSize
+			headerSize = 16
 		}
 
-		if boxSize < 8 || pos+boxSize > len(data) {
+		if boxSize < headerSize || pos+boxSize > len(data) {
 			break
 		}
 
-		if boxType == "uuid" && pos+8+16 <= len(data) {
-			uuid := data[pos+8 : pos+24]
+		if boxType == "uuid" && pos+headerSize+16 <= pos+boxSize {
+			uuid := data[pos+headerSize : pos+headerSize+16]
 			if bytes.Equal(uuid, xmpUUID) {
-				return string(data[pos+24 : pos+boxSize])
+				return string(data[pos+headerSize+16 : pos+boxSize])
 			}
 		}
 
