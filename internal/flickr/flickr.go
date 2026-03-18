@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/briandeitte/photo-copy/internal/config"
+	"github.com/briandeitte/photo-copy/internal/jpegmeta"
 	"github.com/briandeitte/photo-copy/internal/logging"
 	"github.com/briandeitte/photo-copy/internal/media"
 	"github.com/briandeitte/photo-copy/internal/mp4meta"
@@ -391,6 +392,30 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 				}
 			} else {
 				c.log.Info("no date available for %s, skipping date metadata", filename)
+			}
+
+			// Embed title, description, and tags as XMP metadata.
+			meta := buildPhotoMeta(photo.Title, photo.Description.Content, photo.Tags)
+			if !meta.isEmpty() {
+				filePath := filepath.Join(outputDir, filename)
+				switch ext {
+				case ".jpg", ".jpeg":
+					if err := jpegmeta.SetMetadata(filePath, jpegmeta.Metadata{
+						Title:       meta.Title,
+						Description: meta.Description,
+						Tags:        meta.Tags,
+					}); err != nil {
+						c.log.Error("setting JPEG XMP metadata for %s: %v", filename, err)
+					}
+				case ".mp4", ".mov":
+					if err := mp4meta.SetXMPMetadata(filePath, mp4meta.XMPMetadata{
+						Title:       meta.Title,
+						Description: meta.Description,
+						Tags:        meta.Tags,
+					}); err != nil {
+						c.log.Error("setting MP4 XMP metadata for %s: %v", filename, err)
+					}
+				}
 			}
 
 			estimator.Tick()
