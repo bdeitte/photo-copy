@@ -607,7 +607,11 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) (*trans
 		}
 		estimator.Tick()
 		remaining := len(files) - (i + 1)
-		c.log.Info("[%d/%d] %suploaded %s", i+1, len(files), estimator.Estimate(remaining), filename)
+		dateStr := ""
+		if info != nil {
+			dateStr = fmt.Sprintf(" (%s)", info.ModTime().Format("2006-01-02"))
+		}
+		c.log.Info("[%d/%d] %suploaded %s%s", i+1, len(files), estimator.Estimate(remaining), filename, dateStr)
 	}
 
 	result.Finish()

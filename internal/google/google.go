@@ -151,7 +151,11 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) (*trans
 
 	for i, filePath := range toUpload {
 		filename := filepath.Base(filePath)
-		c.log.Info("[%d/%d] %suploading %s", i+1, len(toUpload), estimator.Estimate(len(toUpload)-(i+1)), filename)
+		dateStr := ""
+		if fi, ferr := os.Stat(filePath); ferr == nil {
+			dateStr = fmt.Sprintf(" (%s)", fi.ModTime().Format("2006-01-02"))
+		}
+		c.log.Info("[%d/%d] %suploading %s%s", i+1, len(toUpload), estimator.Estimate(len(toUpload)-(i+1)), filename, dateStr)
 		c.log.Debug("reading file: %s", filePath)
 
 		uploadToken, err := c.uploadBytes(ctx, filePath, filename)
