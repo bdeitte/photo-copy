@@ -218,12 +218,14 @@ type photosResponse struct {
 		Pages   int `json:"pages"`
 		Total   int `json:"total"`
 		Photo   []struct {
-			ID         string `json:"id"`
-			Secret     string `json:"secret"`
-			Server     string `json:"server"`
-			Title      string `json:"title"`
-			DateTaken  string `json:"datetaken"`
-			DateUpload string `json:"dateupload"`
+			ID          string             `json:"id"`
+			Secret      string             `json:"secret"`
+			Server      string             `json:"server"`
+			Title       string             `json:"title"`
+			DateTaken   string             `json:"datetaken"`
+			DateUpload  string             `json:"dateupload"`
+			Description flickrDescription  `json:"description"`
+			Tags        string             `json:"tags"`
 		} `json:"photo"`
 	} `json:"photos"`
 	Stat string `json:"stat"`
@@ -291,7 +293,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 			"user_id":  "me",
 			"page":     strconv.Itoa(page),
 			"per_page": "500",
-			"extras":   "date_taken,date_upload",
+			"extras":   "date_taken,date_upload,description,tags",
 		})
 		if err != nil {
 			return result, fmt.Errorf("fetching photos page %d: %w", page, err)
