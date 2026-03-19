@@ -9,9 +9,11 @@ import (
 	gomp4 "github.com/abema/go-mp4"
 )
 
-// isIOError reports whether err is an I/O or filesystem error (as opposed
-// to an MP4 parse/format error).
-func isIOError(err error) bool {
+// isFileSystemError reports whether err is a filesystem error such as
+// file-not-found or permission denied (as opposed to an MP4 parse/format
+// error). Does not catch bare io errors from mid-read failures, which are
+// rare for local files and will be treated as parse errors.
+func isFileSystemError(err error) bool {
 	var pathErr *fs.PathError
 	return errors.As(err, &pathErr)
 }
@@ -58,7 +60,7 @@ func ReadCreationTime(filePath string) (time.Time, error) {
 	})
 	if err != nil {
 		// Distinguish I/O errors from parse errors
-		if isIOError(err) {
+		if isFileSystemError(err) {
 			return time.Time{}, err
 		}
 		// MP4 parse/format error — not a valid MP4
@@ -69,7 +71,7 @@ func ReadCreationTime(filePath string) (time.Time, error) {
 		return time.Time{}, nil
 	}
 
-	// Guard against pre-Unix-epoch dates (creation time < MP4 epoch offset)
+	// Guard: creation times below this offset map to dates before 1970-01-01
 	if int64(creationTime) < mp4Epoch {
 		return time.Time{}, nil
 	}
