@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/briandeitte/photo-copy/internal/config"
+	"github.com/briandeitte/photo-copy/internal/daterange"
 	"github.com/briandeitte/photo-copy/internal/logging"
 	"github.com/briandeitte/photo-copy/internal/media"
 	"github.com/briandeitte/photo-copy/internal/transfer"
@@ -25,7 +26,7 @@ func NewClient(cfg *config.S3Config, log *logging.Logger) *Client {
 	return &Client{cfg: cfg, log: log}
 }
 
-func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, mediaOnly bool, limit int) (*transfer.Result, error) {
+func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, mediaOnly bool, limit int, dateRange *daterange.DateRange) (*transfer.Result, error) {
 	result := transfer.NewResult("s3", "upload", inputDir)
 
 	binDir, err := rcloneBinDir()
@@ -51,6 +52,11 @@ func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, me
 		args = append(args, filterFlags...)
 	}
 
+	dateFlags := buildDateRangeFlags(dateRange)
+	if len(dateFlags) > 0 {
+		filterFlags = append(filterFlags, dateFlags...)
+	}
+
 	if limit > 0 {
 		filesFromPath, err := c.buildFilesFrom(ctx, rclonePath, configPath, inputDir, args, limit)
 		if err != nil {
@@ -67,6 +73,10 @@ func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, me
 		filterFlags = []string{"--files-from", filesFromPath}
 	}
 
+	if len(dateFlags) > 0 {
+		args = append(args, dateFlags...)
+	}
+
 	total := c.countFiles(ctx, rclonePath, configPath, inputDir, filterFlags)
 	c.log.Debug("running: %s %s", rclonePath, strings.Join(args, " "))
 	err = c.runRcloneWithProgress(ctx, rclonePath, args, total, "uploaded")
@@ -74,7 +84,7 @@ func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, me
 	return result, err
 }
 
-func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string, mediaOnly bool, limit int) (*transfer.Result, error) {
+func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string, mediaOnly bool, limit int, dateRange *daterange.DateRange) (*transfer.Result, error) {
 	result := transfer.NewResult("s3", "download", outputDir)
 
 	binDir, err := rcloneBinDir()
@@ -105,6 +115,11 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 		args = append(args, filterFlags...)
 	}
 
+	dateFlags := buildDateRangeFlags(dateRange)
+	if len(dateFlags) > 0 {
+		filterFlags = append(filterFlags, dateFlags...)
+	}
+
 	if limit > 0 {
 		filesFromPath, err := c.buildFilesFrom(ctx, rclonePath, configPath, src, args, limit)
 		if err != nil {
@@ -119,6 +134,10 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 		args = buildDownloadArgs(configPath, bucket, prefix, outputDir)
 		args = append(args, "--files-from", filesFromPath)
 		filterFlags = []string{"--files-from", filesFromPath}
+	}
+
+	if len(dateFlags) > 0 {
+		args = append(args, dateFlags...)
 	}
 
 	total := c.countFiles(ctx, rclonePath, configPath, src, filterFlags)
@@ -271,12 +290,20 @@ func buildDownloadArgs(configPath, bucket, prefix, outputDir string) []string {
 // buildFilesFrom runs "rclone lsf" on the source to list files, takes the first `limit` entries,
 // writes them to a temp file, and returns the path. The caller must remove the file when done.
 func (c *Client) buildFilesFrom(ctx context.Context, rclonePath, configPath, source string, copyArgs []string, limit int) (_ string, err error) {
-	// Build lsf args, carrying over any --include filters from the copy args
+	// Build lsf args, carrying over any --include and --min-age/--max-age filters from the copy args
 	lsfArgs := []string{"lsf", source, "--config", configPath, "--files-only", "-R"}
 	for i := 0; i < len(copyArgs); i++ {
-		if copyArgs[i] == "--include" && i+1 < len(copyArgs) {
-			lsfArgs = append(lsfArgs, "--include", copyArgs[i+1])
-			i++
+		switch copyArgs[i] {
+		case "--include":
+			if i+1 < len(copyArgs) {
+				lsfArgs = append(lsfArgs, "--include", copyArgs[i+1])
+				i++
+			}
+		case "--min-age", "--max-age":
+			if i+1 < len(copyArgs) {
+				lsfArgs = append(lsfArgs, copyArgs[i], copyArgs[i+1])
+				i++
+			}
 		}
 	}
 
@@ -314,6 +341,25 @@ func (c *Client) buildFilesFrom(ctx context.Context, rclonePath, configPath, sou
 	}
 
 	return f.Name(), nil
+}
+
+// buildDateRangeFlags converts a DateRange into rclone --min-age/--max-age flags.
+func buildDateRangeFlags(dr *daterange.DateRange) []string {
+	if dr == nil {
+		return nil
+	}
+	var flags []string
+	if dr.After != nil {
+		// --max-age = "files no older than" = our After bound
+		flags = append(flags, "--max-age", dr.After.Format("2006-01-02"))
+	}
+	if dr.Before != nil {
+		// --min-age = "files at least this old" = our Before bound
+		// dr.Before is start of next day, so use the original end date
+		endDate := dr.Before.AddDate(0, 0, -1)
+		flags = append(flags, "--min-age", endDate.Format("2006-01-02"))
+	}
+	return flags
 }
 
 func buildMediaIncludeFlags() []string {
