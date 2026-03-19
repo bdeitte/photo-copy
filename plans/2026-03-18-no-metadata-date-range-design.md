@@ -7,7 +7,7 @@ Two new root-level CLI flags:
 1. **`--no-metadata`** — Skip all metadata embedding operations during Flickr downloads (XMP, MP4 creation time, filesystem timestamps).
 2. **`--date-range START:END`** — Filter uploads/downloads to only process files within a date range.
 
-Both flags are root-level (like `--debug` and `--limit`). When a flag has no effect on the current command, a clear warning is logged.
+Both flags are root-level (like `--debug` and `--limit`). When a flag has no effect on the current command, a clear warning is logged. No-op warnings are implemented in a `PersistentPreRunE` on the root command, which has access to `rootOpts` and can inspect which subcommand is being run. This avoids needing to pass `rootOpts` to every subcommand constructor.
 
 ## Feature 1: --no-metadata
 
@@ -47,7 +47,7 @@ The `Before` date is inclusive of the full day — implemented as `< start of ne
 
 ### Timezone handling
 
-All date parsing and comparison uses **local time**. The `--date-range` flag values are parsed as local time. Dates from different sources (Flickr API, EXIF, MP4) are compared as-is without timezone conversion. This is documented in CLI help text — the intent is "date as the photographer sees it," which aligns with how `date_taken` and EXIF `DateTimeOriginal` work (local time, no timezone). MP4 creation times are stored as UTC but are compared without conversion for simplicity.
+All date parsing and comparison uses **local time**. The `--date-range` flag values are parsed as local time. Dates from different sources (Flickr API, EXIF, MP4) are compared as-is without timezone conversion. This is documented in CLI help text — the intent is "date as the photographer sees it," which aligns with how `date_taken` and EXIF `DateTimeOriginal` work (local time, no timezone). MP4 creation times are stored as UTC but are compared without conversion for simplicity. In practice, this means MP4 files near date boundaries could be incorrectly included/excluded by up to ~24 hours depending on the user's timezone vs UTC. This is an accepted tradeoff for simplicity.
 
 ### Date range struct
 
@@ -77,7 +77,11 @@ Uses the existing `resolvePhotoDate()` logic (`date_taken` preferred, `date_uplo
 
 Photos with no resolvable date (both fields empty/unparseable) are **included** — we don't silently drop files with missing dates.
 
-### Uploads (Flickr, Google, S3)
+### Flag interaction: --no-metadata + --date-range
+
+The two flags are orthogonal. When both are used on `flickr download`, date filtering still works because it uses dates from the Flickr API response (not from file metadata). The flow is: fetch photo info from API → check date range → download file → skip metadata embedding. `--no-metadata` does not affect `--date-range` filtering.
+
+### Uploads (Flickr, Google) and S3 (upload and download)
 
 For Flickr and Google uploads, before uploading each file, read the file's embedded metadata date:
 
@@ -88,7 +92,7 @@ For Flickr and Google uploads, before uploading each file, read the file's embed
 
 Check the resolved date against the range. If outside, skip (increment `result.Skipped`, log with filename and date).
 
-For **S3 uploads and downloads**, pass rclone's `--max-age` and `--min-age` flags to the rclone subprocess. The mapping is:
+For **S3 uploads and S3 downloads**, pass rclone's `--max-age` and `--min-age` flags to the rclone subprocess. Both directions use the same rclone flag approach. The mapping is:
 - `After` date → `--max-age YYYY-MM-DD` (files newer than this date)
 - `Before` date → `--min-age YYYY-MM-DD` (files older than this date)
 
@@ -98,7 +102,7 @@ For S3 objects, rclone filters by the object's **LastModified** timestamp (the t
 
 **Important caveat**: S3 date filtering uses rclone's age-based filtering, not embedded metadata dates. This differs from Flickr/Google where embedded metadata dates (EXIF, MP4 creation time) are used. This must be clearly documented in CLI help text, README, and CLAUDE.md.
 
-**Interaction with `--files-from`**: The existing S3 code uses `--files-from` when `--limit` is set, which disables most rclone filters. When both `--date-range` and `--limit` are used with S3, apply date filtering first by listing files with `--min-age`/`--max-age`, then truncate to the limit for `--files-from`.
+**Interaction with `--files-from`**: The existing S3 code uses `--files-from` when `--limit` is set, which disables most rclone filters. When both `--date-range` and `--limit` are used with S3, add `--min-age`/`--max-age` to the `buildFilesFrom` listing step (the `rclone ls` call) so the file list is pre-filtered by date before being truncated to the limit. This way `--files-from` receives only date-matching files.
 
 ### No-op warnings
 
