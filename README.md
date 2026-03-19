@@ -111,6 +111,16 @@ Add `--debug` to any command for verbose logging:
 ./photo-copy flickr download ../photos --debug
 ```
 
+### Filtering Options
+
+- `--no-metadata` — Skip metadata embedding during Flickr downloads (XMP metadata, MP4 creation time, filesystem timestamps). The raw file is downloaded without modification.
+- `--date-range YYYY-MM-DD:YYYY-MM-DD` — Only process files within the specified date range. Either side can be omitted for open-ended ranges (e.g., `2020-01-01:` for everything from 2020 onward, `:2023-12-31` for everything up to end of 2023).
+
+**Date sources by command:**
+- **Flickr download**: Uses `date_taken` (preferred) or `date_upload` from the Flickr API.
+- **Flickr/Google upload**: Reads EXIF DateTimeOriginal (JPEG) or MP4 creation time, falling back to file modification time.
+- **S3 upload/download**: Uses rclone's `--min-age`/`--max-age` flags, which filter by **file modification time** (or S3 object LastModified timestamp), not embedded metadata dates. This is a limitation of delegating to rclone.
+
 ### Supported file types
 
 JPEG, PNG, TIFF, GIF, HEIC, WebP, MP4, MOV, AVI, MKV
