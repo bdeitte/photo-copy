@@ -2,6 +2,9 @@ package s3
 
 import (
 	"testing"
+	"time"
+
+	"github.com/briandeitte/photo-copy/internal/daterange"
 )
 
 func TestBuildUploadArgs(t *testing.T) {
@@ -113,5 +116,68 @@ func TestBuildMediaIncludeFlags_CoversExpectedExtensions(t *testing.T) {
 		if !flagSet[ext] {
 			t.Errorf("missing expected extension: %s", ext)
 		}
+	}
+}
+
+func TestBuildDateRangeFlags_Nil(t *testing.T) {
+	flags := buildDateRangeFlags(nil)
+	if flags != nil {
+		t.Fatalf("expected nil, got %v", flags)
+	}
+}
+
+func TestBuildDateRangeFlags_BothBounds(t *testing.T) {
+	after := time.Date(2020, 1, 1, 0, 0, 0, 0, time.Local)
+	before := time.Date(2024, 1, 1, 0, 0, 0, 0, time.Local) // exclusive next day
+	dr := &daterange.DateRange{After: &after, Before: &before}
+
+	flags := buildDateRangeFlags(dr)
+
+	expected := []string{"--max-age", "2020-01-01", "--min-age", "2024-01-01"}
+	if len(flags) != len(expected) {
+		t.Fatalf("expected %d flags, got %d: %v", len(expected), len(flags), flags)
+	}
+	for i, want := range expected {
+		if flags[i] != want {
+			t.Errorf("flags[%d] = %q, want %q", i, flags[i], want)
+		}
+	}
+}
+
+func TestBuildDateRangeFlags_AfterOnly(t *testing.T) {
+	after := time.Date(2020, 6, 15, 0, 0, 0, 0, time.Local)
+	dr := &daterange.DateRange{After: &after}
+
+	flags := buildDateRangeFlags(dr)
+
+	if len(flags) != 2 {
+		t.Fatalf("expected 2 flags, got %d: %v", len(flags), flags)
+	}
+	if flags[0] != "--max-age" || flags[1] != "2020-06-15" {
+		t.Errorf("got %v, want [--max-age 2020-06-15]", flags)
+	}
+}
+
+func TestBuildDateRangeFlags_BeforeOnly(t *testing.T) {
+	// User specifies --date-range :2023-12-31, so Before = 2024-01-01 (exclusive next day)
+	before := time.Date(2024, 1, 1, 0, 0, 0, 0, time.Local)
+	dr := &daterange.DateRange{Before: &before}
+
+	flags := buildDateRangeFlags(dr)
+
+	if len(flags) != 2 {
+		t.Fatalf("expected 2 flags, got %d: %v", len(flags), flags)
+	}
+	// --min-age should use the exclusive next-day date directly
+	if flags[0] != "--min-age" || flags[1] != "2024-01-01" {
+		t.Errorf("got %v, want [--min-age 2024-01-01]", flags)
+	}
+}
+
+func TestBuildDateRangeFlags_NoBounds(t *testing.T) {
+	dr := &daterange.DateRange{}
+	flags := buildDateRangeFlags(dr)
+	if len(flags) != 0 {
+		t.Fatalf("expected no flags for empty range, got %v", flags)
 	}
 }

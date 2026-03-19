@@ -9,7 +9,9 @@ import (
 
 const dateFormat = "2006-01-02"
 
-// DateRange represents an optional date range with inclusive bounds.
+// DateRange represents an optional half-open date interval [After, Before).
+// User-specified start and end dates are both inclusive; Before stores the
+// start of the day after the end date so comparisons use a simple < check.
 // Nil fields indicate no bound in that direction.
 type DateRange struct {
 	After  *time.Time // start of range (inclusive); nil = no lower bound

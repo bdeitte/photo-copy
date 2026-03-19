@@ -90,3 +90,37 @@ func TestContainsNilRange(t *testing.T) {
 		t.Error("nil DateRange should contain all times")
 	}
 }
+
+func TestContainsOpenStart(t *testing.T) {
+	dr, _ := Parse(":2023-12-31")
+	tests := []struct {
+		t    time.Time
+		want bool
+	}{
+		{time.Date(1900, 1, 1, 0, 0, 0, 0, time.Local), true},
+		{time.Date(2023, 12, 31, 23, 59, 59, 0, time.Local), true},
+		{time.Date(2024, 1, 1, 0, 0, 0, 0, time.Local), false},
+	}
+	for _, tt := range tests {
+		if got := dr.Contains(tt.t); got != tt.want {
+			t.Errorf("Contains(%v) = %v, want %v", tt.t, got, tt.want)
+		}
+	}
+}
+
+func TestContainsOpenEnd(t *testing.T) {
+	dr, _ := Parse("2020-01-01:")
+	tests := []struct {
+		t    time.Time
+		want bool
+	}{
+		{time.Date(2019, 12, 31, 23, 59, 59, 0, time.Local), false},
+		{time.Date(2020, 1, 1, 0, 0, 0, 0, time.Local), true},
+		{time.Date(2099, 12, 31, 0, 0, 0, 0, time.Local), true},
+	}
+	for _, tt := range tests {
+		if got := dr.Contains(tt.t); got != tt.want {
+			t.Errorf("Contains(%v) = %v, want %v", tt.t, got, tt.want)
+		}
+	}
+}
