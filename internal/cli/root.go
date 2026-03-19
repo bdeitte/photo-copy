@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/briandeitte/photo-copy/internal/daterange"
 	"github.com/spf13/cobra"
@@ -30,9 +29,11 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().BoolVar(&opts.noMetadata, "no-metadata", false, "Skip metadata embedding during Flickr downloads (XMP, MP4 creation time, timestamps)")
 	rootCmd.PersistentFlags().StringVar(&opts.dateRangeStr, "date-range", "", "Filter by date range (YYYY-MM-DD:YYYY-MM-DD, either side optional). For S3, filters by file modification time via rclone, not embedded metadata dates.")
 
+	// NOTE: Cobra silently overrides a parent's PersistentPreRunE if a child
+	// defines its own. If a child command needs PersistentPreRunE, it must
+	// call this parent hook explicitly to preserve date-range parsing and
+	// no-op warning behavior.
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		path := cmd.CommandPath()
-
 		if opts.dateRangeStr != "" {
 			dr, err := daterange.Parse(opts.dateRangeStr)
 			if err != nil {
@@ -41,19 +42,21 @@ func NewRootCmd() *cobra.Command {
 			opts.parsedDateRange = dr
 		}
 
-		// No-op warnings
+		// No-op warnings — match on cmd.Name() and parent for robustness
+		errW := cmd.ErrOrStderr()
 		if opts.noMetadata {
-			if !strings.Contains(path, "flickr download") {
-				fmt.Fprintln(os.Stderr, "Warning: --no-metadata has no effect on "+cmd.Name()+"; metadata embedding only occurs during Flickr downloads")
+			isFlickrDownload := cmd.Name() == "download" && cmd.Parent() != nil && cmd.Parent().Name() == "flickr"
+			if !isFlickrDownload {
+				_, _ = fmt.Fprintln(errW, "Warning: --no-metadata has no effect on "+cmd.Name()+"; metadata embedding only occurs during Flickr downloads")
 			}
 		}
 
 		if opts.parsedDateRange != nil {
-			if strings.Contains(path, "import-takeout") {
-				fmt.Fprintln(os.Stderr, "Warning: --date-range has no effect on import-takeout")
+			if cmd.Name() == "import-takeout" {
+				_, _ = fmt.Fprintln(errW, "Warning: --date-range has no effect on import-takeout")
 				opts.parsedDateRange = nil
-			} else if strings.Contains(path, "config") {
-				fmt.Fprintln(os.Stderr, "Warning: --date-range has no effect on config commands")
+			} else if cmd.Name() == "config" || (cmd.Parent() != nil && cmd.Parent().Name() == "config") {
+				_, _ = fmt.Fprintln(errW, "Warning: --date-range has no effect on config commands")
 				opts.parsedDateRange = nil
 			}
 		}

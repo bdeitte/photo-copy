@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 )
 
@@ -106,5 +107,72 @@ func TestGoogleImportTakeoutCmd_RequiresTwoArgs(t *testing.T) {
 	err := cmd.Execute()
 	if err == nil {
 		t.Fatal("expected error for missing second arg")
+	}
+}
+
+func TestRootCmd_HasNoMetadataFlag(t *testing.T) {
+	cmd := NewRootCmd()
+	f := cmd.PersistentFlags().Lookup("no-metadata")
+	if f == nil {
+		t.Fatal("missing --no-metadata flag")
+	}
+	if f.DefValue != "false" {
+		t.Errorf("--no-metadata default = %q, want %q", f.DefValue, "false")
+	}
+}
+
+func TestRootCmd_HasDateRangeFlag(t *testing.T) {
+	cmd := NewRootCmd()
+	f := cmd.PersistentFlags().Lookup("date-range")
+	if f == nil {
+		t.Fatal("missing --date-range flag")
+	}
+	if f.DefValue != "" {
+		t.Errorf("--date-range default = %q, want empty", f.DefValue)
+	}
+}
+
+func TestRootCmd_InvalidDateRangeReturnsError(t *testing.T) {
+	cmd := NewRootCmd()
+	// Use "flickr download /tmp" to trigger PersistentPreRunE on a leaf command.
+	// The command itself will fail (no config), but the pre-run error should come first.
+	cmd.SetArgs([]string{"--date-range", "bad-value", "flickr", "download", "/tmp"})
+	buf := new(bytes.Buffer)
+	cmd.SetErr(buf)
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for invalid --date-range")
+	}
+	if !strings.Contains(err.Error(), "invalid --date-range") {
+		t.Errorf("error = %q, want to contain 'invalid --date-range'", err.Error())
+	}
+}
+
+func TestRootCmd_NoMetadataWarningOnS3Upload(t *testing.T) {
+	cmd := NewRootCmd()
+	// s3 upload requires --bucket, so it'll error, but PersistentPreRunE fires first
+	cmd.SetArgs([]string{"--no-metadata", "s3", "upload", "--bucket", "b", "/tmp"})
+	buf := new(bytes.Buffer)
+	cmd.SetErr(buf)
+	cmd.SetOut(new(bytes.Buffer))
+	_ = cmd.Execute()
+	if !strings.Contains(buf.String(), "--no-metadata has no effect") {
+		t.Errorf("expected no-metadata warning on stderr, got: %q", buf.String())
+	}
+}
+
+func TestRootCmd_DateRangeWarningOnConfigSubcommand(t *testing.T) {
+	cmd := NewRootCmd()
+	// "config flickr" is a leaf command with RunE, so PersistentPreRunE fires.
+	// It will fail waiting for stdin, but warnings happen in pre-run.
+	cmd.SetArgs([]string{"--date-range", "2020-01-01:2023-12-31", "config", "flickr"})
+	buf := new(bytes.Buffer)
+	cmd.SetErr(buf)
+	cmd.SetOut(new(bytes.Buffer))
+	// Provide empty stdin so the command doesn't block
+	cmd.SetIn(strings.NewReader("\n\n"))
+	_ = cmd.Execute()
+	if !strings.Contains(buf.String(), "--date-range has no effect on config") {
+		t.Errorf("expected date-range config warning on stderr, got: %q", buf.String())
 	}
 }
