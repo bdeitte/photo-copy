@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/briandeitte/photo-copy/internal/config"
+	"github.com/briandeitte/photo-copy/internal/daterange"
 	"github.com/briandeitte/photo-copy/internal/jpegmeta"
 	"github.com/briandeitte/photo-copy/internal/logging"
 	"github.com/briandeitte/photo-copy/internal/media"
@@ -264,7 +265,7 @@ type sizesResponse struct {
 }
 
 // Download fetches all photos from the authenticated user's Flickr account.
-func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*transfer.Result, error) {
+func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMetadata bool, dateRange *daterange.DateRange) (*transfer.Result, error) {
 	c.log.Debug("starting Flickr download to %s", outputDir)
 	result := transfer.NewResult("flickr", "download", outputDir)
 
@@ -329,6 +330,17 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 				continue
 			}
 
+			// Date range filtering
+			if dateRange != nil {
+				photoDate := resolvePhotoDate(photo.DateTaken, photo.DateUpload)
+				if !photoDate.IsZero() && !dateRange.Contains(photoDate) {
+					result.RecordSkip(1)
+					c.log.Debug("skipping %s: date %s outside range", photo.ID, photoDate.Format("2006-01-02"))
+					continue
+				}
+				// Photos with no resolvable date are included
+			}
+
 			candidates, err := c.getOriginalURLs(ctx, photo.ID)
 			if err != nil {
 				result.RecordError(photo.ID, err.Error())
@@ -382,51 +394,53 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int) (*tr
 
 			filePath := filepath.Join(outputDir, filename)
 
-			// Set original dates in MP4 container metadata. This must run
-			// before XMP embedding because gomp4 cannot parse UUID boxes and
-			// would hang if SetXMPMetadata appended one first.
 			photoDate := resolvePhotoDate(photo.DateTaken, photo.DateUpload)
-			if !photoDate.IsZero() {
-				if ext == ".mp4" || ext == ".mov" {
-					if err := mp4meta.SetCreationTime(filePath, photoDate); err != nil {
-						c.log.Error("setting MP4 metadata for %s: %v", filename, err)
+			if !noMetadata {
+				// Set original dates in MP4 container metadata. This must run
+				// before XMP embedding because gomp4 cannot parse UUID boxes and
+				// would hang if SetXMPMetadata appended one first.
+				if !photoDate.IsZero() {
+					if ext == ".mp4" || ext == ".mov" {
+						if err := mp4meta.SetCreationTime(filePath, photoDate); err != nil {
+							c.log.Error("setting MP4 metadata for %s: %v", filename, err)
+						}
 					}
 				}
-			}
 
-			// Embed title, description, and tags as XMP metadata.
-			// For MP4/MOV this appends a UUID box at EOF which gomp4 cannot
-			// parse, so it must happen after SetCreationTime.
-			meta := buildPhotoMeta(photo.Title, photo.Description.Content, photo.Tags)
-			if !meta.isEmpty() {
-				switch ext {
-				case ".jpg", ".jpeg":
-					if err := jpegmeta.SetMetadata(filePath, jpegmeta.Metadata{
-						Title:       meta.Title,
-						Description: meta.Description,
-						Tags:        meta.Tags,
-					}); err != nil {
-						c.log.Error("setting JPEG XMP metadata for %s: %v", filename, err)
-					}
-				case ".mp4", ".mov":
-					if err := mp4meta.SetXMPMetadata(filePath, mp4meta.XMPMetadata{
-						Title:       meta.Title,
-						Description: meta.Description,
-						Tags:        meta.Tags,
-					}); err != nil {
-						c.log.Error("setting MP4 XMP metadata for %s: %v", filename, err)
+				// Embed title, description, and tags as XMP metadata.
+				// For MP4/MOV this appends a UUID box at EOF which gomp4 cannot
+				// parse, so it must happen after SetCreationTime.
+				meta := buildPhotoMeta(photo.Title, photo.Description.Content, photo.Tags)
+				if !meta.isEmpty() {
+					switch ext {
+					case ".jpg", ".jpeg":
+						if err := jpegmeta.SetMetadata(filePath, jpegmeta.Metadata{
+							Title:       meta.Title,
+							Description: meta.Description,
+							Tags:        meta.Tags,
+						}); err != nil {
+							c.log.Error("setting JPEG XMP metadata for %s: %v", filename, err)
+						}
+					case ".mp4", ".mov":
+						if err := mp4meta.SetXMPMetadata(filePath, mp4meta.XMPMetadata{
+							Title:       meta.Title,
+							Description: meta.Description,
+							Tags:        meta.Tags,
+						}); err != nil {
+							c.log.Error("setting MP4 XMP metadata for %s: %v", filename, err)
+						}
 					}
 				}
-			}
 
-			// Set filesystem timestamps last since temp-file-rename in both
-			// SetCreationTime and SetXMPMetadata resets mtime.
-			if !photoDate.IsZero() {
-				if err := os.Chtimes(filePath, photoDate, photoDate); err != nil {
-					c.log.Error("setting file time for %s: %v", filename, err)
+				// Set filesystem timestamps last since temp-file-rename in both
+				// SetCreationTime and SetXMPMetadata resets mtime.
+				if !photoDate.IsZero() {
+					if err := os.Chtimes(filePath, photoDate, photoDate); err != nil {
+						c.log.Error("setting file time for %s: %v", filename, err)
+					}
+				} else {
+					c.log.Info("no date available for %s, skipping date metadata", filename)
 				}
-			} else {
-				c.log.Info("no date available for %s, skipping date metadata", filename)
 			}
 
 			estimator.Tick()
