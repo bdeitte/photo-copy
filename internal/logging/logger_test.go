@@ -42,3 +42,39 @@ func TestInfoLogger_AlwaysOutputs(t *testing.T) {
 		t.Fatal("expected info output even when debug disabled")
 	}
 }
+
+func TestErrorLogger_AlwaysOutputs(t *testing.T) {
+	var buf bytes.Buffer
+	log := New(false, &buf)
+
+	log.Error("something went wrong")
+
+	got := buf.String()
+	if got == "" {
+		t.Fatal("expected error output even when debug disabled")
+	}
+	if !bytes.Contains([]byte(got), []byte("something went wrong")) {
+		t.Fatalf("unexpected output: %s", got)
+	}
+}
+
+func TestErrorLogger_HasPrefix(t *testing.T) {
+	var buf bytes.Buffer
+	log := New(false, &buf)
+
+	log.Error("disk full")
+
+	got := buf.String()
+	if !bytes.Contains([]byte(got), []byte("ERROR:")) {
+		t.Fatalf("expected ERROR: prefix, got: %s", got)
+	}
+}
+
+func TestLogger_NilWriter(t *testing.T) {
+	log := New(false, nil)
+
+	// Should not panic
+	log.Info("test message")
+	log.Error("test error")
+	log.Debug("test debug")
+}

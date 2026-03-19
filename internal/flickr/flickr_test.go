@@ -351,6 +351,138 @@ func TestRetryableGet_ContextCancellation(t *testing.T) {
 	}
 }
 
+func TestRetryableGet_RetriesOn502(t *testing.T) {
+	t.Setenv("PHOTO_COPY_TEST_MODE", "1")
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts <= 1 {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	c := newTestClient()
+	c.http = server.Client()
+
+	resp, err := c.retryableGet(context.Background(), server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if attempts != 2 {
+		t.Errorf("expected 2 attempts, got %d", attempts)
+	}
+}
+
+func TestRetryableGet_RetriesOn503(t *testing.T) {
+	t.Setenv("PHOTO_COPY_TEST_MODE", "1")
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts <= 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	c := newTestClient()
+	c.http = server.Client()
+
+	resp, err := c.retryableGet(context.Background(), server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if attempts != 2 {
+		t.Errorf("expected 2 attempts, got %d", attempts)
+	}
+}
+
+func TestRetryableGet_NoRetryOn400(t *testing.T) {
+	t.Setenv("PHOTO_COPY_TEST_MODE", "1")
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	c := newTestClient()
+	c.http = server.Client()
+
+	resp, err := c.retryableGet(context.Background(), server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if attempts != 1 {
+		t.Errorf("expected 1 attempt (no retry), got %d", attempts)
+	}
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestRetryableGet_NoRetryOn401(t *testing.T) {
+	t.Setenv("PHOTO_COPY_TEST_MODE", "1")
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	c := newTestClient()
+	c.http = server.Client()
+
+	resp, err := c.retryableGet(context.Background(), server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if attempts != 1 {
+		t.Errorf("expected 1 attempt (no retry), got %d", attempts)
+	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected status 401, got %d", resp.StatusCode)
+	}
+}
+
+func TestRetryableGet_NoRetryOn403(t *testing.T) {
+	t.Setenv("PHOTO_COPY_TEST_MODE", "1")
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	c := newTestClient()
+	c.http = server.Client()
+
+	resp, err := c.retryableGet(context.Background(), server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if attempts != 1 {
+		t.Errorf("expected 1 attempt (no retry), got %d", attempts)
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected status 403, got %d", resp.StatusCode)
+	}
+}
+
 func TestRetryableGet_ExhaustsRetries(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", "0")
