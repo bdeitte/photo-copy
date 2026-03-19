@@ -1161,6 +1161,50 @@ func TestFlickrDownload_DateRange(t *testing.T) {
 	}
 }
 
+func TestFlickrDownload_DateRangeIncludesNoDate(t *testing.T) {
+	outputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	photos := []map[string]string{
+		{"id": "1", "secret": "aaa", "server": "1", "title": "dated", "datetaken": "2022-06-15 10:30:00", "dateupload": "1655286600"},
+		{"id": "2", "secret": "bbb", "server": "1", "title": "no-date"},
+		{"id": "3", "secret": "ccc", "server": "1", "title": "out-of-range", "datetaken": "2019-01-01 00:00:00", "dateupload": "1546300800"},
+	}
+
+	var mock *mockserver.FlickrMock
+	mock = mockserver.NewFlickr(t).
+		OnGetPhotos(mockserver.RespondJSON(200, flickrPhotosResponse(photos, 1, 1, 3))).
+		OnGetSizes(func(w http.ResponseWriter, r *http.Request) {
+			photoID := r.URL.Query().Get("photo_id")
+			mockserver.RespondJSON(200, flickrSizesResponse(
+				mock.Server.URL+"/download/"+photoID+".jpg",
+			))(w, r)
+		}).
+		OnDownload(mockserver.RespondBytes(200, testImageData)).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_API_URL", mock.APIURL)
+
+	err := executeCmd(t, "flickr", "download", "--date-range", "2021-01-01:2023-12-31", outputDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Photo 1 (in range) and photo 2 (no date, included) should be downloaded
+	if _, err := os.Stat(filepath.Join(outputDir, "1_aaa.jpg")); err != nil {
+		t.Error("photo 1 should have been downloaded (within date range)")
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "2_bbb.jpg")); err != nil {
+		t.Error("photo 2 should have been downloaded (no date = included)")
+	}
+	// Photo 3 (out of range) should NOT be downloaded
+	if _, err := os.Stat(filepath.Join(outputDir, "3_ccc.jpg")); err == nil {
+		t.Error("photo 3 should NOT have been downloaded (before date range)")
+	}
+}
+
 func TestNoOpWarnings_NoMetadataOnUpload(t *testing.T) {
 	inputDir := t.TempDir()
 	configDir := t.TempDir()
