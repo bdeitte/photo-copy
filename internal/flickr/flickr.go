@@ -331,15 +331,18 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 				continue
 			}
 
+			// Resolve photo date once for both filtering and metadata
+			photoDate := resolvePhotoDate(photo.DateTaken, photo.DateUpload)
+
 			// Date range filtering
 			if dateRange != nil {
-				photoDate := resolvePhotoDate(photo.DateTaken, photo.DateUpload)
-				if !photoDate.IsZero() && !dateRange.Contains(photoDate) {
+				if photoDate.IsZero() {
+					c.log.Info("including %s despite date range filter: no date available", photo.ID)
+				} else if !dateRange.Contains(photoDate) {
 					result.RecordSkip(1)
 					c.log.Debug("skipping %s: date %s outside range", photo.ID, photoDate.Format("2006-01-02"))
 					continue
 				}
-				// Photos with no resolvable date are included
 			}
 
 			candidates, err := c.getOriginalURLs(ctx, photo.ID)
@@ -395,7 +398,6 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 
 			filePath := filepath.Join(outputDir, filename)
 
-			photoDate := resolvePhotoDate(photo.DateTaken, photo.DateUpload)
 			if !noMetadata {
 				// Set original dates in MP4 container metadata. This must run
 				// before XMP embedding because gomp4 cannot parse UUID boxes and
