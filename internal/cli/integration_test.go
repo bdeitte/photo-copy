@@ -5,6 +5,7 @@ package cli
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"net/http"
 	"os"
@@ -1293,6 +1294,431 @@ func TestFlickrDownload_DateRangeIncludesNoDate(t *testing.T) {
 	// Photo 3 (out of range) should NOT be downloaded
 	if _, err := os.Stat(filepath.Join(outputDir, "3_ccc.jpg")); err == nil {
 		t.Error("photo 3 should NOT have been downloaded (before date range)")
+	}
+}
+
+// buildMinimalMP4 constructs a minimal valid MP4 file with ftyp + moov(mvhd) structure.
+// This is sufficient for mp4meta.SetCreationTime and mp4meta.SetXMPMetadata to operate on.
+func buildMinimalMP4() []byte {
+	var buf bytes.Buffer
+
+	// ftyp box (20 bytes): size(4) + "ftyp"(4) + major_brand(4) + minor_version(4) + compatible(4)
+	ftypPayload := []byte{
+		'i', 's', 'o', 'm', // major brand
+		0x00, 0x00, 0x02, 0x00, // minor version
+		'i', 's', 'o', 'm', // compatible brand
+	}
+	binary.Write(&buf, binary.BigEndian, uint32(8+len(ftypPayload)))
+	buf.WriteString("ftyp")
+	buf.Write(ftypPayload)
+
+	// Build mvhd box (V0: 108 bytes payload)
+	// Version 0 uses 32-bit timestamps
+	mvhdPayload := make([]byte, 108)
+	// version=0, flags=0 (first 4 bytes, already zero)
+	// creation_time at offset 4 (32-bit, zero)
+	// modification_time at offset 8 (32-bit, zero)
+	// timescale at offset 12
+	binary.BigEndian.PutUint32(mvhdPayload[12:16], 1000) // timescale
+	// duration at offset 16 (32-bit, zero)
+	// rate at offset 20
+	binary.BigEndian.PutUint32(mvhdPayload[20:24], 0x00010000) // rate = 1.0
+	// volume at offset 24
+	binary.BigEndian.PutUint16(mvhdPayload[24:26], 0x0100) // volume = 1.0
+	// matrix at offset 36 (9 * 4 bytes) — identity matrix
+	binary.BigEndian.PutUint32(mvhdPayload[36:40], 0x00010000)
+	binary.BigEndian.PutUint32(mvhdPayload[52:56], 0x00010000)
+	binary.BigEndian.PutUint32(mvhdPayload[72:76], 0x40000000)
+	// next_track_id at offset 104
+	binary.BigEndian.PutUint32(mvhdPayload[104:108], 2)
+
+	mvhdSize := uint32(8 + len(mvhdPayload))
+
+	// Build tkhd box (V0: 92 bytes payload)
+	tkhdPayload := make([]byte, 92)
+	// version=0, flags=3 (track enabled + in movie)
+	tkhdPayload[3] = 3
+	// track_id at offset 12
+	binary.BigEndian.PutUint32(tkhdPayload[12:16], 1)
+	// matrix at offset 36
+	binary.BigEndian.PutUint32(tkhdPayload[36:40], 0x00010000)
+	binary.BigEndian.PutUint32(tkhdPayload[52:56], 0x00010000)
+	binary.BigEndian.PutUint32(tkhdPayload[72:76], 0x40000000)
+
+	tkhdSize := uint32(8 + len(tkhdPayload))
+
+	// Build mdhd box (V0: 32 bytes payload)
+	mdhdPayload := make([]byte, 32)
+	// timescale at offset 12
+	binary.BigEndian.PutUint32(mdhdPayload[12:16], 1000)
+
+	mdhdSize := uint32(8 + len(mdhdPayload))
+
+	// mdia = mdhd
+	mdiaSize := uint32(8) + mdhdSize
+	// trak = tkhd + mdia
+	trakSize := uint32(8) + tkhdSize + mdiaSize
+	// moov = mvhd + trak
+	moovSize := uint32(8) + mvhdSize + trakSize
+
+	// Write moov
+	binary.Write(&buf, binary.BigEndian, moovSize)
+	buf.WriteString("moov")
+
+	binary.Write(&buf, binary.BigEndian, mvhdSize)
+	buf.WriteString("mvhd")
+	buf.Write(mvhdPayload)
+
+	binary.Write(&buf, binary.BigEndian, trakSize)
+	buf.WriteString("trak")
+
+	binary.Write(&buf, binary.BigEndian, tkhdSize)
+	buf.WriteString("tkhd")
+	buf.Write(tkhdPayload)
+
+	binary.Write(&buf, binary.BigEndian, mdiaSize)
+	buf.WriteString("mdia")
+
+	binary.Write(&buf, binary.BigEndian, mdhdSize)
+	buf.WriteString("mdhd")
+	buf.Write(mdhdPayload)
+
+	return buf.Bytes()
+}
+
+// readXMPFromMP4 extracts XMP content from an MP4 file's UUID box.
+func readXMPFromMP4(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	xmpUUID := []byte{0xBE, 0x7A, 0xCF, 0xCB, 0x97, 0xA9, 0x42, 0xE8, 0x9C, 0x71, 0x99, 0x94, 0x91, 0xE3, 0xAF, 0xAC}
+	pos := 0
+	for pos+8 <= len(data) {
+		boxSize := int(binary.BigEndian.Uint32(data[pos : pos+4]))
+		boxType := string(data[pos+4 : pos+8])
+		if boxSize == 0 {
+			boxSize = len(data) - pos
+		}
+		if boxSize < 8 || pos+boxSize > len(data) {
+			break
+		}
+		if boxType == "uuid" && pos+8+16 <= pos+boxSize {
+			if bytes.Equal(data[pos+8:pos+8+16], xmpUUID) {
+				return string(data[pos+8+16 : pos+boxSize])
+			}
+		}
+		pos += boxSize
+	}
+	return ""
+}
+
+func TestFlickrDownload_VideoMetadata(t *testing.T) {
+	outputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	mp4Data := buildMinimalMP4()
+
+	photos := []map[string]any{
+		{
+			"id": "1", "secret": "aaa", "server": "1",
+			"title":       "Beach Video",
+			"datetaken":   "2020-06-15 14:30:00",
+			"dateupload":  "1592234567",
+			"description": map[string]string{"_content": "A day at the beach"},
+			"tags":        "beach ocean",
+		},
+	}
+
+	var mock *mockserver.FlickrMock
+	mock = mockserver.NewFlickr(t).
+		OnGetPhotos(mockserver.RespondJSON(200, map[string]any{
+			"photos": map[string]any{
+				"page":  1,
+				"pages": 1,
+				"total": 1,
+				"photo": photos,
+			},
+			"stat": "ok",
+		})).
+		OnGetSizes(func(w http.ResponseWriter, r *http.Request) {
+			mockserver.RespondJSON(200, flickrMultiSizesResponse([]map[string]string{
+				{"label": "Video Original", "source": mock.Server.URL + "/download/video.mp4"},
+			}))(w, r)
+		}).
+		OnDownload(mockserver.RespondBytes(200, mp4Data)).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_API_URL", mock.APIURL)
+
+	err := executeCmd(t, "flickr", "download", outputDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	filePath := filepath.Join(outputDir, "1_aaa.mp4")
+
+	// Verify file exists
+	if _, err := os.Stat(filePath); err != nil {
+		t.Fatalf("video file should have been downloaded: %v", err)
+	}
+
+	// Verify XMP metadata was embedded in the MP4
+	xmp := readXMPFromMP4(t, filePath)
+	if xmp == "" {
+		t.Fatal("no XMP metadata found in downloaded MP4")
+	}
+	if !strings.Contains(xmp, "Beach Video") {
+		t.Errorf("XMP should contain title, got: %s", xmp)
+	}
+	if !strings.Contains(xmp, "A day at the beach") {
+		t.Errorf("XMP should contain description, got: %s", xmp)
+	}
+	if !strings.Contains(xmp, "<rdf:li>beach</rdf:li>") {
+		t.Errorf("XMP should contain tags, got: %s", xmp)
+	}
+
+	// Verify file system timestamp was set
+	info, err := os.Stat(filePath)
+	if err != nil {
+		t.Fatalf("stat failed: %v", err)
+	}
+	expectedTime := time.Date(2020, 6, 15, 14, 30, 0, 0, time.UTC)
+	modTime := info.ModTime().UTC()
+	if !modTime.Equal(expectedTime) {
+		t.Errorf("file mod time = %v, want %v", modTime, expectedTime)
+	}
+}
+
+func TestFlickrUpload_ConsecutiveFailureAbort(t *testing.T) {
+	inputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	// Create more than 10 files to trigger the abort threshold
+	for i := range 12 {
+		_ = os.WriteFile(filepath.Join(inputDir, fmt.Sprintf("photo%02d.jpg", i)), testImageData, 0644)
+	}
+
+	mock := mockserver.NewFlickr(t).
+		OnUpload(mockserver.RespondStatus(500)). // All uploads fail
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_UPLOAD_URL", mock.UploadURL)
+
+	err := executeCmd(t, "flickr", "upload", inputDir)
+	if err == nil {
+		t.Fatal("expected error from consecutive failure abort")
+	}
+	if !strings.Contains(err.Error(), "consecutive upload failures") {
+		t.Errorf("error should mention consecutive failures, got: %v", err)
+	}
+
+	// Verify fewer than 12 upload requests were made (aborted at 10)
+	uploadRequests := 0
+	for _, req := range mock.Requests() {
+		if strings.HasPrefix(req.Path, "/services/upload/") {
+			uploadRequests++
+		}
+	}
+	if uploadRequests > 10 {
+		t.Errorf("should have aborted at 10 consecutive failures, but made %d requests", uploadRequests)
+	}
+}
+
+func TestFlickrUpload_PartialFailure(t *testing.T) {
+	inputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	// Create files with alphabetical names so processing order is deterministic
+	_ = os.WriteFile(filepath.Join(inputDir, "a_good.jpg"), testImageData, 0644)
+	_ = os.WriteFile(filepath.Join(inputDir, "b_bad.jpg"), testImageData, 0644)
+	_ = os.WriteFile(filepath.Join(inputDir, "c_good.jpg"), testImageData, 0644)
+
+	var mu sync.Mutex
+	fileCount := 0
+	mock := mockserver.NewFlickr(t).
+		OnUpload(func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			n := fileCount
+			fileCount++
+			mu.Unlock()
+			if n == 1 {
+				// Second file fails
+				mockserver.RespondStatus(500)(w, r)
+			} else {
+				mockserver.RespondStatus(200)(w, r)
+			}
+		}).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_UPLOAD_URL", mock.UploadURL)
+
+	err := executeCmd(t, "flickr", "upload", inputDir)
+	if err != nil {
+		t.Fatalf("unexpected error (should continue past single failure): %v", err)
+	}
+
+	// Verify all 3 upload requests were made
+	uploadRequests := 0
+	for _, req := range mock.Requests() {
+		if strings.HasPrefix(req.Path, "/services/upload/") {
+			uploadRequests++
+		}
+	}
+	if uploadRequests != 3 {
+		t.Errorf("got %d upload requests, want 3 (should continue past single failure)", uploadRequests)
+	}
+
+	// Verify report shows the failure
+	entries, _ := os.ReadDir(inputDir)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "photo-copy-report-") {
+			data, _ := os.ReadFile(filepath.Join(inputDir, e.Name()))
+			report := string(data)
+			if !strings.Contains(report, "succeeded: 2") {
+				t.Errorf("report should show 2 succeeded, got: %s", report)
+			}
+			if !strings.Contains(report, "failed:    1") {
+				t.Errorf("report should show 1 failed, got: %s", report)
+			}
+		}
+	}
+}
+
+func TestFlickrUpload_EmptyDirectory(t *testing.T) {
+	inputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	// Empty directory (no media files)
+	mock := mockserver.NewFlickr(t).
+		OnUpload(mockserver.RespondStatus(200)).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_UPLOAD_URL", mock.UploadURL)
+
+	err := executeCmd(t, "flickr", "upload", inputDir)
+	if err != nil {
+		t.Fatalf("unexpected error for empty dir: %v", err)
+	}
+
+	// Verify no upload requests
+	for _, req := range mock.Requests() {
+		if strings.HasPrefix(req.Path, "/services/upload/") {
+			t.Error("no upload requests should have been made for empty directory")
+		}
+	}
+}
+
+func TestFlickrDownload_EmptyPhotoList(t *testing.T) {
+	outputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	mock := mockserver.NewFlickr(t).
+		OnGetPhotos(mockserver.RespondJSON(200, flickrPhotosResponse(nil, 1, 1, 0))).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_API_URL", mock.APIURL)
+
+	err := executeCmd(t, "flickr", "download", outputDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Only transfer.log and possibly report should exist
+	entries, _ := os.ReadDir(outputDir)
+	for _, e := range entries {
+		if e.Name() != "transfer.log" && !strings.HasPrefix(e.Name(), "photo-copy-report-") {
+			t.Errorf("unexpected file in output: %s", e.Name())
+		}
+	}
+}
+
+func TestFlickrDownload_AllPhotosFilteredByDateRange(t *testing.T) {
+	outputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	photos := []map[string]string{
+		{"id": "1", "secret": "aaa", "server": "1", "title": "old1", "datetaken": "2019-01-01 00:00:00", "dateupload": "1546300800"},
+		{"id": "2", "secret": "bbb", "server": "1", "title": "old2", "datetaken": "2018-06-15 00:00:00", "dateupload": "1529020800"},
+	}
+
+	mock := mockserver.NewFlickr(t).
+		OnGetPhotos(mockserver.RespondJSON(200, flickrPhotosResponse(photos, 1, 1, 2))).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_API_URL", mock.APIURL)
+
+	err := executeCmd(t, "flickr", "download", "--date-range", "2022-01-01:2023-12-31", outputDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// No photos should have been downloaded
+	entries, _ := os.ReadDir(outputDir)
+	for _, e := range entries {
+		if e.Name() != "transfer.log" && !strings.HasPrefix(e.Name(), "photo-copy-report-") {
+			t.Errorf("unexpected file: %s (all photos should have been filtered out)", e.Name())
+		}
+	}
+}
+
+func TestGoogleImportTakeout_DuplicateFilenames(t *testing.T) {
+	takeoutDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	createTestZip(t, takeoutDir, "takeout.zip", map[string]string{
+		"Google Photos/Album1/sunset.jpg": "jpeg-from-album1",
+		"Google Photos/Album2/sunset.jpg": "jpeg-from-album2",
+	})
+
+	err := executeCmd(t, "google", "import-takeout", takeoutDir, outputDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Both files should exist — one as sunset.jpg, other as sunset_1.jpg
+	if _, err := os.Stat(filepath.Join(outputDir, "sunset.jpg")); err != nil {
+		t.Error("sunset.jpg should have been extracted")
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "sunset_1.jpg")); err != nil {
+		t.Error("sunset_1.jpg should have been created for duplicate")
+	}
+}
+
+func TestGoogleImportTakeout_MultipleZips(t *testing.T) {
+	takeoutDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	createTestZip(t, takeoutDir, "takeout-001.zip", map[string]string{
+		"Google Photos/Trip/photo1.jpg": "jpeg-from-zip1",
+	})
+	createTestZip(t, takeoutDir, "takeout-002.zip", map[string]string{
+		"Google Photos/Vacation/photo2.jpg": "jpeg-from-zip2",
+	})
+
+	err := executeCmd(t, "google", "import-takeout", takeoutDir, outputDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(outputDir, "photo1.jpg")); err != nil {
+		t.Error("photo1.jpg from first zip should have been extracted")
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "photo2.jpg")); err != nil {
+		t.Error("photo2.jpg from second zip should have been extracted")
 	}
 }
 
