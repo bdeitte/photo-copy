@@ -4,6 +4,7 @@ package cli
 
 import (
 	"archive/zip"
+	"bytes"
 	"fmt"
 	"net/http"
 	"os"
@@ -1043,5 +1044,138 @@ func TestGoogleImportTakeout_FiltersNonMedia(t *testing.T) {
 		if strings.HasSuffix(e.Name(), ".json") {
 			t.Errorf("non-media file should not be extracted: %s", e.Name())
 		}
+	}
+}
+
+// --- Flag Integration Tests ---
+
+func TestFlickrDownload_NoMetadata(t *testing.T) {
+	outputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	photos := []map[string]any{
+		{
+			"id": "1", "secret": "aaa", "server": "1",
+			"title":       "Test Photo",
+			"datetaken":   "2020-06-15 10:30:00",
+			"dateupload":  "1592217000",
+			"description": map[string]string{"_content": "A test description"},
+			"tags":        "tag1 tag2",
+		},
+	}
+
+	// Build a minimal valid JPEG so metadata embedding would normally modify it.
+	jpegData := buildMinimalJPEG()
+
+	var mock *mockserver.FlickrMock
+	mock = mockserver.NewFlickr(t).
+		OnGetPhotos(mockserver.RespondJSON(200, map[string]any{
+			"photos": map[string]any{
+				"page":  1,
+				"pages": 1,
+				"total": 1,
+				"photo": photos,
+			},
+			"stat": "ok",
+		})).
+		OnGetSizes(func(w http.ResponseWriter, r *http.Request) {
+			photoID := r.URL.Query().Get("photo_id")
+			mockserver.RespondJSON(200, flickrSizesResponse(
+				mock.Server.URL+"/download/"+photoID+".jpg",
+			))(w, r)
+		}).
+		OnDownload(mockserver.RespondBytes(200, jpegData)).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_API_URL", mock.APIURL)
+
+	err := executeCmd(t, "flickr", "download", "--no-metadata", outputDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify file was downloaded
+	filePath := filepath.Join(outputDir, "1_aaa.jpg")
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("expected file to be downloaded: %v", err)
+	}
+
+	// With --no-metadata, content should be exactly what the server sent (no XMP injected)
+	if !bytes.Equal(data, jpegData) {
+		t.Errorf("file content should be unchanged with --no-metadata; got %d bytes, want %d bytes", len(data), len(jpegData))
+	}
+}
+
+func TestFlickrDownload_DateRange(t *testing.T) {
+	outputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	photos := []map[string]string{
+		{"id": "1", "secret": "aaa", "server": "1", "title": "old", "datetaken": "2020-06-15 10:30:00", "dateupload": "1592217000"},
+		{"id": "2", "secret": "bbb", "server": "1", "title": "mid", "datetaken": "2022-06-15 10:30:00", "dateupload": "1655286600"},
+		{"id": "3", "secret": "ccc", "server": "1", "title": "new", "datetaken": "2024-06-15 10:30:00", "dateupload": "1718441400"},
+	}
+
+	var mock *mockserver.FlickrMock
+	mock = mockserver.NewFlickr(t).
+		OnGetPhotos(mockserver.RespondJSON(200, flickrPhotosResponse(photos, 1, 1, 3))).
+		OnGetSizes(func(w http.ResponseWriter, r *http.Request) {
+			photoID := r.URL.Query().Get("photo_id")
+			mockserver.RespondJSON(200, flickrSizesResponse(
+				mock.Server.URL+"/download/"+photoID+".jpg",
+			))(w, r)
+		}).
+		OnDownload(mockserver.RespondBytes(200, testImageData)).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_API_URL", mock.APIURL)
+
+	err := executeCmd(t, "flickr", "download", "--date-range", "2021-01-01:2023-12-31", outputDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Only photo 2 should have been downloaded
+	if _, err := os.Stat(filepath.Join(outputDir, "2_bbb.jpg")); err != nil {
+		t.Error("photo 2 should have been downloaded (within date range)")
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "1_aaa.jpg")); err == nil {
+		t.Error("photo 1 should NOT have been downloaded (before date range)")
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "3_ccc.jpg")); err == nil {
+		t.Error("photo 3 should NOT have been downloaded (after date range)")
+	}
+
+	// Transfer log should only have photo 2's ID
+	logLines := readLines(t, filepath.Join(outputDir, "transfer.log"))
+	if len(logLines) != 1 {
+		t.Errorf("transfer log has %d entries, want 1", len(logLines))
+	}
+	if len(logLines) > 0 && logLines[0] != "2" {
+		t.Errorf("transfer log entry = %q, want %q", logLines[0], "2")
+	}
+}
+
+func TestNoOpWarnings_NoMetadataOnUpload(t *testing.T) {
+	inputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	mock := mockserver.NewFlickr(t).
+		OnUpload(mockserver.RespondStatus(200)).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_UPLOAD_URL", mock.UploadURL)
+
+	// Run upload with --no-metadata on an empty dir; should not crash
+	err := executeCmd(t, "flickr", "upload", "--no-metadata", inputDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
