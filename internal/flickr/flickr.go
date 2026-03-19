@@ -591,15 +591,24 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 	// Filter by date range (before applying limit)
 	if dateRange != nil {
 		var filtered []string
+		dateFiltered := 0
 		for _, name := range files {
 			filePath := filepath.Join(inputDir, name)
 			fileDate := mediadate.ResolveDate(filePath)
-			if fileDate.IsZero() || dateRange.Contains(fileDate) {
+			switch {
+			case fileDate.IsZero():
+				c.log.Info("including %s despite date range filter: no date available", name)
 				filtered = append(filtered, name)
-			} else {
-				result.RecordSkip(1)
+			case dateRange.Contains(fileDate):
+				filtered = append(filtered, name)
+			default:
+				dateFiltered++
 				c.log.Debug("skipping %s: date %s outside range", name, fileDate.Format("2006-01-02"))
 			}
+		}
+		if dateFiltered > 0 {
+			c.log.Info("filtered %d files outside date range", dateFiltered)
+			result.RecordSkip(dateFiltered)
 		}
 		files = filtered
 	}

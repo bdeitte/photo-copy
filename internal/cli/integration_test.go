@@ -734,6 +734,45 @@ func TestFlickrUpload_LimitFlag(t *testing.T) {
 	}
 }
 
+func TestFlickrUpload_DateRange(t *testing.T) {
+	inputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	// Create files with known modification times
+	inRange := filepath.Join(inputDir, "in_range.jpg")
+	outRange := filepath.Join(inputDir, "out_range.jpg")
+	_ = os.WriteFile(inRange, testImageData, 0644)
+	_ = os.WriteFile(outRange, testImageData, 0644)
+
+	// Set mod times: in_range = 2022, out_range = 2019
+	_ = os.Chtimes(inRange, time.Now(), time.Date(2022, 6, 15, 10, 0, 0, 0, time.Local))
+	_ = os.Chtimes(outRange, time.Now(), time.Date(2019, 1, 1, 10, 0, 0, 0, time.Local))
+
+	mock := mockserver.NewFlickr(t).
+		OnUpload(mockserver.RespondStatus(200)).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_UPLOAD_URL", mock.UploadURL)
+
+	err := executeCmd(t, "flickr", "upload", "--date-range", "2021-01-01:2023-12-31", inputDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Only in_range.jpg should have been uploaded
+	uploadRequests := 0
+	for _, req := range mock.Requests() {
+		if strings.HasPrefix(req.Path, "/services/upload/") {
+			uploadRequests++
+		}
+	}
+	if uploadRequests != 1 {
+		t.Errorf("got %d upload requests, want 1 (only in_range.jpg)", uploadRequests)
+	}
+}
+
 func TestFlickrUpload_FailsOnError(t *testing.T) {
 	inputDir := t.TempDir()
 	configDir := t.TempDir()
@@ -972,6 +1011,58 @@ func TestGoogleUpload_LimitFlag(t *testing.T) {
 	logLines := readLines(t, filepath.Join(inputDir, ".photo-copy-upload.log"))
 	if len(logLines) != 2 {
 		t.Errorf("upload log has %d entries, want 2", len(logLines))
+	}
+}
+
+func TestGoogleUpload_DateRange(t *testing.T) {
+	inputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupGoogleConfig(t, configDir)
+
+	// Create files with known modification times
+	inRange := filepath.Join(inputDir, "in_range.jpg")
+	outRange := filepath.Join(inputDir, "out_range.jpg")
+	_ = os.WriteFile(inRange, testImageData, 0644)
+	_ = os.WriteFile(outRange, testImageData, 0644)
+
+	// Set mod times: in_range = 2022, out_range = 2019
+	_ = os.Chtimes(inRange, time.Now(), time.Date(2022, 6, 15, 10, 0, 0, 0, time.Local))
+	_ = os.Chtimes(outRange, time.Now(), time.Date(2019, 1, 1, 10, 0, 0, 0, time.Local))
+
+	mock := mockserver.NewGoogle(t).
+		OnUploadBytes(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("token"))
+		}).
+		OnBatchCreate(mockserver.RespondJSON(200, map[string]any{})).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_GOOGLE_API_URL", mock.BaseURL)
+	t.Setenv("PHOTO_COPY_GOOGLE_TOKEN", "skip")
+
+	err := executeCmd(t, "google", "upload", "--date-range", "2021-01-01:2023-12-31", inputDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Only in_range.jpg should have been uploaded
+	logLines := readLines(t, filepath.Join(inputDir, ".photo-copy-upload.log"))
+	if len(logLines) != 1 {
+		t.Errorf("upload log has %d entries, want 1", len(logLines))
+	}
+	if len(logLines) > 0 && logLines[0] != "in_range.jpg" {
+		t.Errorf("upload log entry = %q, want in_range.jpg", logLines[0])
+	}
+
+	// Verify only 1 upload request was made
+	uploadRequests := 0
+	for _, req := range mock.Requests() {
+		if req.Path == "/v1/uploads" {
+			uploadRequests++
+		}
+	}
+	if uploadRequests != 1 {
+		t.Errorf("got %d upload requests, want 1", uploadRequests)
 	}
 }
 
