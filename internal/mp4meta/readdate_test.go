@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	gomp4 "github.com/abema/go-mp4"
 )
 
 func TestReadCreationTimeInvalidFile(t *testing.T) {
@@ -65,6 +67,58 @@ func TestReadCreationTime_V1(t *testing.T) {
 	}
 	if !got.Equal(targetTime) {
 		t.Errorf("ReadCreationTime() = %v, want %v", got, targetTime)
+	}
+}
+
+func TestReadCreationTime_MissingMvhd(t *testing.T) {
+	// Build a minimal MP4 with ftyp + moov but no mvhd inside the moov.
+	dir := t.TempDir()
+	mp4Path := filepath.Join(dir, "no-mvhd.mp4")
+
+	f, err := os.Create(mp4Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w := gomp4.NewWriter(f)
+
+	// ftyp box
+	ftyp, err := w.StartBox(&gomp4.BoxInfo{Type: gomp4.BoxTypeFtyp()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = gomp4.Marshal(w, &gomp4.Ftyp{
+		MajorBrand:   [4]byte{'i', 's', 'o', 'm'},
+		MinorVersion: 0x200,
+	}, ftyp.Context)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = w.EndBox()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// moov box with no children (no mvhd)
+	_, err = w.StartBox(&gomp4.BoxInfo{Type: gomp4.BoxTypeMoov()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = w.EndBox()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ReadCreationTime(mp4Path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !got.IsZero() {
+		t.Errorf("expected zero time for MP4 without mvhd, got %v", got)
 	}
 }
 

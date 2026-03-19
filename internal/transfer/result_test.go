@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/briandeitte/photo-copy/internal/logging"
 )
@@ -255,6 +256,40 @@ func TestScanDir(t *testing.T) {
 	}
 	if !r.Scanned {
 		t.Fatal("expected Scanned to be true")
+	}
+}
+
+func TestValidate_ZeroSizeFiles_SkippedForUpload(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "empty.jpg"), nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+	r := NewResult("flickr", "upload", dir)
+	r.RecordSuccess("empty.jpg", 0)
+	r.Finish()
+	r.Validate()
+	for _, w := range r.Warnings {
+		if w.Message == "zero-size file" {
+			t.Fatalf("zero-size file warning should not appear for upload operations, got: %v", r.Warnings)
+		}
+	}
+}
+
+func TestResult_HandleNilResult(t *testing.T) {
+	var buf bytes.Buffer
+	log := logging.New(false, &buf)
+	// Should return early without panic
+	HandleResult(nil, log, t.TempDir())
+}
+
+func TestResult_Duration(t *testing.T) {
+	r := NewResult("flickr", "download", "/tmp")
+	r.StartTime = time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
+	r.EndTime = time.Date(2024, 1, 1, 10, 5, 30, 0, time.UTC)
+	got := r.Duration()
+	want := 5*time.Minute + 30*time.Second
+	if got != want {
+		t.Fatalf("Duration() = %v, want %v", got, want)
 	}
 }
 

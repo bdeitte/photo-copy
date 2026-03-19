@@ -108,6 +108,53 @@ func TestContainsOpenStart(t *testing.T) {
 	}
 }
 
+func TestContains_ExactBoundary(t *testing.T) {
+	dr, err := Parse("2024-06-15:2024-06-15")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Exactly at After (inclusive)
+	atAfter := time.Date(2024, 6, 15, 0, 0, 0, 0, time.Local)
+	if !dr.Contains(atAfter) {
+		t.Error("Contains at exact After boundary should be true")
+	}
+	// One nanosecond before Before (should be inside range)
+	beforeMinus1ns := time.Date(2024, 6, 16, 0, 0, 0, 0, time.Local).Add(-time.Nanosecond)
+	if !dr.Contains(beforeMinus1ns) {
+		t.Error("Contains at Before-1ns should be true")
+	}
+	// Exactly at Before (exclusive, should be outside range)
+	atBefore := time.Date(2024, 6, 16, 0, 0, 0, 0, time.Local)
+	if dr.Contains(atBefore) {
+		t.Error("Contains at exact Before boundary should be false")
+	}
+}
+
+func TestParse_SameDateBothSides(t *testing.T) {
+	dr, err := Parse("2024-01-01:2024-01-01")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if dr.After == nil || dr.Before == nil {
+		t.Fatal("expected both bounds to be set")
+	}
+	expectedAfter := time.Date(2024, 1, 1, 0, 0, 0, 0, time.Local)
+	if !dr.After.Equal(expectedAfter) {
+		t.Errorf("After = %v, want %v", *dr.After, expectedAfter)
+	}
+	expectedBefore := time.Date(2024, 1, 2, 0, 0, 0, 0, time.Local)
+	if !dr.Before.Equal(expectedBefore) {
+		t.Errorf("Before = %v, want %v", *dr.Before, expectedBefore)
+	}
+}
+
+func TestParse_ReversedDates(t *testing.T) {
+	_, err := Parse("2024-12-31:2024-01-01")
+	if err == nil {
+		t.Fatal("expected error for reversed date range, got nil")
+	}
+}
+
 func TestContainsOpenEnd(t *testing.T) {
 	dr, _ := Parse("2020-01-01:")
 	tests := []struct {

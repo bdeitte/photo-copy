@@ -1698,6 +1698,76 @@ func TestGoogleImportTakeout_DuplicateFilenames(t *testing.T) {
 	}
 }
 
+func TestFlickrDownload_PermanentDownloadFailure(t *testing.T) {
+	outputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	photos := []map[string]string{
+		{"id": "1", "secret": "aaa", "server": "1", "title": "good"},
+		{"id": "2", "secret": "bbb", "server": "1", "title": "bad"},
+		{"id": "3", "secret": "ccc", "server": "1", "title": "also_good"},
+	}
+
+	var mock *mockserver.FlickrMock
+	mock = mockserver.NewFlickr(t).
+		OnGetPhotos(mockserver.RespondJSON(200, flickrPhotosResponse(photos, 1, 1, 3))).
+		OnGetSizes(func(w http.ResponseWriter, r *http.Request) {
+			photoID := r.URL.Query().Get("photo_id")
+			if photoID == "2" {
+				// Return sizes but all URLs will 404
+				mockserver.RespondJSON(200, flickrMultiSizesResponse([]map[string]string{
+					{"label": "Original", "source": mock.Server.URL + "/download/missing.jpg"},
+				}))(w, r)
+			} else {
+				mockserver.RespondJSON(200, flickrSizesResponse(
+					mock.Server.URL+"/download/"+photoID+".jpg",
+				))(w, r)
+			}
+		}).
+		OnDownload(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "missing") {
+				w.WriteHeader(404)
+				return
+			}
+			mockserver.RespondBytes(200, testImageData)(w, r)
+		}).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_API_URL", mock.APIURL)
+
+	err := executeCmd(t, "flickr", "download", outputDir)
+	if err != nil {
+		t.Fatalf("unexpected error (should continue past single failure): %v", err)
+	}
+
+	// Photo 1 and 3 should have been downloaded
+	if _, err := os.Stat(filepath.Join(outputDir, "1_aaa.jpg")); err != nil {
+		t.Error("photo 1 should have been downloaded")
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "3_ccc.jpg")); err != nil {
+		t.Error("photo 3 should have been downloaded")
+	}
+
+	// Transfer log should have 2 successful entries
+	logLines := readLines(t, filepath.Join(outputDir, "transfer.log"))
+	if len(logLines) != 2 {
+		t.Errorf("transfer log has %d entries, want 2", len(logLines))
+	}
+
+	// Report should mention the failure
+	entries, _ := os.ReadDir(outputDir)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "photo-copy-report-") {
+			data, _ := os.ReadFile(filepath.Join(outputDir, e.Name()))
+			if !strings.Contains(string(data), "failed:    1") {
+				t.Errorf("report should show 1 failure, got: %s", string(data))
+			}
+		}
+	}
+}
+
 func TestGoogleImportTakeout_MultipleZips(t *testing.T) {
 	takeoutDir := t.TempDir()
 	outputDir := t.TempDir()

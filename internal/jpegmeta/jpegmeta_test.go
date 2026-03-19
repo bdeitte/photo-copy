@@ -231,6 +231,76 @@ func TestSetMetadata_PreservesFilePermissions(t *testing.T) {
 	}
 }
 
+func TestSetMetadata_UnicodeContent(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.jpg")
+	writeMinimalJPEG(t, path)
+
+	meta := Metadata{
+		Title:       "日本語タイトル",
+		Description: "中文描述 & émojis: café",
+		Tags:        []string{"日本", "中国", "한국"},
+	}
+	if err := SetMetadata(path, meta); err != nil {
+		t.Fatalf("SetMetadata failed: %v", err)
+	}
+
+	xmp := readXMPFromJPEG(t, path)
+	if !strings.Contains(xmp, "日本語タイトル") {
+		t.Errorf("XMP missing CJK title, got: %s", xmp)
+	}
+	if !strings.Contains(xmp, "中文描述") {
+		t.Errorf("XMP missing Chinese description, got: %s", xmp)
+	}
+	if !strings.Contains(xmp, "<rdf:li>한국</rdf:li>") {
+		t.Errorf("XMP missing Korean tag, got: %s", xmp)
+	}
+}
+
+func TestSetMetadata_VeryLargeMetadata(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.jpg")
+	writeMinimalJPEG(t, path)
+
+	// Build metadata that approaches the 65533-byte APP1 limit.
+	// The XMP namespace header is 29 bytes + null = 30 bytes, plus 2-byte length field.
+	// So usable XMP payload must be under 65533 - 30 = 65503 bytes.
+	// Build a large title that keeps the total payload just under the limit.
+	largeTitle := strings.Repeat("A", 60000)
+	meta := Metadata{
+		Title: largeTitle,
+	}
+	if err := SetMetadata(path, meta); err != nil {
+		t.Fatalf("SetMetadata failed for large metadata: %v", err)
+	}
+
+	xmp := readXMPFromJPEG(t, path)
+	if !strings.Contains(xmp, largeTitle) {
+		t.Error("XMP missing large title content")
+	}
+}
+
+func TestSetMetadata_MetadataExceedsLimit(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.jpg")
+	writeMinimalJPEG(t, path)
+
+	// Build metadata that exceeds the 65533-byte APP1 limit.
+	// XMP namespace is 30 bytes, XMP boilerplate is ~300 bytes, so a 66000-char title
+	// will push the total well over 65535 bytes.
+	hugeTitle := strings.Repeat("X", 66000)
+	meta := Metadata{
+		Title: hugeTitle,
+	}
+	err := SetMetadata(path, meta)
+	if err == nil {
+		t.Fatal("expected error for metadata exceeding APP1 size limit")
+	}
+	if !strings.Contains(err.Error(), "too large") {
+		t.Errorf("error should mention 'too large', got: %v", err)
+	}
+}
+
 func TestSetMetadata_NonexistentFile(t *testing.T) {
 	err := SetMetadata("/nonexistent/path/test.jpg", Metadata{Title: "Test"})
 	if err == nil {

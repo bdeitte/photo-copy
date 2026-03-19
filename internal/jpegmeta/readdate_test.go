@@ -66,6 +66,34 @@ func TestReadDateWithDateTimeFallback(t *testing.T) {
 	}
 }
 
+func TestReadDate_MalformedExif(t *testing.T) {
+	// Build a JPEG with an APP1 segment that has the Exif header but garbage TIFF data.
+	var jpeg []byte
+	jpeg = append(jpeg, 0xFF, 0xD8) // SOI
+
+	// APP1 marker with Exif header + garbage
+	payload := []byte("Exif\x00\x00")
+	payload = append(payload, []byte("THIS_IS_NOT_VALID_TIFF_DATA_AT_ALL_GARBAGE")...)
+	segLen := uint16(len(payload) + 2)
+	jpeg = append(jpeg, 0xFF, 0xE1)
+	jpeg = append(jpeg, byte(segLen>>8), byte(segLen))
+	jpeg = append(jpeg, payload...)
+	jpeg = append(jpeg, 0xFF, 0xD9) // EOI
+
+	path := filepath.Join(t.TempDir(), "malformed.jpg")
+	if err := os.WriteFile(path, jpeg, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ReadDate(path)
+	if err != nil {
+		t.Fatalf("expected no error for malformed EXIF, got: %v", err)
+	}
+	if !got.IsZero() {
+		t.Errorf("expected zero time for malformed EXIF, got %v", got)
+	}
+}
+
 // EXIF tag IDs
 const (
 	exifDateTimeOriginal = 0x9003

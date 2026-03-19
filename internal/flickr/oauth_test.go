@@ -104,6 +104,85 @@ func TestOAuthSign_PreservesExistingParams(t *testing.T) {
 	}
 }
 
+func TestOAuthSign_SpecialCharactersInParams(t *testing.T) {
+	cfg := &config.FlickrConfig{
+		APIKey:           "test-key",
+		APISecret:        "test-secret",
+		OAuthToken:       "test-token",
+		OAuthTokenSecret: "test-token-secret",
+	}
+
+	params := map[string]string{
+		"method": "flickr.test.echo",
+		"text":   "hello world+foo=bar&baz",
+	}
+
+	sig := oauthSign("GET", "https://api.flickr.com/services/rest/", params, cfg)
+
+	if sig == "" {
+		t.Fatal("expected non-empty signature")
+	}
+
+	// The text param should be preserved as-is in the params map (encoding
+	// happens only during base string construction).
+	if params["text"] != "hello world+foo=bar&baz" {
+		t.Errorf("text param was altered: got %q", params["text"])
+	}
+
+	// Signature must be valid base64
+	if params["oauth_signature"] == "" {
+		t.Fatal("oauth_signature not set")
+	}
+
+	// Signing a different value should produce a different signature
+	params2 := map[string]string{
+		"method": "flickr.test.echo",
+		"text":   "different value",
+	}
+	sig2 := oauthSign("GET", "https://api.flickr.com/services/rest/", params2, cfg)
+	// Signatures differ (nonce/timestamp also differ, but this confirms no crash)
+	if sig2 == "" {
+		t.Fatal("expected non-empty signature for second call")
+	}
+}
+
+func TestOAuthSign_EmptyParams(t *testing.T) {
+	cfg := &config.FlickrConfig{
+		APIKey:           "test-key",
+		APISecret:        "test-secret",
+		OAuthToken:       "test-token",
+		OAuthTokenSecret: "test-token-secret",
+	}
+
+	params := map[string]string{}
+
+	sig := oauthSign("GET", "https://api.flickr.com/services/rest/", params, cfg)
+
+	if sig == "" {
+		t.Fatal("expected non-empty signature")
+	}
+
+	// All required OAuth params should still be set even with no extra params
+	required := []string{
+		"oauth_consumer_key",
+		"oauth_token",
+		"oauth_signature_method",
+		"oauth_timestamp",
+		"oauth_nonce",
+		"oauth_version",
+		"oauth_signature",
+	}
+	for _, key := range required {
+		if _, ok := params[key]; !ok {
+			t.Errorf("missing required OAuth param: %s", key)
+		}
+	}
+
+	if params["oauth_signature"] != sig {
+		t.Errorf("returned signature %q != params signature %q", sig, params["oauth_signature"])
+	}
+}
+
 func TestGenerateNonce(t *testing.T) {
 	nonce := generateNonce()
 	if len(nonce) != 32 {

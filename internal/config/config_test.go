@@ -157,6 +157,50 @@ func TestDefaultDir(t *testing.T) {
 	}
 }
 
+func TestSaveConfig_PermissionDenied(t *testing.T) {
+	tmpDir := t.TempDir()
+	readOnlyDir := filepath.Join(tmpDir, "readonly")
+	if err := os.MkdirAll(readOnlyDir, 0500); err != nil {
+		t.Fatal(err)
+	}
+	subDir := filepath.Join(readOnlyDir, "subdir")
+	fc := &FlickrConfig{APIKey: "k", APISecret: "s"}
+	err := SaveFlickrConfig(subDir, fc)
+	if err == nil {
+		t.Fatal("expected permission denied error, got nil")
+	}
+}
+
+func TestConfigDir_EnvOverride_CreatesDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	newDir := filepath.Join(tmpDir, "new-config-dir")
+	t.Setenv("PHOTO_COPY_CONFIG_DIR", newDir)
+
+	got := DefaultDir()
+	if got != newDir {
+		t.Fatalf("DefaultDir() = %q, want %q", got, newDir)
+	}
+
+	// Directory should not exist yet
+	if _, err := os.Stat(newDir); !os.IsNotExist(err) {
+		t.Fatal("expected directory to not exist before save")
+	}
+
+	fc := &FlickrConfig{APIKey: "k", APISecret: "s"}
+	if err := SaveFlickrConfig(newDir, fc); err != nil {
+		t.Fatalf("save failed: %v", err)
+	}
+
+	// Directory should now exist
+	info, err := os.Stat(newDir)
+	if err != nil {
+		t.Fatalf("expected directory to exist after save, got error: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatal("expected path to be a directory")
+	}
+}
+
 func TestDefaultDir_EnvOverride(t *testing.T) {
 	t.Setenv("PHOTO_COPY_CONFIG_DIR", "/tmp/test-config")
 	if got := DefaultDir(); got != "/tmp/test-config" {
