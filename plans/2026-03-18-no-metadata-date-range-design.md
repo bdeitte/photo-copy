@@ -43,7 +43,11 @@ Either side is optional for open-ended ranges:
 - `--date-range 2020-01-01:` — everything from 2020 onward
 - `--date-range :2023-12-31` — everything up to end of 2023
 
-The `Before` date is inclusive of the full day (set to 23:59:59). Validation errors (bad format, start after end) are reported at CLI level before invoking any service.
+The `Before` date is inclusive of the full day — implemented as `< start of next day` (i.e., `time.Date(y, m, d+1, 0, 0, 0, 0, loc)`) to avoid missing sub-second timestamps. Validation errors (bad format, start after end) are reported at CLI level before invoking any service.
+
+### Timezone handling
+
+All date parsing and comparison uses **local time**. The `--date-range` flag values are parsed as local time. Dates from different sources (Flickr API, EXIF, MP4) are compared as-is without timezone conversion. This is documented in CLI help text — the intent is "date as the photographer sees it," which aligns with how `date_taken` and EXIF `DateTimeOriginal` work (local time, no timezone). MP4 creation times are stored as UTC but are compared without conversion for simplicity.
 
 ### Date range struct
 
@@ -60,6 +64,12 @@ func (dr *DateRange) Contains(t time.Time) bool
 ```
 
 Shared across all commands.
+
+### Interaction with --limit
+
+`--limit` counts only **transferred** files, not examined files. Date-filtered files that are skipped do not count toward the limit. For example, `--limit 10 --date-range 2020-01-01:` processes photos until 10 in-range files are transferred, regardless of how many out-of-range files were skipped.
+
+This is consistent across all services, including S3 where rclone applies date filtering (`--min-age`/`--max-age`) before the `--files-from` limit.
 
 ### Flickr download
 
@@ -78,23 +88,33 @@ For Flickr and Google uploads, before uploading each file, read the file's embed
 
 Check the resolved date against the range. If outside, skip (increment `result.Skipped`, log with filename and date).
 
-For **S3 uploads and downloads**, pass `--min-age` and/or `--max-age` flags to the rclone subprocess. These filter by **file modification time**, not embedded metadata date.
+For **S3 uploads and downloads**, pass rclone's `--max-age` and `--min-age` flags to the rclone subprocess. The mapping is:
+- `After` date → `--max-age YYYY-MM-DD` (files newer than this date)
+- `Before` date → `--min-age YYYY-MM-DD` (files older than this date)
 
-**Important caveat**: S3 date filtering uses file modification time because rclone handles file iteration directly. This differs from Flickr/Google where embedded metadata dates are used. This must be clearly documented in CLI help text, README, and CLAUDE.md.
+Note the inverted naming: rclone's `--max-age` means "maximum age" (i.e., files modified *after* the date), which maps to our `After` bound. These flags accept absolute dates in ISO8601 format.
+
+For S3 objects, rclone filters by the object's **LastModified** timestamp (the time the object was uploaded/copied to S3), which may differ from the original file's modification time or metadata date.
+
+**Important caveat**: S3 date filtering uses rclone's age-based filtering, not embedded metadata dates. This differs from Flickr/Google where embedded metadata dates (EXIF, MP4 creation time) are used. This must be clearly documented in CLI help text, README, and CLAUDE.md.
+
+**Interaction with `--files-from`**: The existing S3 code uses `--files-from` when `--limit` is set, which disables most rclone filters. When both `--date-range` and `--limit` are used with S3, apply date filtering first by listing files with `--min-age`/`--max-age`, then truncate to the limit for `--files-from`.
 
 ### No-op warnings
 
-`--date-range` on `google import-takeout` logs:
+`--date-range` on `google import-takeout` logs a warning because import-takeout processes zip archives where per-file date filtering would be complex and of low value:
 
 ```
 --date-range has no effect on import-takeout
 ```
 
+Both `--no-metadata` and `--date-range` on `config` subcommands (`config flickr`, `config google`, `config s3`) log warnings since these commands only manage credentials.
+
 ### Date reading from files
 
 For reading metadata dates from local files during uploads:
 
-- **JPEG**: If extending `jpegmeta` to read EXIF `DateTimeOriginal` is straightforward, add `ReadDate(filePath string) (time.Time, error)` there. Otherwise, use an external library like `rwcarlsen/goexif`.
+- **JPEG**: Use an external library (`rwcarlsen/goexif` or similar) for reading EXIF `DateTimeOriginal`. The current `jpegmeta` package writes XMP APP1 segments, which is structurally different from reading EXIF (TIFF/IFD format in a separate APP1 segment). Add a `ReadDate(filePath string) (time.Time, error)` function in `jpegmeta` that wraps the external library.
 - **MP4/MOV**: Add `ReadCreationTime(filePath string) (time.Time, error)` to `mp4meta` using the existing `abema/go-mp4` dependency to read the `mvhd` box.
 
 Both return `time.Time` and `error`. Zero time means no date found, triggering fallback to file modification time.
