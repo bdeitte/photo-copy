@@ -355,9 +355,9 @@ func buildDateRangeFlags(dr *daterange.DateRange) []string {
 	}
 	if dr.Before != nil {
 		// --min-age = "files at least this old" = our Before bound
-		// dr.Before is start of next day, so use the original end date
-		endDate := dr.Before.AddDate(0, 0, -1)
-		flags = append(flags, "--min-age", endDate.Format("2006-01-02"))
+		// dr.Before is already start of next day (exclusive), which is exactly what
+		// rclone needs: --min-age 2024-01-01 includes files from 2023-12-31
+		flags = append(flags, "--min-age", dr.Before.Format("2006-01-02"))
 	}
 	return flags
 }
