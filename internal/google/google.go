@@ -15,8 +15,10 @@ import (
 	"time"
 
 	"github.com/briandeitte/photo-copy/internal/config"
+	"github.com/briandeitte/photo-copy/internal/daterange"
 	"github.com/briandeitte/photo-copy/internal/logging"
 	"github.com/briandeitte/photo-copy/internal/media"
+	"github.com/briandeitte/photo-copy/internal/mediadate"
 	"github.com/briandeitte/photo-copy/internal/transfer"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -101,7 +103,7 @@ func NewClient(ctx context.Context, cfg *config.GoogleConfig, configDir string, 
 }
 
 // Upload uploads all media files from inputDir to Google Photos.
-func (c *Client) Upload(ctx context.Context, inputDir string, limit int) (*transfer.Result, error) {
+func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRange *daterange.DateRange) (*transfer.Result, error) {
 	result := transfer.NewResult("google-photos", "upload", inputDir)
 
 	files, err := collectMediaFiles(inputDir)
@@ -123,6 +125,21 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) (*trans
 		if !uploaded[filepath.Base(f)] {
 			toUpload = append(toUpload, f)
 		}
+	}
+
+	// Filter by date range
+	if dateRange != nil {
+		var filtered []string
+		for _, filePath := range toUpload {
+			fileDate := mediadate.ResolveDate(filePath)
+			if fileDate.IsZero() || dateRange.Contains(fileDate) {
+				filtered = append(filtered, filePath)
+			} else {
+				result.RecordSkip(1)
+				c.log.Debug("skipping %s: date %s outside range", filepath.Base(filePath), fileDate.Format("2006-01-02"))
+			}
+		}
+		toUpload = filtered
 	}
 
 	if len(toUpload) == 0 {

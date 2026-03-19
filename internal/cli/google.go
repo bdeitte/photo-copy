@@ -46,7 +46,7 @@ func newGoogleUploadCmd(opts *rootOpts) *cobra.Command {
 				return fmt.Errorf("creating Google Photos client: %w", err)
 			}
 
-			result, err := client.Upload(ctx, inputDir, opts.limit)
+			result, err := client.Upload(ctx, inputDir, opts.limit, opts.parsedDateRange)
 			transfer.HandleResult(result, log, inputDir)
 			return err
 		},
