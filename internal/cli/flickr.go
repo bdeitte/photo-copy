@@ -91,7 +91,7 @@ func newFlickrUploadCmd(opts *rootOpts) *cobra.Command {
 
 			log := logging.New(opts.debug, nil)
 			client := flickr.NewClient(cfg, log)
-			result, err := client.Upload(context.Background(), inputDir, opts.limit)
+			result, err := client.Upload(context.Background(), inputDir, opts.limit, opts.parsedDateRange)
 			transfer.HandleResult(result, log, inputDir)
 			return err
 		},

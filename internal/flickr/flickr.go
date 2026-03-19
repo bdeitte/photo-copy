@@ -23,6 +23,7 @@ import (
 	"github.com/briandeitte/photo-copy/internal/jpegmeta"
 	"github.com/briandeitte/photo-copy/internal/logging"
 	"github.com/briandeitte/photo-copy/internal/media"
+	"github.com/briandeitte/photo-copy/internal/mediadate"
 	"github.com/briandeitte/photo-copy/internal/mp4meta"
 	"github.com/briandeitte/photo-copy/internal/transfer"
 )
@@ -563,7 +564,7 @@ func (c *Client) downloadFile(ctx context.Context, fileURL, destPath string) (er
 }
 
 // Upload uploads media files from inputDir to Flickr.
-func (c *Client) Upload(ctx context.Context, inputDir string, limit int) (*transfer.Result, error) {
+func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRange *daterange.DateRange) (*transfer.Result, error) {
 	c.log.Debug("starting Flickr upload from %s", inputDir)
 	result := transfer.NewResult("flickr", "upload", inputDir)
 
@@ -581,6 +582,28 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int) (*trans
 
 	if len(files) == 0 {
 		c.log.Info("no supported media files found in %s", inputDir)
+		result.Finish()
+		return result, nil
+	}
+
+	// Filter by date range (before applying limit)
+	if dateRange != nil {
+		var filtered []string
+		for _, name := range files {
+			filePath := filepath.Join(inputDir, name)
+			fileDate := mediadate.ResolveDate(filePath)
+			if fileDate.IsZero() || dateRange.Contains(fileDate) {
+				filtered = append(filtered, name)
+			} else {
+				result.RecordSkip(1)
+				c.log.Debug("skipping %s: date %s outside range", name, fileDate.Format("2006-01-02"))
+			}
+		}
+		files = filtered
+	}
+
+	if len(files) == 0 {
+		c.log.Info("no supported media files found in %s (after filtering)", inputDir)
 		result.Finish()
 		return result, nil
 	}
