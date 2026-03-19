@@ -1,15 +1,25 @@
 package mp4meta
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"time"
 
 	gomp4 "github.com/abema/go-mp4"
 )
 
+// isIOError reports whether err is an I/O or filesystem error (as opposed
+// to an MP4 parse/format error).
+func isIOError(err error) bool {
+	var pathErr *fs.PathError
+	return errors.As(err, &pathErr)
+}
+
 // ReadCreationTime reads the creation time from an MP4/MOV file's mvhd box.
-// Returns zero time if the file is not a valid MP4 or has no creation time.
-// Returns an error only for file I/O failures.
+// Returns zero time if the file is not a valid MP4, has no creation time, or
+// the creation time represents a date before the Unix epoch (1970).
+// Returns an error for file I/O failures; MP4 parse errors return zero time.
 func ReadCreationTime(filePath string) (time.Time, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
@@ -47,11 +57,20 @@ func ReadCreationTime(filePath string) (time.Time, error) {
 		}
 	})
 	if err != nil {
-		// Not a valid MP4 — return zero time
+		// Distinguish I/O errors from parse errors
+		if isIOError(err) {
+			return time.Time{}, err
+		}
+		// MP4 parse/format error — not a valid MP4
 		return time.Time{}, nil
 	}
 
 	if !found || creationTime == 0 {
+		return time.Time{}, nil
+	}
+
+	// Guard against pre-Unix-epoch dates (creation time < MP4 epoch offset)
+	if int64(creationTime) < mp4Epoch {
 		return time.Time{}, nil
 	}
 
