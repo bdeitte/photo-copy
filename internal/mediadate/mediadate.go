@@ -4,6 +4,7 @@ package mediadate
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,14 +17,14 @@ import (
 // from the mvhd box. Falls back to file modification time.
 // Returns zero time if the file cannot be read.
 func ResolveDate(filePath string) time.Time {
-	ext := strings.ToLower(filePath)
+	ext := strings.ToLower(filepath.Ext(filePath))
 
-	switch {
-	case strings.HasSuffix(ext, ".jpg") || strings.HasSuffix(ext, ".jpeg"):
+	switch ext {
+	case ".jpg", ".jpeg":
 		if t, err := jpegmeta.ReadDate(filePath); err == nil && !t.IsZero() {
 			return t
 		}
-	case strings.HasSuffix(ext, ".mp4") || strings.HasSuffix(ext, ".mov"):
+	case ".mp4", ".mov":
 		if t, err := mp4meta.ReadCreationTime(filePath); err == nil && !t.IsZero() {
 			return t
 		}

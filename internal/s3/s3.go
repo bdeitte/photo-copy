@@ -55,6 +55,7 @@ func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, me
 	dateFlags := buildDateRangeFlags(dateRange)
 	if len(dateFlags) > 0 {
 		filterFlags = append(filterFlags, dateFlags...)
+		args = append(args, dateFlags...)
 	}
 
 	if limit > 0 {
@@ -70,11 +71,10 @@ func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, me
 		// Replace include flags with --files-from (they're mutually exclusive in rclone)
 		args = buildUploadArgs(configPath, inputDir, bucket, prefix)
 		args = append(args, "--files-from", filesFromPath)
+		if len(dateFlags) > 0 {
+			args = append(args, dateFlags...)
+		}
 		filterFlags = []string{"--files-from", filesFromPath}
-	}
-
-	if len(dateFlags) > 0 {
-		args = append(args, dateFlags...)
 	}
 
 	total := c.countFiles(ctx, rclonePath, configPath, inputDir, filterFlags)
@@ -118,6 +118,7 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 	dateFlags := buildDateRangeFlags(dateRange)
 	if len(dateFlags) > 0 {
 		filterFlags = append(filterFlags, dateFlags...)
+		args = append(args, dateFlags...)
 	}
 
 	if limit > 0 {
@@ -133,11 +134,10 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 		// Replace include flags with --files-from (they're mutually exclusive in rclone)
 		args = buildDownloadArgs(configPath, bucket, prefix, outputDir)
 		args = append(args, "--files-from", filesFromPath)
+		if len(dateFlags) > 0 {
+			args = append(args, dateFlags...)
+		}
 		filterFlags = []string{"--files-from", filesFromPath}
-	}
-
-	if len(dateFlags) > 0 {
-		args = append(args, dateFlags...)
 	}
 
 	total := c.countFiles(ctx, rclonePath, configPath, src, filterFlags)
