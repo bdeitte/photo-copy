@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/briandeitte/photo-copy/internal/daterange"
 	"github.com/spf13/cobra"
@@ -64,6 +65,8 @@ func NewRootCmd() *cobra.Command {
 		return nil
 	}
 
+	rootCmd.SilenceUsage = true
+	rootCmd.SilenceErrors = true
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 
 	cobra.EnableCommandSorting = false
@@ -87,7 +90,21 @@ func NewRootCmd() *cobra.Command {
 func Execute() {
 	rootCmd := NewRootCmd()
 	if err := rootCmd.Execute(); err != nil {
+		if strings.Contains(err.Error(), "unknown command") {
+			printAvailableCommands(os.Stderr, rootCmd)
+		}
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// printAvailableCommands writes the list of available commands to w.
+func printAvailableCommands(w *os.File, cmd *cobra.Command) {
+	_, _ = fmt.Fprintln(w, "Available commands:")
+	for _, c := range cmd.Commands() {
+		if c.IsAvailableCommand() {
+			_, _ = fmt.Fprintf(w, "  %-20s %s\n", c.Name(), c.Short)
+		}
+	}
+	_, _ = fmt.Fprintln(w)
 }
