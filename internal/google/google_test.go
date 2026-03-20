@@ -2,6 +2,8 @@ package google
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -201,6 +203,38 @@ func TestCollectMediaFiles_EmptyDir(t *testing.T) {
 	}
 	if len(files) != 0 {
 		t.Errorf("expected 0 files, got %d", len(files))
+	}
+}
+
+// roundTripFunc allows using a function as an http.RoundTripper.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestRetryableDo_InvalidGrantFailsImmediately(t *testing.T) {
+	t.Setenv("PHOTO_COPY_TEST_MODE", "1")
+	calls := 0
+	c := &Client{
+		httpClient: &http.Client{
+			Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+				calls++
+				return nil, fmt.Errorf("oauth2: \"invalid_grant\" \"Token has been expired or revoked.\"")
+			}),
+		},
+		log: logging.New(false, nil),
+	}
+
+	_, err := c.retryableDo(context.Background(), func() (*http.Request, error) {
+		return http.NewRequest("GET", "http://example.com", nil)
+	})
+
+	if !errors.Is(err, errTokenExpired) {
+		t.Errorf("expected errTokenExpired, got: %v", err)
+	}
+	if calls != 1 {
+		t.Errorf("expected 1 call (no retries), got %d", calls)
 	}
 }
 

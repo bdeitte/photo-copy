@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,6 +24,9 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
+
+// errTokenExpired is returned when the OAuth token is expired or revoked.
+var errTokenExpired = fmt.Errorf("Google OAuth token has been expired or revoked. Run 'photo-copy config google' to re-authenticate") //nolint:staticcheck // proper noun
 
 const (
 	defaultUploadURL      = "https://photoslibrary.googleapis.com/v1/uploads"
@@ -186,6 +190,10 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 
 		uploadToken, err := c.uploadBytes(ctx, filePath, filename)
 		if err != nil {
+			if errors.Is(err, errTokenExpired) {
+				result.Finish()
+				return result, err
+			}
 			result.RecordError(filename, err.Error())
 			c.log.Error("upload failed for %s: %v", filename, err)
 			estimator.Tick()
@@ -194,6 +202,10 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 
 		c.log.Debug("got upload token for %s, creating media item", filename)
 		if err := c.createMediaItem(ctx, uploadToken, filename); err != nil {
+			if errors.Is(err, errTokenExpired) {
+				result.Finish()
+				return result, err
+			}
 			result.RecordError(filename, err.Error())
 			c.log.Error("create media item failed for %s: %v", filename, err)
 			estimator.Tick()
@@ -263,8 +275,8 @@ func (c *Client) retryableDo(ctx context.Context, buildReq func() (*http.Request
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
-			if strings.Contains(err.Error(), "invalid_grant") {
-				return nil, fmt.Errorf("Google OAuth token has been expired or revoked. Run 'photo-copy config google' to re-authenticate") //nolint:staticcheck // proper noun
+			if strings.Contains(strings.ToLower(err.Error()), "invalid_grant") {
+				return nil, errTokenExpired
 			}
 			if attempt == maxRetries {
 				return nil, err
