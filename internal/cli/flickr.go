@@ -29,7 +29,7 @@ func newFlickrCmd(opts *rootOpts) *cobra.Command {
 func newFlickrDownloadCmd(opts *rootOpts) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "download <output-dir>",
-		Short: "Download all photos from Flickr",
+		Short: "Download all photos/videos from Flickr",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			outputDir := args[0]
@@ -76,7 +76,7 @@ func newFlickrDownloadCmd(opts *rootOpts) *cobra.Command {
 func newFlickrUploadCmd(opts *rootOpts) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "upload <input-dir>",
-		Short: "Upload photos to Flickr",
+		Short: "Upload photos/videos to Flickr",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			inputDir := args[0]

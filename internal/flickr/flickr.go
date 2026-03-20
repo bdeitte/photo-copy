@@ -315,11 +315,11 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 			return result, fmt.Errorf("Flickr API error on page %d: stat=%s", page, photosResp.Stat) //nolint:staticcheck // proper noun
 		}
 
-		c.log.Debug("page %d/%d: %d photos", page, photosResp.Photos.Pages, len(photosResp.Photos.Photo))
+		c.log.Debug("page %d/%d: %d photos/videos", page, photosResp.Photos.Pages, len(photosResp.Photos.Photo))
 
 		if page == 1 {
 			result.Expected = photosResp.Photos.Total
-			c.log.Info("found %d photos on Flickr", result.Expected)
+			c.log.Info("found %d photos/videos on Flickr", result.Expected)
 		}
 
 		pageSkipped := 0
@@ -468,10 +468,10 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 		}
 
 		if pageSkipped > 0 {
-			c.log.Info("[%d/%d] skipped %d already-downloaded photos on page %d", result.Succeeded+result.Skipped+result.Failed, result.Expected, pageSkipped, page)
+			c.log.Info("[%d/%d] skipped %d already-downloaded photos/videos on page %d", result.Succeeded+result.Skipped+result.Failed, result.Expected, pageSkipped, page)
 		}
 		if pageDateFiltered > 0 {
-			c.log.Info("[%d/%d] skipped %d photos outside date range on page %d", result.Succeeded+result.Skipped+result.Failed, result.Expected, pageDateFiltered, page)
+			c.log.Info("[%d/%d] skipped %d photos/videos outside date range on page %d", result.Succeeded+result.Skipped+result.Failed, result.Expected, pageDateFiltered, page)
 		}
 
 		if limit > 0 && result.Succeeded+result.Failed >= limit {

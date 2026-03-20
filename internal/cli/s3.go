@@ -28,7 +28,7 @@ func newS3UploadCmd(opts *rootOpts) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "upload <input-dir>",
-		Short: "Upload photos to S3",
+		Short: "Upload photos/videos to S3",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.LoadS3Config(config.DefaultDir())
@@ -58,7 +58,7 @@ func newS3DownloadCmd(opts *rootOpts) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "download <output-dir>",
-		Short: "Download photos from S3",
+		Short: "Download photos/videos from S3",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.LoadS3Config(config.DefaultDir())

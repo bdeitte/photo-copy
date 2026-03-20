@@ -26,7 +26,7 @@ func newGooglePhotosCmd(opts *rootOpts) *cobra.Command {
 func newGoogleUploadCmd(opts *rootOpts) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "upload <input-dir>",
-		Short: "Upload photos to Google Photos",
+		Short: "Upload photos/videos to Google Photos",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			inputDir := args[0]
@@ -58,7 +58,7 @@ func newGoogleUploadCmd(opts *rootOpts) *cobra.Command {
 func newGoogleImportTakeoutCmd(opts *rootOpts) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "import-takeout <takeout-dir> <output-dir>",
-		Short: "Import photos from Google Takeout zip files",
+		Short: "Import photos/videos from Google Takeout zip files",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			log := logging.New(opts.debug, nil)
