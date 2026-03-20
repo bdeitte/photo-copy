@@ -11,6 +11,7 @@ import (
 
 	"github.com/briandeitte/photo-copy/internal/config"
 	"github.com/briandeitte/photo-copy/internal/logging"
+	"github.com/briandeitte/photo-copy/internal/transfer"
 )
 
 func TestLoadTransferLog_Empty(t *testing.T) {
@@ -496,5 +497,47 @@ func TestRetryableGet_ExhaustsRetries(t *testing.T) {
 	_, err := c.retryableGet(context.Background(), server.URL)
 	if err == nil {
 		t.Fatal("expected error after exhausting retries")
+	}
+}
+
+func TestEstimateRemaining(t *testing.T) {
+	tests := []struct {
+		name      string
+		limit     int
+		result    *transfer.Result
+		want      int
+	}{
+		{
+			name:  "no limit uses expected minus processed",
+			limit: 0,
+			result: &transfer.Result{Expected: 100, Succeeded: 30, Skipped: 10, Failed: 5},
+			want:  55,
+		},
+		{
+			name:  "limit with remaining",
+			limit: 10,
+			result: &transfer.Result{Succeeded: 3, Failed: 1},
+			want:  6,
+		},
+		{
+			name:  "limit fully consumed",
+			limit: 10,
+			result: &transfer.Result{Succeeded: 9, Failed: 1},
+			want:  0,
+		},
+		{
+			name:  "limit exceeded clamps to zero",
+			limit: 10,
+			result: &transfer.Result{Succeeded: 11, Failed: 2},
+			want:  0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := estimateRemaining(tt.limit, tt.result)
+			if got != tt.want {
+				t.Errorf("estimateRemaining(%d, ...) = %d, want %d", tt.limit, got, tt.want)
+			}
+		})
 	}
 }
