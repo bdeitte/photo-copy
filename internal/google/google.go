@@ -270,6 +270,15 @@ func (c *Client) retryableDo(ctx context.Context, buildReq func() (*http.Request
 		}
 		req = req.WithContext(ctx)
 
+		c.log.Debug("HTTP %s %s", req.Method, req.URL.String())
+		for key, vals := range req.Header {
+			if strings.EqualFold(key, "Authorization") {
+				c.log.Debug("  %s: [redacted]", key)
+			} else {
+				c.log.Debug("  %s: %s", key, strings.Join(vals, ", "))
+			}
+		}
+
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -291,6 +300,8 @@ func (c *Client) retryableDo(ctx context.Context, buildReq func() (*http.Request
 			}
 			continue
 		}
+
+		c.log.Debug("HTTP response: %d %s", resp.StatusCode, resp.Status)
 
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
 			_ = resp.Body.Close()
@@ -338,6 +349,7 @@ func (c *Client) uploadBytes(ctx context.Context, filePath, filename string) (st
 	if err != nil {
 		return "", fmt.Errorf("reading response: %w", err)
 	}
+	c.log.Debug("upload response body: %s", string(body))
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
@@ -364,6 +376,7 @@ func (c *Client) createMediaItem(ctx context.Context, uploadToken, filename stri
 	if err != nil {
 		return fmt.Errorf("marshaling request: %w", err)
 	}
+	c.log.Debug("createMediaItem request body: %s", string(data))
 
 	resp, err := c.retryableDo(ctx, func() (*http.Request, error) {
 		req, err := http.NewRequest("POST", getBatchCreateURL(), bytes.NewReader(data))
@@ -382,6 +395,7 @@ func (c *Client) createMediaItem(ctx context.Context, uploadToken, filename stri
 	if err != nil {
 		return fmt.Errorf("reading response: %w", err)
 	}
+	c.log.Debug("createMediaItem response body: %s", string(body))
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("create failed with status %d: %s", resp.StatusCode, string(body))

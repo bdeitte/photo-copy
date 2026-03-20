@@ -90,6 +90,22 @@ func (c *Client) throttle() {
 	c.lastRequest = time.Now()
 }
 
+// sanitizeURL strips OAuth and API key params from a URL for safe debug logging.
+func sanitizeURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	q := u.Query()
+	for key := range q {
+		if strings.HasPrefix(key, "oauth_") || key == "api_key" {
+			q.Del(key)
+		}
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
 // retryableGet performs an HTTP GET with retry on 429 and 5xx errors.
 func (c *Client) retryableGet(ctx context.Context, url string) (*http.Response, error) {
 	for attempt := 0; attempt <= maxRetries; attempt++ {
@@ -100,10 +116,13 @@ func (c *Client) retryableGet(ctx context.Context, url string) (*http.Response, 
 			return nil, err
 		}
 
+		c.log.Debug("HTTP GET %s", sanitizeURL(url))
 		resp, err := c.http.Do(req)
 		if err != nil {
+			c.log.Debug("HTTP error: %v", err)
 			return nil, err
 		}
+		c.log.Debug("HTTP response: %d %s", resp.StatusCode, resp.Status)
 
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
 			_ = resp.Body.Close()
@@ -209,6 +228,14 @@ func (c *Client) signedAPIGet(ctx context.Context, method string, extra map[stri
 			continue
 		}
 
+		// Buffer and log JSON response body for debugging.
+		respBody, readErr := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if readErr != nil {
+			return nil, fmt.Errorf("reading response body: %w", readErr)
+		}
+		c.log.Debug("API response body: %s", string(respBody))
+		resp.Body = io.NopCloser(bytes.NewReader(respBody))
 		return resp, nil
 	}
 	return nil, fmt.Errorf("retries exhausted for %s API call", method)
@@ -733,14 +760,19 @@ func (c *Client) uploadFile(ctx context.Context, filePath string) error {
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
+	c.log.Debug("HTTP POST %s (multipart upload: %s)", upURL, filepath.Base(filePath))
 	resp, err := c.http.Do(req)
 	if err != nil {
+		c.log.Debug("HTTP error: %v", err)
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	respBody, _ := io.ReadAll(resp.Body)
+	c.log.Debug("HTTP response: %d %s", resp.StatusCode, resp.Status)
+	c.log.Debug("upload response body: %s", string(respBody))
+
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("upload failed HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 
