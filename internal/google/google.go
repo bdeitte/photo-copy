@@ -263,6 +263,9 @@ func (c *Client) retryableDo(ctx context.Context, buildReq func() (*http.Request
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
+			if strings.Contains(err.Error(), "invalid_grant") {
+				return nil, fmt.Errorf("Google OAuth token has been expired or revoked. Run 'photo-copy config google' to re-authenticate") //nolint:staticcheck // proper noun
+			}
 			if attempt == maxRetries {
 				return nil, err
 			}
