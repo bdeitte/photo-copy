@@ -1820,3 +1820,85 @@ func TestNoOpWarnings_NoMetadataOnUpload(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+// --- Fatal Error Summary Suppression Tests ---
+
+func TestGoogleUpload_FatalError_NoSummary(t *testing.T) {
+	configDir := t.TempDir()
+	setupGoogleConfig(t, configDir)
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_GOOGLE_TOKEN", "skip")
+
+	// Non-existent directory causes Upload to return an error from collectMediaFiles.
+	// Before the fix, HandleResult would still be called and could panic or produce
+	// a misleading summary. Now the error returns directly.
+	nonexistent := filepath.Join(t.TempDir(), "does-not-exist")
+	err := executeCmd(t, "google", "upload", nonexistent)
+	if err == nil {
+		t.Fatal("expected error from non-existent directory")
+	}
+	if !strings.Contains(err.Error(), "collecting media files") {
+		t.Errorf("expected 'collecting media files' error, got: %v", err)
+	}
+}
+
+func TestFlickrDownload_FatalError_NoSummary(t *testing.T) {
+	outputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	// Server always returns 500 for getPhotos, exhausting retries
+	mock := mockserver.NewFlickr(t).
+		OnGetPhotos(mockserver.RespondStatus(500)).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_API_URL", mock.APIURL)
+
+	err := executeCmd(t, "flickr", "download", outputDir)
+	if err == nil {
+		t.Fatal("expected error from exhausted retries")
+	}
+
+	// Verify no report file was written (HandleResult was skipped)
+	entries, _ := os.ReadDir(outputDir)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "photo-copy-report-") {
+			t.Errorf("report file %s should not exist on fatal error", e.Name())
+		}
+	}
+}
+
+func TestFlickrUpload_FatalError_NoSummary(t *testing.T) {
+	inputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	// Create enough files to trigger the consecutive failure abort (10)
+	for i := 0; i < 11; i++ {
+		_ = os.WriteFile(filepath.Join(inputDir, fmt.Sprintf("photo%02d.jpg", i)), testImageData, 0644)
+	}
+
+	// Upload endpoint always returns 500
+	mock := mockserver.NewFlickr(t).
+		OnUpload(mockserver.RespondStatus(500)).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_API_URL", mock.APIURL)
+	t.Setenv("PHOTO_COPY_FLICKR_UPLOAD_URL", mock.UploadURL)
+
+	err := executeCmd(t, "flickr", "upload", inputDir)
+	if err == nil {
+		t.Fatal("expected error from consecutive upload failures")
+	}
+
+	// Verify no report file was written (HandleResult was skipped)
+	entries, _ := os.ReadDir(inputDir)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "photo-copy-report-") {
+			t.Errorf("report file %s should not exist on fatal error", e.Name())
+		}
+	}
+}

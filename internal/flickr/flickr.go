@@ -234,7 +234,11 @@ func (c *Client) signedAPIGet(ctx context.Context, method string, extra map[stri
 		if readErr != nil {
 			return nil, fmt.Errorf("reading response body: %w", readErr)
 		}
-		c.log.Debug("API response body: %s", string(respBody))
+		if len(respBody) <= 4096 {
+			c.log.Debug("API response body: %s", string(respBody))
+		} else {
+			c.log.Debug("API response body (%d bytes, truncated): %s", len(respBody), string(respBody[:4096]))
+		}
 		resp.Body = io.NopCloser(bytes.NewReader(respBody))
 		return resp, nil
 	}
