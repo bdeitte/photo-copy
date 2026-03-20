@@ -45,6 +45,9 @@ func newFlickrDownloadCmd(opts *rootOpts) *cobra.Command {
 			log := logging.New(opts.debug, nil)
 			client := flickr.NewClient(cfg, log)
 			result, err := client.Download(context.Background(), outputDir, opts.limit, opts.noMetadata, opts.parsedDateRange)
+			if err != nil {
+				return err
+			}
 			if result != nil {
 				logPath := filepath.Join(outputDir, "transfer.log")
 				// Build lookup map once instead of reading directory per log entry.
@@ -66,7 +69,7 @@ func newFlickrDownloadCmd(opts *rootOpts) *cobra.Command {
 				})
 				transfer.HandleResult(result, log, outputDir)
 			}
-			return err
+			return nil
 		},
 	}
 
@@ -92,8 +95,11 @@ func newFlickrUploadCmd(opts *rootOpts) *cobra.Command {
 			log := logging.New(opts.debug, nil)
 			client := flickr.NewClient(cfg, log)
 			result, err := client.Upload(context.Background(), inputDir, opts.limit, opts.parsedDateRange)
+			if err != nil {
+				return err
+			}
 			transfer.HandleResult(result, log, inputDir)
-			return err
+			return nil
 		},
 	}
 

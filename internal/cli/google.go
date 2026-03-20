@@ -47,8 +47,11 @@ func newGoogleUploadCmd(opts *rootOpts) *cobra.Command {
 			}
 
 			result, err := client.Upload(ctx, inputDir, opts.limit, opts.parsedDateRange)
+			if err != nil {
+				return err
+			}
 			transfer.HandleResult(result, log, inputDir)
-			return err
+			return nil
 		},
 	}
 
@@ -63,8 +66,11 @@ func newGoogleImportTakeoutCmd(opts *rootOpts) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			log := logging.New(opts.debug, nil)
 			result, err := google.ImportTakeout(args[0], args[1], log)
+			if err != nil {
+				return err
+			}
 			transfer.HandleResult(result, log, args[1])
-			return err
+			return nil
 		},
 	}
 

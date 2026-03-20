@@ -276,6 +276,7 @@ func (c *Client) retryableDo(ctx context.Context, buildReq func() (*http.Request
 				return nil, ctx.Err()
 			}
 			if strings.Contains(strings.ToLower(err.Error()), "invalid_grant") {
+				c.log.Debug("OAuth error: %v", err)
 				return nil, errTokenExpired
 			}
 			if attempt == maxRetries {
