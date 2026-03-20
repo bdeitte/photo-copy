@@ -22,7 +22,7 @@ if [ ! -d "rclone-bin" ] || [ -z "$(ls rclone-bin/rclone-* 2>/dev/null)" ]; then
 fi
 
 echo ""
-echo "Setup complete! Next steps:"
-echo "  1. Run './photo-copy config flickr' to set up Flickr credentials"
-echo "  2. Run './photo-copy config google' to set up Google credentials"
-echo "  3. Run './photo-copy config s3' to set up S3 credentials"
+echo "Setup complete! Next step is to configure what you need:"
+echo "  - Run './photo-copy config flickr' to set up Flickr credentials"
+echo "  - Run './photo-copy config google' to set up Google credentials (only needed for upload)"
+echo "  - Run './photo-copy config s3' to set up S3 credentials"
