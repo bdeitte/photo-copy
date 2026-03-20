@@ -204,6 +204,33 @@ func TestReadAWSCredentials_NoDefaultProfile(t *testing.T) {
 	}
 }
 
+func TestRootCmd_UnknownCommandShowsAvailableCommands(t *testing.T) {
+	cmd := NewRootCmd()
+	cmd.SetArgs([]string{"download", "flickr"})
+	buf := new(bytes.Buffer)
+	cmd.SetErr(buf)
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for unknown command")
+	}
+	if !strings.Contains(err.Error(), "unknown command") {
+		t.Errorf("error = %q, want to contain 'unknown command'", err.Error())
+	}
+
+	// Verify printAvailableCommands output
+	out := new(bytes.Buffer)
+	printAvailableCommands(out, cmd)
+	output := out.String()
+	for _, name := range []string{"config", "flickr", "google", "s3"} {
+		if !strings.Contains(output, name) {
+			t.Errorf("printAvailableCommands output missing %q", name)
+		}
+	}
+	if !strings.Contains(output, "Available commands:") {
+		t.Error("printAvailableCommands output missing header")
+	}
+}
+
 func TestRootCmd_DateRangeWarningOnConfigSubcommand(t *testing.T) {
 	cmd := NewRootCmd()
 	// "config flickr" is a leaf command with RunE, so PersistentPreRunE fires.

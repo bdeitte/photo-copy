@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -90,6 +91,7 @@ func NewRootCmd() *cobra.Command {
 func Execute() {
 	rootCmd := NewRootCmd()
 	if err := rootCmd.Execute(); err != nil {
+		// NOTE: Depends on cobra's internal error message format for unknown commands.
 		if strings.Contains(err.Error(), "unknown command") {
 			printAvailableCommands(os.Stderr, rootCmd)
 		}
@@ -99,7 +101,7 @@ func Execute() {
 }
 
 // printAvailableCommands writes the list of available commands to w.
-func printAvailableCommands(w *os.File, cmd *cobra.Command) {
+func printAvailableCommands(w io.Writer, cmd *cobra.Command) {
 	_, _ = fmt.Fprintln(w, "Available commands:")
 	for _, c := range cmd.Commands() {
 		if c.IsAvailableCommand() {
