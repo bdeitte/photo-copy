@@ -1,6 +1,7 @@
 package daterange
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -152,6 +153,9 @@ func TestParse_ReversedDates(t *testing.T) {
 	_, err := Parse("2024-12-31:2024-01-01")
 	if err == nil {
 		t.Fatal("expected error for reversed date range, got nil")
+	}
+	if !strings.Contains(err.Error(), "not before") {
+		t.Errorf("error should mention 'not before', got: %v", err)
 	}
 }
 

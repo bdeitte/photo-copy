@@ -65,15 +65,19 @@ func TestErrorLogger_HasPrefix(t *testing.T) {
 	log.Error("disk full")
 
 	got := buf.String()
-	if !bytes.Contains([]byte(got), []byte("ERROR:")) {
+	if !bytes.Contains([]byte(got), []byte("ERROR: ")) {
 		t.Fatalf("expected ERROR: prefix, got: %s", got)
 	}
 }
 
-func TestLogger_NilWriter(t *testing.T) {
+func TestLogger_DefaultsToStderr(t *testing.T) {
+	// New(false, nil) should fall back to os.Stderr without panic.
 	log := New(false, nil)
+	if log.writer == nil {
+		t.Fatal("expected writer to default to os.Stderr, got nil")
+	}
 
-	// Should not panic
+	// Smoke-test: calls should not panic.
 	log.Info("test message")
 	log.Error("test error")
 	log.Debug("test debug")

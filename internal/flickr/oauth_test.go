@@ -104,6 +104,10 @@ func TestOAuthSign_PreservesExistingParams(t *testing.T) {
 	}
 }
 
+// TestOAuthSign_SpecialCharactersInParams is a smoke test verifying that
+// oauthSign does not panic or corrupt params when values contain characters
+// that require URL encoding (+, =, &, spaces). It does not verify the
+// signature value itself because nonce/timestamp make signatures non-deterministic.
 func TestOAuthSign_SpecialCharactersInParams(t *testing.T) {
 	cfg := &config.FlickrConfig{
 		APIKey:           "test-key",
@@ -117,11 +121,7 @@ func TestOAuthSign_SpecialCharactersInParams(t *testing.T) {
 		"text":   "hello world+foo=bar&baz",
 	}
 
-	sig := oauthSign("GET", "https://api.flickr.com/services/rest/", params, cfg)
-
-	if sig == "" {
-		t.Fatal("expected non-empty signature")
-	}
+	oauthSign("GET", "https://api.flickr.com/services/rest/", params, cfg)
 
 	// The text param should be preserved as-is in the params map (encoding
 	// happens only during base string construction).
@@ -129,20 +129,9 @@ func TestOAuthSign_SpecialCharactersInParams(t *testing.T) {
 		t.Errorf("text param was altered: got %q", params["text"])
 	}
 
-	// Signature must be valid base64
+	// Signature must have been set
 	if params["oauth_signature"] == "" {
 		t.Fatal("oauth_signature not set")
-	}
-
-	// Signing a different value should produce a different signature
-	params2 := map[string]string{
-		"method": "flickr.test.echo",
-		"text":   "different value",
-	}
-	sig2 := oauthSign("GET", "https://api.flickr.com/services/rest/", params2, cfg)
-	// Signatures differ (nonce/timestamp also differ, but this confirms no crash)
-	if sig2 == "" {
-		t.Fatal("expected non-empty signature for second call")
 	}
 }
 

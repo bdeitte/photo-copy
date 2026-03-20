@@ -1525,8 +1525,8 @@ func TestFlickrUpload_ConsecutiveFailureAbort(t *testing.T) {
 			uploadRequests++
 		}
 	}
-	if uploadRequests > 10 {
-		t.Errorf("should have aborted at 10 consecutive failures, but made %d requests", uploadRequests)
+	if uploadRequests != 10 {
+		t.Errorf("should have aborted at exactly 10 consecutive failures, but made %d requests", uploadRequests)
 	}
 }
 
@@ -1578,8 +1578,10 @@ func TestFlickrUpload_PartialFailure(t *testing.T) {
 
 	// Verify report shows the failure
 	entries, _ := os.ReadDir(inputDir)
+	reportFound := false
 	for _, e := range entries {
 		if strings.HasPrefix(e.Name(), "photo-copy-report-") {
+			reportFound = true
 			data, _ := os.ReadFile(filepath.Join(inputDir, e.Name()))
 			report := string(data)
 			if !strings.Contains(report, "succeeded: 2") {
@@ -1589,6 +1591,9 @@ func TestFlickrUpload_PartialFailure(t *testing.T) {
 				t.Errorf("report should show 1 failed, got: %s", report)
 			}
 		}
+	}
+	if !reportFound {
+		t.Error("expected a report file to be written")
 	}
 }
 
@@ -1758,13 +1763,18 @@ func TestFlickrDownload_PermanentDownloadFailure(t *testing.T) {
 
 	// Report should mention the failure
 	entries, _ := os.ReadDir(outputDir)
+	reportFound := false
 	for _, e := range entries {
 		if strings.HasPrefix(e.Name(), "photo-copy-report-") {
+			reportFound = true
 			data, _ := os.ReadFile(filepath.Join(outputDir, e.Name()))
 			if !strings.Contains(string(data), "failed:    1") {
 				t.Errorf("report should show 1 failure, got: %s", string(data))
 			}
 		}
+	}
+	if !reportFound {
+		t.Error("expected a report file to be written")
 	}
 }
 

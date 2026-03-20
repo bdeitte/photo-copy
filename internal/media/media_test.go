@@ -55,11 +55,6 @@ func TestIsSupportedFile_CaseSensitivity(t *testing.T) {
 func TestSupportedExtensions_Complete(t *testing.T) {
 	exts := SupportedExtensions()
 
-	expectedCount := 12
-	if len(exts) != expectedCount {
-		t.Fatalf("SupportedExtensions() returned %d extensions, want %d", len(exts), expectedCount)
-	}
-
 	expected := []string{".jpg", ".jpeg", ".png", ".tiff", ".tif", ".gif", ".heic", ".webp", ".mp4", ".mov", ".avi", ".mkv"}
 	extSet := make(map[string]bool)
 	for _, ext := range exts {
@@ -69,6 +64,9 @@ func TestSupportedExtensions_Complete(t *testing.T) {
 		if !extSet[ext] {
 			t.Errorf("SupportedExtensions() missing %q", ext)
 		}
+	}
+	if len(exts) != len(expected) {
+		t.Errorf("SupportedExtensions() returned %d extensions, want %d; got %v", len(exts), len(expected), exts)
 	}
 }
 
