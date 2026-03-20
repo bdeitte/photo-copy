@@ -352,7 +352,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 				result.RecordError(photo.ID, err.Error())
 				estimator.Tick()
 				processed := result.Succeeded + result.Skipped + result.Failed
-				c.log.Error("[%d/%d] %sgetting original URL for %s: %v", processed, result.Expected, estimator.Estimate(result.Expected-processed), photo.ID, err)
+				c.log.Error("[%d/%d] %sgetting original URL for %s: %v", processed, result.Expected, estimator.Estimate(estimateRemaining(limit, result)), photo.ID, err)
 				continue
 			}
 
@@ -382,7 +382,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 				result.RecordError(filename, downloadErr.Error())
 				estimator.Tick()
 				processed := result.Succeeded + result.Skipped + result.Failed
-				c.log.Error("[%d/%d] %sdownloading %s: %v", processed, result.Expected, estimator.Estimate(result.Expected-processed), filename, downloadErr)
+				c.log.Error("[%d/%d] %sdownloading %s: %v", processed, result.Expected, estimator.Estimate(estimateRemaining(limit, result)), filename, downloadErr)
 				continue
 			}
 
@@ -459,7 +459,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 			case !photoDate.IsZero():
 				detail = fmt.Sprintf(" (%s)", photoDate.Format("2006-01-02"))
 			}
-			c.log.Info("[%d/%d] %sdownloaded %s%s", processed, result.Expected, estimator.Estimate(result.Expected-processed), filename, detail)
+			c.log.Info("[%d/%d] %sdownloaded %s%s", processed, result.Expected, estimator.Estimate(estimateRemaining(limit, result)), filename, detail)
 
 			if limit > 0 && result.Succeeded+result.Failed >= limit {
 				c.log.Info("reached limit of %d files (%d downloaded, %d errors)", limit, result.Succeeded, result.Failed)
@@ -492,6 +492,21 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 type originalResult struct {
 	URL   string
 	Label string
+}
+
+// estimateRemaining returns the number of files left to download/upload for
+// time estimation. When a limit is set, remaining is based on the limit
+// rather than the total expected count.
+func estimateRemaining(limit int, result *transfer.Result) int {
+	done := result.Succeeded + result.Failed
+	if limit > 0 {
+		remaining := limit - done
+		if remaining < 0 {
+			return 0
+		}
+		return remaining
+	}
+	return result.Expected - result.Succeeded - result.Skipped - result.Failed
 }
 
 // getOriginalURLs retrieves available URLs for a photo or video in preference order.
