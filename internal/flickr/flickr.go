@@ -323,6 +323,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 		}
 
 		pageSkipped := 0
+		pageDateFiltered := 0
 		for _, photo := range photosResp.Photos.Photo {
 			if transferred[photo.ID] {
 				result.RecordSkip(1)
@@ -340,6 +341,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 					c.log.Info("including %s despite date range filter: no date available", photo.ID)
 				} else if !dateRange.Contains(photoDate) {
 					result.RecordSkip(1)
+					pageDateFiltered++
 					c.log.Debug("skipping %s: date %s outside range", photo.ID, photoDate.Format("2006-01-02"))
 					continue
 				}
@@ -467,6 +469,9 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 
 		if pageSkipped > 0 {
 			c.log.Info("[%d/%d] skipped %d already-downloaded photos on page %d", result.Succeeded+result.Skipped+result.Failed, result.Expected, pageSkipped, page)
+		}
+		if pageDateFiltered > 0 {
+			c.log.Info("[%d/%d] skipped %d photos outside date range on page %d", result.Succeeded+result.Skipped+result.Failed, result.Expected, pageDateFiltered, page)
 		}
 
 		if limit > 0 && result.Succeeded+result.Failed >= limit {
