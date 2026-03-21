@@ -47,7 +47,7 @@ Each command will tell you what you need to do. Credentials are saved to `~/.con
 The Google Photos API only allows access to photos the app itself uploaded, so downloading your full library requires Google Takeout (a manual zip export from Google).
 
 ```bash
-# Upload local photos to Google Photos (requires 'config google' setup)
+# Upload local photos to Google Photos
 ./photo-copy google upload ../photos
 
 # Download: export your library via Google Takeout, then extract the zips
@@ -68,11 +68,6 @@ The Google Photos API only allows access to photos the app itself uploaded, so d
 
 Download works on all platforms. Upload requires macOS with Photos.app and iCloud Photos sync enabled.
 
-icloudpd and osxphotos are bundled with photo-copy for most platforms. No separate installation is needed on supported platforms.
-
-- **icloudpd** (for downloads): bundled for Linux amd64/arm64, macOS amd64 (runs via Rosetta on Apple Silicon), and Windows amd64. Other platforms: `pipx install icloudpd`.
-- **osxphotos** (for uploads): bundled for macOS ARM64 only. Intel Macs: `pipx install osxphotos`.
-
 ```bash
 # Download all photos from iCloud
 ./photo-copy icloud download ../icloud-photos
@@ -81,12 +76,16 @@ icloudpd and osxphotos are bundled with photo-copy for most platforms. No separa
 ./photo-copy icloud upload ../photos
 ```
 
-**Notes:**
+**Notes on download:**
 - Download requires Apple ID with 2FA. Run `photo-copy config icloud` to authenticate.
-- Session cookies expire approximately every 2 months — re-run `config icloud` to re-authenticate.
+- Session cookies expire approximately every 2 months — re-run config to re-authenticate.
 - Advanced Data Protection must be disabled for downloads.
+- icloudpd for downloads bundled for Linux amd64/arm64, macOS amd64 (runs via Rosetta on Apple Silicon), and Windows amd64. Other platforms: `pipx install icloudpd`.
+
+**Notes on upload:**
 - Upload does not require `config icloud` — it imports files directly into Photos.app via osxphotos. If iCloud Photos sync is enabled in System Settings, they automatically upload to iCloud.
 - `--no-metadata` has no effect on iCloud commands.
+- osxphotos for uploads bundled for macOS ARM64 only. Intel Macs: `pipx install osxphotos`.
 
 ## Features
 
