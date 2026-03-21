@@ -38,7 +38,7 @@ download_icloudpd() {
     local binary_name="$2"
 
     echo "Downloading icloudpd $ICLOUDPD_VERSION ($upstream_name)..."
-    curl -sL "${BASE_URL}/icloudpd-${ICLOUDPD_VERSION}-${upstream_name}" -o "$BIN_DIR/$binary_name"
+    curl -sfL "${BASE_URL}/icloudpd-${ICLOUDPD_VERSION}-${upstream_name}" -o "$BIN_DIR/$binary_name"
     chmod +x "$BIN_DIR/$binary_name"
     echo "  -> $binary_name"
 }
@@ -50,7 +50,7 @@ download_icloudpd "macos-amd64"     "icloudpd-darwin-amd64"
 
 # Windows binary has .exe suffix upstream
 echo "Downloading icloudpd $ICLOUDPD_VERSION (windows-amd64)..."
-curl -sL "${BASE_URL}/icloudpd-${ICLOUDPD_VERSION}-windows-amd64.exe" -o "$BIN_DIR/icloudpd-windows-amd64.exe"
+curl -sfL "${BASE_URL}/icloudpd-${ICLOUDPD_VERSION}-windows-amd64.exe" -o "$BIN_DIR/icloudpd-windows-amd64.exe"
 echo "  -> icloudpd-windows-amd64.exe"
 
 echo ""

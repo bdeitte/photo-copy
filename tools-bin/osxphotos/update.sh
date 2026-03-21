@@ -34,7 +34,7 @@ ZIP_NAME="osxphotos_MacOS_exe_darwin_arm64_v${OSXPHOTOS_VERSION}.zip"
 URL="https://github.com/RhetTbull/osxphotos/releases/download/v${OSXPHOTOS_VERSION}/${ZIP_NAME}"
 
 echo "Downloading osxphotos $OSXPHOTOS_VERSION (darwin-arm64)..."
-curl -sL "$URL" -o "$WORK_DIR/$ZIP_NAME"
+curl -sfL "$URL" -o "$WORK_DIR/$ZIP_NAME"
 unzip -q -o "$WORK_DIR/$ZIP_NAME" -d "$WORK_DIR/osxphotos"
 
 # Find the osxphotos binary in the extracted zip
