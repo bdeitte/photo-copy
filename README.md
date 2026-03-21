@@ -109,6 +109,17 @@ Files that fail during transfer are not marked as completed in the log, so re-ru
 - **Flickr** — Requests are throttled to 1/second (staying under Flickr's 3,600 requests/hour API limit). HTTP 429 and 5xx errors are retried up to 5 times with exponential backoff (2s, 4s, 8s, 16s, 32s), honoring the `Retry-After` header when present. This applies to both API calls and photo downloads.
 - **Google Photos** — Subject to a 10,000 uploads/day limit, enforced in code.
 
+### Filtering Options
+
+- `--date-range YYYY-MM-DD:YYYY-MM-DD` — Only process files within the specified date range. Either side can be omitted for open-ended ranges (e.g., `2020-01-01:` for everything from 2020 onward, `:2023-12-31` for everything up to end of 2023).
+
+**Date sources by command:**
+- **Flickr download**: Uses `date_taken` (preferred) or `date_upload` from the Flickr API.
+- **Flickr/Google upload**: Reads EXIF DateTimeOriginal (JPEG) or MP4 creation time, falling back to file modification time.
+- **S3 upload/download**: Uses rclone's `--min-age`/`--max-age` flags, which filter by **file modification time** (or S3 object LastModified timestamp), not embedded metadata dates. This is a limitation of delegating to rclone.
+- **iCloud download**: Uses icloudpd's date filtering (photo creation date from iCloud). Note: `--limit` maps to icloudpd's `--recent` flag, which selects the N most recently uploaded photos.
+- **iCloud upload**: Reads EXIF DateTimeOriginal (JPEG) or MP4 creation time, falling back to file modification time (same as Flickr/Google upload).
+
 ### Transfer summary & validation
 
 Every transfer automatically prints a summary and writes a detailed report file when it finishes. The summary includes file counts (succeeded, skipped, failed), total size transferred, and elapsed time. Any errors are re-listed so they're easy to spot.
@@ -134,6 +145,8 @@ Flickr downloads automatically preserve original capture dates and embed Flickr 
   - Video files (`.mp4`, `.mov`) get an XMP UUID box inserted in the MP4 container.
   - HTML in Flickr descriptions is stripped to plain text. Tags are split into individual keywords.
 
+- `--no-metadata` — Skip metadata embedding during Flickr downloads (XMP metadata, MP4 creation time, filesystem timestamps). The raw file is downloaded without modification.
+
 ### Debug mode
 
 Add `--debug` to any command for verbose logging:
@@ -141,18 +154,6 @@ Add `--debug` to any command for verbose logging:
 ```bash
 ./photo-copy flickr download ../photos --debug
 ```
-
-### Filtering Options
-
-- `--no-metadata` — Skip metadata embedding during Flickr downloads (XMP metadata, MP4 creation time, filesystem timestamps). The raw file is downloaded without modification.
-- `--date-range YYYY-MM-DD:YYYY-MM-DD` — Only process files within the specified date range. Either side can be omitted for open-ended ranges (e.g., `2020-01-01:` for everything from 2020 onward, `:2023-12-31` for everything up to end of 2023).
-
-**Date sources by command:**
-- **Flickr download**: Uses `date_taken` (preferred) or `date_upload` from the Flickr API.
-- **Flickr/Google upload**: Reads EXIF DateTimeOriginal (JPEG) or MP4 creation time, falling back to file modification time.
-- **S3 upload/download**: Uses rclone's `--min-age`/`--max-age` flags, which filter by **file modification time** (or S3 object LastModified timestamp), not embedded metadata dates. This is a limitation of delegating to rclone.
-- **iCloud download**: Uses icloudpd's date filtering (photo creation date from iCloud). Note: `--limit` maps to icloudpd's `--recent` flag, which selects the N most recently uploaded photos.
-- **iCloud upload**: Reads EXIF DateTimeOriginal (JPEG) or MP4 creation time, falling back to file modification time (same as Flickr/Google upload).
 
 ### Supported file types
 
