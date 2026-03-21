@@ -38,6 +38,7 @@ Go CLI app using [cobra](https://github.com/spf13/cobra) for command structure. 
 - **flickr/** - Flickr API client with OAuth 1.0a signing (`oauth.go`). Uses transfer log files (`transfer.log`) for resumable downloads.
 - **google/** - Google Photos API client with OAuth2 flow. `takeout.go` handles extracting media from Google Takeout zip archives. Uses upload log files for resumable uploads.
 - **s3/** - S3 operations via bundled rclone binary subprocess. `rclone.go` handles binary resolution (checks next to executable, then cwd) and temp config generation. `s3.go` builds rclone command args and runs them.
+- **icloud/** — iCloud Photos client. Downloads via icloudpd subprocess (cross-platform). Uploads via osxphotos subprocess (macOS only, imports into Photos.app which syncs to iCloud). No direct Apple API — both operations delegate to external Python tools, similar to how S3 delegates to rclone.
 - **jpegmeta/** - Writes XMP metadata (title, description, tags) into JPEG files as APP1 segments using Dublin Core namespace. Used by Flickr downloads to embed Flickr metadata into downloaded photos. Also reads EXIF DateTimeOriginal via `rwcarlsen/goexif` for date-range filtering of uploads.
 - **mp4meta/** - Sets creation/modification timestamps in MP4/MOV container metadata (`mvhd`/`tkhd`/`mdhd` boxes) using `abema/go-mp4`, and writes XMP metadata (title, description, tags) as UUID boxes using raw I/O. Used by Flickr downloads to preserve original capture dates and embed Flickr metadata in video files. Also reads creation time from the `mvhd` box for date-range filtering of uploads.
 - **daterange/** - Parses `--date-range YYYY-MM-DD:YYYY-MM-DD` flag values into a `DateRange` struct with optional `After`/`Before` bounds. `Contains()` checks if a time falls within the range.
@@ -70,6 +71,8 @@ Go CLI app using [cobra](https://github.com/spf13/cobra) for command structure. 
 - **Google Photos upload limit:** 10,000 uploads/day, enforced in code.
 - **Cross-service copies** (e.g., Flickr -> S3) go through a local directory as an intermediate step — there is no direct service-to-service transfer.
 - **`config s3`** can import credentials from `~/.aws/credentials` (reads the `[default]` profile).
+- **iCloud Photos upload:** macOS only — imports into Photos.app via osxphotos, relies on iCloud Photos sync to upload to cloud. No cross-platform upload API exists.
+- **iCloud Photos authentication:** Requires Apple ID with 2FA. Session cookies expire ~2 months. Advanced Data Protection must be disabled.
 
 ### Design docs
 
