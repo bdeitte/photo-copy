@@ -23,7 +23,7 @@ func NewRootCmd() *cobra.Command {
 
 	rootCmd := &cobra.Command{
 		Use:   "photo-copy",
-		Short: "Copy photos and videos between Flickr, Google Photos, S3, and local directories",
+		Short: "Copy photos and videos between iCloud Photos, Flickr, Google Photos, S3, and local directories",
 	}
 
 	rootCmd.PersistentFlags().BoolVar(&opts.debug, "debug", false, "Enable verbose debug logging to stderr")
@@ -75,6 +75,7 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.AddCommand(newFlickrCmd(opts))
 	rootCmd.AddCommand(newGooglePhotosCmd(opts))
 	rootCmd.AddCommand(newS3Cmd(opts))
+	rootCmd.AddCommand(newICloudCmd(opts))
 	rootCmd.InitDefaultHelpCmd()
 	// Move help command to end by removing and re-adding it
 	for _, cmd := range rootCmd.Commands() {
