@@ -20,8 +20,12 @@ func NewClient(cfg *config.ICloudConfig, log *logging.Logger) *Client {
 
 func findTool(name, envVar string) (string, error) {
 	if path := os.Getenv(envVar); path != "" {
-		if _, err := os.Stat(path); err != nil {
+		info, err := os.Stat(path)
+		if err != nil {
 			return "", fmt.Errorf("%s path from %s not found: %s", name, envVar, path)
+		}
+		if info.IsDir() || info.Mode()&0111 == 0 {
+			return "", fmt.Errorf("%s path from %s is not executable: %s", name, envVar, path)
 		}
 		return path, nil
 	}

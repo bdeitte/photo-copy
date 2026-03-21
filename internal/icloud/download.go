@@ -69,6 +69,12 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, date
 			continue
 		}
 
+		if filename, reason := parseDownloadError(line); reason != "" {
+			c.log.Error("icloudpd: %s", line)
+			result.RecordError(filename, reason)
+			continue
+		}
+
 		c.log.Debug("icloudpd: %s", line)
 	}
 
@@ -141,4 +147,20 @@ func parsePhotoCount(line string) int {
 func isSkipLine(line string) bool {
 	lower := strings.ToLower(line)
 	return strings.Contains(lower, "already exists") || strings.Contains(lower, "skipping")
+}
+
+// downloadErrorRe matches icloudpd error lines like "ERROR downloading IMG_5678.jpg: reason".
+var downloadErrorRe = regexp.MustCompile(`(?i)error\S*\s+(?:.*\s)?downloading\s+(\S+?)(?::\s*(.*))?$`)
+
+func parseDownloadError(line string) (filename, reason string) {
+	m := downloadErrorRe.FindStringSubmatch(line)
+	if m == nil {
+		return "", ""
+	}
+	filename = strings.TrimSpace(m[1])
+	reason = line
+	if len(m) > 2 && m[2] != "" {
+		reason = m[2]
+	}
+	return filename, reason
 }

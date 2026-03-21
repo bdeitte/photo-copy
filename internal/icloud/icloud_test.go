@@ -47,6 +47,18 @@ func TestFindTool_EnvOverride_NotFound(t *testing.T) {
 	}
 }
 
+func TestFindTool_EnvOverride_NotExecutable(t *testing.T) {
+	tmpFile := filepath.Join(t.TempDir(), "fake-icloudpd")
+	if err := os.WriteFile(tmpFile, []byte("not executable"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PHOTO_COPY_ICLOUDPD_PATH", tmpFile)
+	_, err := findTool("icloudpd", "PHOTO_COPY_ICLOUDPD_PATH")
+	if err == nil {
+		t.Fatal("expected error for non-executable env override path")
+	}
+}
+
 func TestFindTool_NotInstalled(t *testing.T) {
 	t.Setenv("PHOTO_COPY_ICLOUDPD_PATH", "")
 	_, err := findTool("nonexistent-tool-xyz-12345", "PHOTO_COPY_NONEXISTENT_PATH")
@@ -143,6 +155,31 @@ func TestParseDownloadLine(t *testing.T) {
 		if got != tt.expected {
 			t.Errorf("parseDownloadLine(%q) = %q, want %q", tt.line, got, tt.expected)
 		}
+	}
+}
+
+func TestParseDownloadError(t *testing.T) {
+	filename, reason := parseDownloadError("ERROR downloading IMG_5678.jpg: connection reset")
+	if filename != "IMG_5678.jpg" {
+		t.Errorf("expected filename 'IMG_5678.jpg', got %q", filename)
+	}
+	if reason != "connection reset" {
+		t.Errorf("expected reason 'connection reset', got %q", reason)
+	}
+
+	filename, _ = parseDownloadError("error downloading photo.png")
+	if filename != "photo.png" {
+		t.Errorf("expected filename 'photo.png', got %q", filename)
+	}
+
+	_, reason = parseDownloadError("Downloading IMG_1234.jpg")
+	if reason != "" {
+		t.Errorf("expected no match for download line, got reason %q", reason)
+	}
+
+	_, reason = parseDownloadError("Found 50 photos")
+	if reason != "" {
+		t.Errorf("expected no match for count line, got reason %q", reason)
 	}
 }
 
