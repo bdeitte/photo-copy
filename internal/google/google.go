@@ -4,13 +4,16 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"errors"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -82,7 +85,7 @@ func NewClient(ctx context.Context, cfg *config.GoogleConfig, configDir string, 
 		ClientSecret: cfg.ClientSecret,
 		Scopes:       oauthScopes,
 		Endpoint:     google.Endpoint,
-		RedirectURL:  "urn:ietf:wg:oauth:2.0:oob",
+		RedirectURL:  "http://localhost", // placeholder, updated with actual port in runOAuthFlow
 	}
 
 	token, err := loadToken(configDir)
@@ -485,25 +488,87 @@ func saveToken(configDir string, token *oauth2.Token) error {
 	return config.SaveGoogleToken(configDir, token)
 }
 
-// runOAuthFlow runs an interactive OAuth2 flow via the terminal.
+// runOAuthFlow runs an OAuth2 flow using a localhost redirect.
+// It starts a temporary HTTP server to receive the authorization code from Google.
 func runOAuthFlow(ctx context.Context, cfg *oauth2.Config) (*oauth2.Token, error) {
+	// Listen on a random available port
+	listener, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		return nil, fmt.Errorf("starting local server: %w", err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+
+	// Update the redirect URL with the actual port
+	cfg.RedirectURL = fmt.Sprintf("http://localhost:%d", port)
+
+	codeCh := make(chan string, 1)
+	errCh := make(chan error, 1)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		code := r.URL.Query().Get("code")
+		if code == "" {
+			errMsg := r.URL.Query().Get("error")
+			if errMsg == "" {
+				errMsg = "no authorization code received"
+			}
+			_, _ = fmt.Fprintf(w, "<html><body><h2>Authorization failed: %s</h2><p>You can close this window.</p></body></html>", errMsg)
+			errCh <- fmt.Errorf("authorization failed: %s", errMsg)
+			return
+		}
+		_, _ = fmt.Fprint(w, "<html><body><h2>Authorization successful!</h2><p>You can close this window and return to the terminal.</p></body></html>")
+		codeCh <- code
+	})
+
+	server := &http.Server{Handler: mux}
+
+	go func() {
+		if serveErr := server.Serve(listener); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			errCh <- fmt.Errorf("local server error: %w", serveErr)
+		}
+	}()
+	defer func() { _ = server.Close() }()
+
 	authURL := cfg.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
-	fmt.Println("Visit this URL to authorize the application:")
+	fmt.Println("Opening browser for Google authorization...")
+	fmt.Println("If the browser doesn't open, visit this URL:")
 	fmt.Println(authURL)
 	fmt.Println()
-	fmt.Print("Enter the authorization code: ")
 
-	reader := bufio.NewReader(os.Stdin)
-	code, err := reader.ReadString('\n')
-	if err != nil {
-		return nil, fmt.Errorf("reading authorization code: %w", err)
+	// Try to open the browser automatically
+	openBrowser(authURL)
+
+	fmt.Println("Waiting for authorization...")
+
+	var code string
+	select {
+	case code = <-codeCh:
+	case err := <-errCh:
+		return nil, err
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 
-	code = strings.TrimSpace(code)
 	token, err := cfg.Exchange(ctx, code)
 	if err != nil {
 		return nil, fmt.Errorf("exchanging code for token: %w", err)
 	}
 
 	return token, nil
+}
+
+// openBrowser tries to open a URL in the default browser.
+func openBrowser(url string) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "linux":
+		cmd = exec.Command("xdg-open", url)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	default:
+		return
+	}
+	_ = cmd.Start()
 }
