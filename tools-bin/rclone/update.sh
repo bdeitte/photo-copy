@@ -3,7 +3,7 @@ set -e
 
 RCLONE_VERSION="${1:-v1.73.2}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BIN_DIR="$SCRIPT_DIR/../rclone-bin"
+BIN_DIR="$SCRIPT_DIR"
 
 mkdir -p "$BIN_DIR"
 
