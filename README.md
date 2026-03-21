@@ -68,12 +68,10 @@ The Google Photos API only allows access to photos the app itself uploaded, so d
 
 Download works on all platforms. Upload requires macOS with Photos.app and iCloud Photos sync enabled.
 
-**Prerequisites:** Install [icloudpd](https://github.com/icloud-photos-downloader/icloud_photos_downloader) for downloads and [osxphotos](https://github.com/RhetTbull/osxphotos) for uploads:
+icloudpd and osxphotos are bundled with photo-copy for most platforms. No separate installation is needed on supported platforms.
 
-```bash
-pipx install icloudpd       # Required for download (all platforms)
-pipx install osxphotos      # Required for upload (macOS only)
-```
+- **icloudpd** (for downloads): bundled for Linux amd64/arm64, macOS amd64 (runs via Rosetta on Apple Silicon), and Windows amd64. Other platforms: `pipx install icloudpd`.
+- **osxphotos** (for uploads): bundled for macOS ARM64 only. Intel Macs: `pipx install osxphotos`.
 
 ```bash
 # Download all photos from iCloud
@@ -192,11 +190,27 @@ S3 integration testing is not included — S3 operations delegate to a rclone
 subprocess, and rclone's own test coverage handles that layer. S3 unit tests
 cover command arg building, config generation, and binary resolution.
 
-### Updating rclone
+### Updating bundled tools
 
-To update the bundled rclone binaries:
+
+To update all bundled tool binaries:
 
 ```bash
-./rclone-bin/update-rclone.sh v1.68.2
+./tools-bin/update.sh
 ```
 
+To update a specific tool:
+
+```bash
+./tools-bin/update.sh rclone v1.73.2
+./tools-bin/update.sh icloudpd 1.32.2
+./tools-bin/update.sh osxphotos 0.75.6
+```
+
+## Acknowledgments
+
+photo-copy relies on these excellent open-source tools:
+
+- **[rclone](https://rclone.org/)** — Used for S3 uploads and downloads
+- **[icloudpd](https://github.com/icloud-photos-downloader/icloud_photos_downloader)** — Used for iCloud Photos downloads
+- **[osxphotos](https://github.com/RhetTbull/osxphotos)** — Used for iCloud Photos uploads on macOS
