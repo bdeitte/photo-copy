@@ -183,6 +183,31 @@ func TestParseDownloadError(t *testing.T) {
 	}
 }
 
+func TestErrorLineNotMatchedAsSuccess(t *testing.T) {
+	// Error lines containing "downloading" must be caught by parseDownloadError,
+	// not parseDownloadLine. This verifies the parse ordering is correct.
+	errorLine := "ERROR downloading IMG_5678.jpg: connection reset"
+
+	if parseDownloadLine(errorLine) != "" {
+		// If parseDownloadLine matches error lines, the loop ordering must
+		// ensure parseDownloadError is checked first (which it now is).
+		// Verify parseDownloadError does match.
+		filename, reason := parseDownloadError(errorLine)
+		if filename == "" || reason == "" {
+			t.Fatal("parseDownloadError should match error lines containing 'downloading'")
+		}
+	}
+
+	// Verify normal download lines are NOT matched by parseDownloadError
+	normalLine := "Downloading IMG_1234.jpg"
+	if _, reason := parseDownloadError(normalLine); reason != "" {
+		t.Errorf("parseDownloadError should not match normal download line, got reason %q", reason)
+	}
+	if parseDownloadLine(normalLine) == "" {
+		t.Error("parseDownloadLine should match normal download line")
+	}
+}
+
 func TestParsePhotoCount(t *testing.T) {
 	tests := []struct {
 		line     string

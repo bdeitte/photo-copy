@@ -50,6 +50,13 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, date
 			}
 		}
 
+		// Check errors before successes — both may contain "downloading"
+		if filename, reason := parseDownloadError(line); reason != "" {
+			c.log.Error("icloudpd: %s", line)
+			result.RecordError(filename, reason)
+			continue
+		}
+
 		if filename := parseDownloadLine(line); filename != "" {
 			downloaded++
 			estimator.Tick()
@@ -66,12 +73,6 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, date
 		if isSkipLine(line) {
 			result.RecordSkip(1)
 			c.log.Debug("icloudpd: %s", line)
-			continue
-		}
-
-		if filename, reason := parseDownloadError(line); reason != "" {
-			c.log.Error("icloudpd: %s", line)
-			result.RecordError(filename, reason)
 			continue
 		}
 
