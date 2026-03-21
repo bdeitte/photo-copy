@@ -111,6 +111,7 @@ git commit -m "Move rclone-bin/ to tools-bin/rclone/"
 set -e
 
 ICLOUDPD_VERSION="${1:-1.32.2}"
+ICLOUDPD_VERSION="${ICLOUDPD_VERSION#v}"  # Strip leading 'v' if present
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BIN_DIR="$SCRIPT_DIR"
 
@@ -136,8 +137,8 @@ echo ""
 echo "Release: https://github.com/icloud-photos-downloader/icloud_photos_downloader/releases/tag/v${ICLOUDPD_VERSION}"
 echo ""
 
-TMPDIR=$(mktemp -d)
-trap 'rm -rf "$TMPDIR"' EXIT
+WORK_DIR=$(mktemp -d)
+trap 'rm -rf "$WORK_DIR"' EXIT
 
 BASE_URL="https://github.com/icloud-photos-downloader/icloud_photos_downloader/releases/download/v${ICLOUDPD_VERSION}"
 
@@ -191,6 +192,7 @@ The upstream asset name is `osxphotos_MacOS_exe_darwin_arm64_v{VER}.zip`. Only o
 set -e
 
 OSXPHOTOS_VERSION="${1:-0.75.6}"
+OSXPHOTOS_VERSION="${OSXPHOTOS_VERSION#v}"  # Strip leading 'v' if present
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BIN_DIR="$SCRIPT_DIR"
 
@@ -215,18 +217,18 @@ echo ""
 echo "Release: https://github.com/RhetTbull/osxphotos/releases/tag/v${OSXPHOTOS_VERSION}"
 echo ""
 
-TMPDIR=$(mktemp -d)
-trap 'rm -rf "$TMPDIR"' EXIT
+WORK_DIR=$(mktemp -d)
+trap 'rm -rf "$WORK_DIR"' EXIT
 
 ZIP_NAME="osxphotos_MacOS_exe_darwin_arm64_v${OSXPHOTOS_VERSION}.zip"
 URL="https://github.com/RhetTbull/osxphotos/releases/download/v${OSXPHOTOS_VERSION}/${ZIP_NAME}"
 
 echo "Downloading osxphotos $OSXPHOTOS_VERSION (darwin-arm64)..."
-curl -sL "$URL" -o "$TMPDIR/$ZIP_NAME"
-unzip -q -o "$TMPDIR/$ZIP_NAME" -d "$TMPDIR/osxphotos"
+curl -sL "$URL" -o "$WORK_DIR/$ZIP_NAME"
+unzip -q -o "$WORK_DIR/$ZIP_NAME" -d "$WORK_DIR/osxphotos"
 
 # Find the osxphotos binary in the extracted zip
-EXTRACTED_BIN=$(find "$TMPDIR/osxphotos" -name "osxphotos" -type f | head -1)
+EXTRACTED_BIN=$(find "$WORK_DIR/osxphotos" -name "osxphotos" -type f | head -1)
 if [ -z "$EXTRACTED_BIN" ]; then
     echo "Error: could not find osxphotos binary in zip"
     exit 1
@@ -705,7 +707,7 @@ if not exist "tools-bin\osxphotos" (
 )
 
 echo.
-echo To download all tool binaries: tools-bin\update.sh
+echo To download all tool binaries: bash tools-bin\update.sh
 ```
 
 - [ ] **Step 3: Commit**
