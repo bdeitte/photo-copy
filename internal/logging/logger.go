@@ -18,6 +18,10 @@ func New(debug bool, writer io.Writer) *Logger {
 	return &Logger{debug: debug, writer: writer}
 }
 
+func (l *Logger) IsDebug() bool {
+	return l.debug
+}
+
 func (l *Logger) Debug(format string, args ...any) {
 	if !l.debug {
 		return

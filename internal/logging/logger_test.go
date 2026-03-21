@@ -82,3 +82,15 @@ func TestLogger_DefaultsToStderr(t *testing.T) {
 	log.Error("test error")
 	log.Debug("test debug")
 }
+
+func TestLogger_IsDebug(t *testing.T) {
+	debugLog := New(true, nil)
+	if !debugLog.IsDebug() {
+		t.Fatal("expected IsDebug() true for debug logger")
+	}
+
+	normalLog := New(false, nil)
+	if normalLog.IsDebug() {
+		t.Fatal("expected IsDebug() false for normal logger")
+	}
+}
