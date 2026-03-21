@@ -188,14 +188,10 @@ func TestErrorLineNotMatchedAsSuccess(t *testing.T) {
 	// not parseDownloadLine. This verifies the parse ordering is correct.
 	errorLine := "ERROR downloading IMG_5678.jpg: connection reset"
 
-	if parseDownloadLine(errorLine) != "" {
-		// If parseDownloadLine matches error lines, the loop ordering must
-		// ensure parseDownloadError is checked first (which it now is).
-		// Verify parseDownloadError does match.
-		filename, reason := parseDownloadError(errorLine)
-		if filename == "" || reason == "" {
-			t.Fatal("parseDownloadError should match error lines containing 'downloading'")
-		}
+	// parseDownloadError must always match error lines
+	filename, reason := parseDownloadError(errorLine)
+	if filename == "" || reason == "" {
+		t.Fatal("parseDownloadError should match error lines containing 'downloading'")
 	}
 
 	// Verify normal download lines are NOT matched by parseDownloadError
