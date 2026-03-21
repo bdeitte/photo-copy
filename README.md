@@ -29,7 +29,7 @@ Each command will tell you what you need to do. Credentials are saved to `~/.con
 ./photo-copy config flickr    # Flickr API key + OAuth
 ./photo-copy config google    # Google OAuth credentials for upload
 ./photo-copy config s3        # AWS credentials for S3
-./photo-copy config icloud   # iCloud authentication (requires icloudpd)
+./photo-copy config icloud   # iCloud download authentication (not needed for upload)
 ```
 
 ### Flickr
@@ -87,7 +87,7 @@ pipx install osxphotos      # Required for upload (macOS only)
 - Download requires Apple ID with 2FA. Run `photo-copy config icloud` to authenticate.
 - Session cookies expire approximately every 2 months — re-run `config icloud` to re-authenticate.
 - Advanced Data Protection must be disabled for downloads.
-- Upload imports files into Photos.app. If iCloud Photos sync is enabled in System Settings, they automatically upload to iCloud.
+- Upload does not require `config icloud` — it imports files directly into Photos.app via osxphotos. If iCloud Photos sync is enabled in System Settings, they automatically upload to iCloud.
 - `--no-metadata` has no effect on iCloud commands.
 
 ## Features

@@ -213,11 +213,12 @@ func readAWSCredentials(path string) (*config.S3Config, error) {
 func newConfigICloudCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "icloud",
-		Short: "Set up iCloud credentials and authenticate",
+		Short: "Set up iCloud credentials and authenticate (required for downloads only)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			reader := bufio.NewReader(os.Stdin)
 
-			fmt.Println("iCloud Setup")
+			fmt.Println("iCloud Setup (for downloads)")
+			fmt.Println("Upload does not require this step — just install osxphotos and run 'photo-copy icloud upload'.")
 			fmt.Println()
 
 			// Check icloudpd is installed
