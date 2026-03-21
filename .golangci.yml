@@ -13,4 +13,4 @@ linters:
     - gocritic
   exclusions:
     paths:
-      - rclone-bin
+      - tools-bin
