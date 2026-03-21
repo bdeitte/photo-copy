@@ -13,13 +13,27 @@ fi
 go build -o photo-copy ./cmd/photo-copy
 echo "Built ./photo-copy"
 
-# Verify rclone binaries are present
-if [ ! -d "rclone-bin" ] || [ -z "$(ls rclone-bin/rclone-* 2>/dev/null)" ]; then
+# Verify tool binaries are present
+if [ ! -d "tools-bin/rclone" ] || [ -z "$(ls tools-bin/rclone/rclone-* 2>/dev/null)" ]; then
     echo ""
-    echo "Warning: rclone binaries not found in rclone-bin/"
-    echo "Run: ./rclone-bin/update-rclone.sh"
+    echo "Warning: rclone binaries not found in tools-bin/rclone/"
     echo "(S3 commands will not work without rclone binaries)"
 fi
+
+if [ ! -d "tools-bin/icloudpd" ] || [ -z "$(ls tools-bin/icloudpd/icloudpd-* 2>/dev/null)" ]; then
+    echo ""
+    echo "Warning: icloudpd binaries not found in tools-bin/icloudpd/"
+    echo "(iCloud download will fall back to system-installed icloudpd)"
+fi
+
+if [ ! -d "tools-bin/osxphotos" ] || [ -z "$(ls tools-bin/osxphotos/osxphotos-* 2>/dev/null)" ]; then
+    echo ""
+    echo "Warning: osxphotos binary not found in tools-bin/osxphotos/"
+    echo "(iCloud upload will fall back to system-installed osxphotos)"
+fi
+
+echo ""
+echo "To download all tool binaries: ./tools-bin/update.sh"
 
 echo ""
 echo "Setup complete! Next step is to configure what you need:"
