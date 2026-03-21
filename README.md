@@ -7,6 +7,8 @@
 
 ## Setup
 
+> **Note:** This project is in active development. Google Photos and Flickr support has been well-tested and is in good shape. S3 and iCloud support is still in an alpha state.
+
 Requires Go 1.21+
 
 ```bash
