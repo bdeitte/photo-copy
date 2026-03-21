@@ -33,7 +33,7 @@ Go CLI app using [cobra](https://github.com/spf13/cobra) for command structure. 
 
 ### Package layout (`internal/`)
 
-- **cli/** - Cobra command definitions. `root.go` wires subcommands (`flickr`, `google-photos`, `s3`, `config`). Each subcommand file defines its own flags and invokes the corresponding service client.
+- **cli/** - Cobra command definitions. `root.go` wires subcommands (`flickr`, `google`, `s3`, `icloud`, `config`). Each subcommand file defines its own flags and invokes the corresponding service client.
 - **config/** - JSON-based credential storage in `~/.config/photo-copy/`. Separate files per service (`flickr.json`, `google_credentials.json`, `google_token.json`, `s3.json`).
 - **flickr/** - Flickr API client with OAuth 1.0a signing (`oauth.go`). Uses transfer log files (`transfer.log`) for resumable downloads.
 - **google/** - Google Photos API client with OAuth2 flow. `takeout.go` handles extracting media from Google Takeout zip archives. Uses upload log files for resumable uploads.
