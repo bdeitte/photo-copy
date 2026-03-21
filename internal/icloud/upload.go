@@ -41,8 +41,35 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 		return result, nil
 	}
 
-	c.log.Info("found %d files to import into Photos.app", len(files))
+	total := len(files)
+	c.log.Info("found %d files to import into Photos.app", total)
 
+	estimator := transfer.NewEstimator()
+	imported := 0
+
+	// Batch files to avoid exceeding OS ARG_MAX limit (~256KB on macOS).
+	for i := 0; i < len(files); i += uploadBatchSize {
+		end := i + uploadBatchSize
+		if end > len(files) {
+			end = len(files)
+		}
+		batch := files[i:end]
+
+		if err := c.runImportBatch(ctx, osxphotosPath, batch, result, estimator, &imported, total); err != nil {
+			result.Finish()
+			return result, err
+		}
+	}
+
+	result.Finish()
+	return result, nil
+}
+
+// uploadBatchSize limits the number of files passed per osxphotos invocation
+// to avoid exceeding the OS ARG_MAX limit (~256KB on macOS).
+const uploadBatchSize = 500
+
+func (c *Client) runImportBatch(ctx context.Context, osxphotosPath string, files []string, result *transfer.Result, estimator *transfer.Estimator, imported *int, total int) error {
 	args := buildUploadArgs(files, c.log.IsDebug())
 	c.log.Debug("running: %s %s", osxphotosPath, strings.Join(args, " "))
 
@@ -50,16 +77,13 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return result, fmt.Errorf("creating stdout pipe: %w", err)
+		return fmt.Errorf("creating stdout pipe: %w", err)
 	}
 
 	if err := cmd.Start(); err != nil {
-		return result, fmt.Errorf("starting osxphotos: %w", err)
+		return fmt.Errorf("starting osxphotos: %w", err)
 	}
 
-	estimator := transfer.NewEstimator()
-	imported := 0
-	total := len(files)
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), 1024*1024)
 
@@ -67,10 +91,10 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 		line := scanner.Text()
 
 		if filename := parseImportLine(line); filename != "" {
-			imported++
+			*imported++
 			estimator.Tick()
-			remaining := total - imported
-			c.log.Info("[%d/%d] %suploaded %s", imported, total, estimator.Estimate(remaining), filename)
+			remaining := total - *imported
+			c.log.Info("[%d/%d] %suploaded %s", *imported, total, estimator.Estimate(remaining), filename)
 			result.RecordSuccess(filename, 0)
 			continue
 		}
@@ -86,16 +110,14 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 
 	if err := scanner.Err(); err != nil {
 		_ = cmd.Wait()
-		return result, fmt.Errorf("reading osxphotos output: %w", err)
+		return fmt.Errorf("reading osxphotos output: %w", err)
 	}
 
 	if err := cmd.Wait(); err != nil {
-		result.Finish()
-		return result, fmt.Errorf("osxphotos failed: %w", err)
+		return fmt.Errorf("osxphotos failed: %w", err)
 	}
 
-	result.Finish()
-	return result, nil
+	return nil
 }
 
 func buildUploadArgs(files []string, debug bool) []string {
