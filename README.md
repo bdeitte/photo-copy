@@ -27,9 +27,9 @@ Each command will tell you what you need to do. Credentials are saved to `~/.con
 
 ```bash
 ./photo-copy config flickr    # Flickr API key + OAuth
-./photo-copy config google    # Google OAuth credentials for upload
+./photo-copy config google    # Google OAuth credentials for upload (not needed for download)
 ./photo-copy config s3        # AWS credentials for S3
-./photo-copy config icloud   # iCloud download authentication (not needed for upload)
+./photo-copy config icloud    # iCloud download authentication (not needed for upload)
 ```
 
 ### Flickr
