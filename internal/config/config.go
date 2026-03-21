@@ -16,6 +16,7 @@ const (
 	googleFile      = "google_credentials.json"
 	googleTokenFile = "google_token.json"
 	s3File          = "s3.json"
+	icloudFile      = "icloud.json"
 )
 
 type FlickrConfig struct {
@@ -87,6 +88,23 @@ func SaveS3Config(configDir string, cfg *S3Config) error {
 func LoadS3Config(configDir string) (*S3Config, error) {
 	var cfg S3Config
 	if err := loadJSON(configDir, s3File, &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+type ICloudConfig struct {
+	AppleID   string `json:"apple_id"`
+	CookieDir string `json:"cookie_dir"`
+}
+
+func SaveICloudConfig(configDir string, cfg *ICloudConfig) error {
+	return saveJSON(configDir, icloudFile, cfg)
+}
+
+func LoadICloudConfig(configDir string) (*ICloudConfig, error) {
+	var cfg ICloudConfig
+	if err := loadJSON(configDir, icloudFile, &cfg); err != nil {
 		return nil, err
 	}
 	return &cfg, nil

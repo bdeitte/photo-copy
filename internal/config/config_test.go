@@ -207,3 +207,46 @@ func TestDefaultDir_EnvOverride(t *testing.T) {
 		t.Errorf("DefaultDir() = %q, want %q", got, "/tmp/test-config")
 	}
 }
+
+func TestSaveAndLoadICloudConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	ic := &ICloudConfig{
+		AppleID:   "user@example.com",
+		CookieDir: "/tmp/cookies",
+	}
+
+	if err := SaveICloudConfig(tmpDir, ic); err != nil {
+		t.Fatalf("save failed: %v", err)
+	}
+
+	loaded, err := LoadICloudConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("load failed: %v", err)
+	}
+
+	if loaded.AppleID != ic.AppleID {
+		t.Fatalf("apple_id mismatch: got %s", loaded.AppleID)
+	}
+	if loaded.CookieDir != ic.CookieDir {
+		t.Fatalf("cookie_dir mismatch: got %s", loaded.CookieDir)
+	}
+}
+
+func TestLoadICloudConfig_NotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	_, err := LoadICloudConfig(tmpDir)
+	if err == nil {
+		t.Fatal("expected error for missing config")
+	}
+}
+
+func TestLoadICloudConfig_MalformedJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(tmpDir, "icloud.json"), []byte("{bad"), 0644)
+
+	_, err := LoadICloudConfig(tmpDir)
+	if err == nil {
+		t.Fatal("expected error for malformed JSON")
+	}
+}
