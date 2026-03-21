@@ -16,7 +16,7 @@ import (
 func (c *Client) Download(ctx context.Context, outputDir string, limit int, dateRange *daterange.DateRange) (*transfer.Result, error) {
 	result := transfer.NewResult("icloud", "download", outputDir)
 
-	icloudpdPath, err := findTool("icloudpd", "PHOTO_COPY_ICLOUDPD_PATH")
+	icloudpdPath, err := FindTool("icloudpd", "PHOTO_COPY_ICLOUDPD_PATH")
 	if err != nil {
 		return result, err
 	}

@@ -1,8 +1,10 @@
 package icloud
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -30,7 +32,7 @@ func TestFindTool_EnvOverride(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PHOTO_COPY_ICLOUDPD_PATH", tmpFile)
-	path, err := findTool("icloudpd", "PHOTO_COPY_ICLOUDPD_PATH")
+	path, err := FindTool("icloudpd", "PHOTO_COPY_ICLOUDPD_PATH")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -41,7 +43,7 @@ func TestFindTool_EnvOverride(t *testing.T) {
 
 func TestFindTool_EnvOverride_NotFound(t *testing.T) {
 	t.Setenv("PHOTO_COPY_ICLOUDPD_PATH", "/nonexistent/path/icloudpd")
-	_, err := findTool("icloudpd", "PHOTO_COPY_ICLOUDPD_PATH")
+	_, err := FindTool("icloudpd", "PHOTO_COPY_ICLOUDPD_PATH")
 	if err == nil {
 		t.Fatal("expected error for nonexistent env override path")
 	}
@@ -53,7 +55,7 @@ func TestFindTool_EnvOverride_NotExecutable(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PHOTO_COPY_ICLOUDPD_PATH", tmpFile)
-	_, err := findTool("icloudpd", "PHOTO_COPY_ICLOUDPD_PATH")
+	_, err := FindTool("icloudpd", "PHOTO_COPY_ICLOUDPD_PATH")
 	if err == nil {
 		t.Fatal("expected error for non-executable env override path")
 	}
@@ -61,7 +63,7 @@ func TestFindTool_EnvOverride_NotExecutable(t *testing.T) {
 
 func TestFindTool_NotInstalled(t *testing.T) {
 	t.Setenv("PHOTO_COPY_ICLOUDPD_PATH", "")
-	_, err := findTool("nonexistent-tool-xyz-12345", "PHOTO_COPY_NONEXISTENT_PATH")
+	_, err := FindTool("nonexistent-tool-xyz-12345", "PHOTO_COPY_NONEXISTENT_PATH")
 	if err == nil {
 		t.Fatal("expected error for missing tool")
 	}
@@ -352,5 +354,46 @@ func TestParseImportError(t *testing.T) {
 	_, reason = parseImportError("Imported photo.jpg")
 	if reason != "" {
 		t.Errorf("expected no match for success line, got reason %q", reason)
+	}
+}
+
+func TestFindTool_BundledBinary(t *testing.T) {
+	tmpDir := t.TempDir()
+	toolDir := filepath.Join(tmpDir, "tools-bin", "icloudpd")
+	_ = os.MkdirAll(toolDir, 0755)
+
+	goos := runtime.GOOS
+	goarch := runtime.GOARCH
+	binName := fmt.Sprintf("icloudpd-%s-%s", goos, goarch)
+	fakeBin := filepath.Join(toolDir, binName)
+	_ = os.WriteFile(fakeBin, []byte("#!/bin/sh"), 0755)
+
+	path, err := FindTool("icloudpd", "PHOTO_COPY_ICLOUDPD_PATH", tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if path != fakeBin {
+		t.Errorf("got %q, want %q", path, fakeBin)
+	}
+}
+
+func TestFindTool_RosettaFallback(t *testing.T) {
+	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" {
+		t.Skip("Rosetta fallback only applies on darwin/arm64")
+	}
+
+	tmpDir := t.TempDir()
+	toolDir := filepath.Join(tmpDir, "tools-bin", "icloudpd")
+	_ = os.MkdirAll(toolDir, 0755)
+
+	fakeBin := filepath.Join(toolDir, "icloudpd-darwin-amd64")
+	_ = os.WriteFile(fakeBin, []byte("#!/bin/sh"), 0755)
+
+	path, err := FindTool("icloudpd", "PHOTO_COPY_ICLOUDPD_PATH", tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if path != fakeBin {
+		t.Errorf("got %q, want %q", path, fakeBin)
 	}
 }

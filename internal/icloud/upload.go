@@ -25,7 +25,7 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 		return result, fmt.Errorf("iCloud upload requires macOS with Photos.app and iCloud Photos sync enabled")
 	}
 
-	osxphotosPath, err := findTool("osxphotos", "PHOTO_COPY_OSXPHOTOS_PATH")
+	osxphotosPath, err := FindTool("osxphotos", "PHOTO_COPY_OSXPHOTOS_PATH")
 	if err != nil {
 		return result, err
 	}
