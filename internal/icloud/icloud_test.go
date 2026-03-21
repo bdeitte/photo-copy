@@ -166,3 +166,121 @@ func TestIsSkipLine(t *testing.T) {
 		t.Error("expected false for download line")
 	}
 }
+
+func TestBuildUploadArgs_Basic(t *testing.T) {
+	files := []string{"/photos/a.jpg", "/photos/b.png"}
+	args := buildUploadArgs(files, false)
+
+	if args[0] != "import" {
+		t.Fatalf("expected 'import' first, got %q", args[0])
+	}
+
+	hasFileA := false
+	hasFileB := false
+	for _, a := range args {
+		if a == "/photos/a.jpg" {
+			hasFileA = true
+		}
+		if a == "/photos/b.png" {
+			hasFileB = true
+		}
+	}
+	if !hasFileA || !hasFileB {
+		t.Fatalf("expected both file paths in args, got: %v", args)
+	}
+}
+
+func TestBuildUploadArgs_WithDebug(t *testing.T) {
+	files := []string{"/photos/a.jpg"}
+	args := buildUploadArgs(files, true)
+
+	found := false
+	for _, a := range args {
+		if a == "--verbose" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected --verbose in args, got: %v", args)
+	}
+}
+
+func TestCollectFiles_Basic(t *testing.T) {
+	tmpDir := t.TempDir()
+	for _, name := range []string{"a.jpg", "b.png", "c.txt", "d.mp4"} {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte("test"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	files, err := collectFiles(tmpDir, 0, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(files) != 3 {
+		t.Fatalf("expected 3 media files, got %d: %v", len(files), files)
+	}
+}
+
+func TestCollectFiles_WithLimit(t *testing.T) {
+	tmpDir := t.TempDir()
+	for _, name := range []string{"a.jpg", "b.jpg", "c.jpg"} {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte("test"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	files, err := collectFiles(tmpDir, 2, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("expected 2 files with limit, got %d", len(files))
+	}
+}
+
+func TestParseImportLine(t *testing.T) {
+	tests := []struct {
+		line     string
+		expected string
+	}{
+		{"Imported /path/to/photo.jpg", "photo.jpg"},
+		{"Importing /path/to/video.mp4", "video.mp4"},
+		{"Some other line", ""},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		got := parseImportLine(tt.line)
+		if got != tt.expected {
+			t.Errorf("parseImportLine(%q) = %q, want %q", tt.line, got, tt.expected)
+		}
+	}
+}
+
+func TestParseImportError(t *testing.T) {
+	filename, reason := parseImportError("Error importing /path/to/photo.jpg: permission denied")
+	if filename != "photo.jpg" {
+		t.Errorf("expected filename 'photo.jpg', got %q", filename)
+	}
+	if reason != "permission denied" {
+		t.Errorf("expected reason 'permission denied', got %q", reason)
+	}
+
+	filename, reason = parseImportError("Failed to import /path/to/video.mp4")
+	if filename != "video.mp4" {
+		t.Errorf("expected filename 'video.mp4', got %q", filename)
+	}
+	if reason != "Failed to import /path/to/video.mp4" {
+		t.Errorf("expected full line as reason fallback, got %q", reason)
+	}
+
+	_, reason = parseImportError("0 errors")
+	if reason != "" {
+		t.Errorf("expected no match for '0 errors', got reason %q", reason)
+	}
+
+	_, reason = parseImportError("Imported photo.jpg")
+	if reason != "" {
+		t.Errorf("expected no match for success line, got reason %q", reason)
+	}
+}
