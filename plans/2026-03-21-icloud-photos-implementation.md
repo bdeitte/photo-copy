@@ -748,10 +748,13 @@ func TestParseImportError(t *testing.T) {
 		t.Errorf("expected reason 'permission denied', got %q", reason)
 	}
 
-	// Should match "Failed to import"
+	// Should match "Failed to import" — reason falls back to full line when no ": reason" suffix
 	filename, reason = parseImportError("Failed to import /path/to/video.mp4")
 	if filename != "video.mp4" {
 		t.Errorf("expected filename 'video.mp4', got %q", filename)
+	}
+	if reason != "Failed to import /path/to/video.mp4" {
+		t.Errorf("expected full line as reason fallback, got %q", reason)
 	}
 
 	// Should NOT match informational lines
@@ -907,10 +910,8 @@ func collectFiles(inputDir string, limit int, dateRange *daterange.DateRange) ([
 
 		if dateRange != nil {
 			fileDate := mediadate.ResolveDate(path)
-			if fileDate.IsZero() {
-				// Can't resolve date — include file anyway (same as other services)
-				// Caller should enable --debug to see which files had unresolvable dates
-			} else if !dateRange.Contains(fileDate) {
+			// If date is zero (unresolvable), include the file anyway (same as other services)
+			if !fileDate.IsZero() && !dateRange.Contains(fileDate) {
 				return nil
 			}
 		}
