@@ -104,17 +104,27 @@ func TestBuildDownloadArgs_WithDateRange(t *testing.T) {
 	before := time.Date(2024, 1, 1, 0, 0, 0, 0, time.Local)
 	dr := &daterange.DateRange{After: &after, Before: &before}
 	args := buildDownloadArgs("/output", "user@example.com", "/cookies", 0, dr, false)
+	foundFrom := false
+	foundTo := false
 	for i, a := range args {
 		if a == "--from-date" {
+			foundFrom = true
 			if i+1 >= len(args) || args[i+1] != "2020-01-01" {
 				t.Errorf("expected --from-date 2020-01-01, got: %v", args)
 			}
 		}
 		if a == "--to-date" {
+			foundTo = true
 			if i+1 >= len(args) || args[i+1] != "2023-12-31" {
 				t.Errorf("expected --to-date 2023-12-31 (Before minus 1 day), got: %v", args)
 			}
 		}
+	}
+	if !foundFrom {
+		t.Error("expected --from-date flag in args")
+	}
+	if !foundTo {
+		t.Error("expected --to-date flag in args")
 	}
 }
 
@@ -248,6 +258,8 @@ func TestParseImportLine(t *testing.T) {
 		{"Importing /path/to/video.mp4", "video.mp4"},
 		{"Some other line", ""},
 		{"", ""},
+		{"5 imported, 0 skipped", ""},
+		{"Finished importing batch", ""},
 	}
 	for _, tt := range tests {
 		got := parseImportLine(tt.line)

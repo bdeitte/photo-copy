@@ -143,16 +143,16 @@ func collectFiles(inputDir string, limit int, dateRange *daterange.DateRange) ([
 	return files, err
 }
 
-// parseImportLine extracts a filename from osxphotos import output.
+// importLineRe matches osxphotos import output like "Imported /path/to/file" or "Importing /path/to/file".
+// Anchored to avoid false positives on summary lines like "5 imported, 0 skipped".
+var importLineRe = regexp.MustCompile(`(?i)^(?:imported|importing)\s+(\S+)`)
+
 func parseImportLine(line string) string {
-	lower := strings.ToLower(line)
-	if strings.Contains(lower, "imported") || strings.Contains(lower, "importing") {
-		parts := strings.Fields(line)
-		if len(parts) >= 2 {
-			return filepath.Base(parts[len(parts)-1])
-		}
+	m := importLineRe.FindStringSubmatch(line)
+	if m == nil {
+		return ""
 	}
-	return ""
+	return filepath.Base(m[1])
 }
 
 // importErrorRe matches osxphotos error lines like "Error importing /path/to/file: reason"
