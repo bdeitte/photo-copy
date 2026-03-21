@@ -67,6 +67,11 @@ func SaveGoogleToken(configDir string, token any) error {
 	return saveJSON(configDir, googleTokenFile, token)
 }
 
+func RemoveGoogleToken(configDir string) error {
+	path := filepath.Join(configDir, googleTokenFile)
+	return os.Remove(path)
+}
+
 func LoadGoogleToken(configDir string) (map[string]any, error) {
 	var token map[string]any
 	if err := loadJSON(configDir, googleTokenFile, &token); err != nil {
