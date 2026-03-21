@@ -10,6 +10,7 @@ import (
 
 	"github.com/briandeitte/photo-copy/internal/config"
 	"github.com/briandeitte/photo-copy/internal/flickr"
+	"github.com/briandeitte/photo-copy/internal/icloud"
 	"github.com/spf13/cobra"
 )
 
@@ -222,18 +223,18 @@ func newConfigICloudCmd() *cobra.Command {
 			fmt.Println()
 
 			// Check icloudpd is installed
-			icloudpdPath, err := exec.LookPath("icloudpd")
+			icloudpdPath, err := icloud.FindTool("icloudpd", "PHOTO_COPY_ICLOUDPD_PATH")
 			if err != nil {
-				return fmt.Errorf("icloudpd not found. Install it with: pipx install icloudpd")
+				return err
 			}
 			fmt.Printf("Found icloudpd at: %s\n", icloudpdPath)
 
 			// Check osxphotos (optional)
-			if osxphotosPath, err := exec.LookPath("osxphotos"); err == nil {
+			if osxphotosPath, err := icloud.FindTool("osxphotos", "PHOTO_COPY_OSXPHOTOS_PATH"); err == nil {
 				fmt.Printf("Found osxphotos at: %s\n", osxphotosPath)
 			} else {
 				fmt.Println("Warning: osxphotos not found. Upload to iCloud will not be available.")
-				fmt.Println("Install with: pipx install osxphotos")
+				fmt.Println("Run ./tools-bin/osxphotos/update.sh to download (macOS ARM64 only), or install manually: pipx install osxphotos")
 			}
 			fmt.Println()
 
