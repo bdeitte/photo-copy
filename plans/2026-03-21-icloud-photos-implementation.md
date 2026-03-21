@@ -128,6 +128,8 @@ Create `internal/icloud/icloud_test.go`:
 package icloud
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/briandeitte/photo-copy/internal/config"
@@ -148,14 +150,26 @@ func TestNewClient(t *testing.T) {
 }
 
 func TestFindTool_EnvOverride(t *testing.T) {
-	t.Setenv("PHOTO_COPY_ICLOUDPD_PATH", "/usr/local/bin/fake-icloudpd")
+	// Create a real temp file to point the env var at
+	tmpFile := filepath.Join(t.TempDir(), "fake-icloudpd")
+	if err := os.WriteFile(tmpFile, []byte("#!/bin/sh"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PHOTO_COPY_ICLOUDPD_PATH", tmpFile)
 	path, err := findTool("icloudpd", "PHOTO_COPY_ICLOUDPD_PATH")
 	if err != nil {
-		// env override doesn't check existence, just returns the path
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if path != "/usr/local/bin/fake-icloudpd" {
+	if path != tmpFile {
 		t.Fatalf("expected env override path, got %s", path)
+	}
+}
+
+func TestFindTool_EnvOverride_NotFound(t *testing.T) {
+	t.Setenv("PHOTO_COPY_ICLOUDPD_PATH", "/nonexistent/path/icloudpd")
+	_, err := findTool("icloudpd", "PHOTO_COPY_ICLOUDPD_PATH")
+	if err == nil {
+		t.Fatal("expected error for nonexistent env override path")
 	}
 }
 
@@ -203,10 +217,13 @@ func NewClient(cfg *config.ICloudConfig, log *logging.Logger) *Client {
 	return &Client{cfg: cfg, log: log}
 }
 
-// findTool resolves a tool path. Checks the env var override first,
-// then falls back to exec.LookPath.
+// findTool resolves a tool path. Checks the env var override first
+// (with existence check), then falls back to exec.LookPath.
 func findTool(name, envVar string) (string, error) {
 	if path := os.Getenv(envVar); path != "" {
+		if _, err := os.Stat(path); err != nil {
+			return "", fmt.Errorf("%s path from %s not found: %s", name, envVar, path)
+		}
 		return path, nil
 	}
 	path, err := exec.LookPath(name)
@@ -401,6 +418,7 @@ func TestParsePhotoCount(t *testing.T) {
 	}{
 		{"Found 1234 items", 1234},
 		{"Found 50 photos", 50},
+		{"Downloading 3 photos from album", 0}, // should NOT match without "Found"
 		{"No count here", 0},
 		{"", 0},
 	}
@@ -495,6 +513,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, date
 		if filename := parseDownloadLine(line); filename != "" {
 			downloaded++
 			estimator.Tick()
+			result.RecordSuccess(filename, 0)
 			if total > 0 {
 				remaining := total - downloaded
 				c.log.Info("[%d/%d] %sdownloaded %s", downloaded, total, estimator.Estimate(remaining), filename)
@@ -504,8 +523,9 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, date
 			continue
 		}
 
-		// Log skips at debug level
+		// Track skipped files (already exist)
 		if isSkipLine(line) {
+			result.RecordSkip(1)
 			c.log.Debug("icloudpd: %s", line)
 			continue
 		}
@@ -525,9 +545,6 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, date
 	}
 
 	result.Finish()
-	if scanErr := result.ScanDir(); scanErr != nil {
-		c.log.Debug("scanning directory: %v", scanErr)
-	}
 	return result, nil
 }
 
@@ -572,8 +589,9 @@ func parseDownloadLine(line string) string {
 	return strings.TrimSpace(m[1])
 }
 
-// Regex to match photo count like "Found 1234 items" or similar
-var photoCountRe = regexp.MustCompile(`(?i)(\d+)\s+(?:items?|photos?|assets?)`)
+// Regex to match photo count like "Found 1234 items" — anchored with "Found" to avoid
+// false positives on lines like "Downloading 3 photos from album..."
+var photoCountRe = regexp.MustCompile(`(?i)found\s+(\d+)\s+(?:items?|photos?|assets?)`)
 
 func parsePhotoCount(line string) int {
 	m := photoCountRe.FindStringSubmatch(line)
@@ -720,22 +738,39 @@ func TestParseImportLine(t *testing.T) {
 	}
 }
 
-func TestIsImportError(t *testing.T) {
-	if !isImportError("Error importing file") {
-		t.Error("expected true for error line")
+func TestParseImportError(t *testing.T) {
+	// Should match targeted error patterns
+	filename, reason := parseImportError("Error importing /path/to/photo.jpg: permission denied")
+	if filename != "photo.jpg" {
+		t.Errorf("expected filename 'photo.jpg', got %q", filename)
 	}
-	if !isImportError("Import failed for photo.jpg") {
-		t.Error("expected true for failed line")
+	if reason != "permission denied" {
+		t.Errorf("expected reason 'permission denied', got %q", reason)
 	}
-	if isImportError("Imported photo.jpg") {
-		t.Error("expected false for success line")
+
+	// Should match "Failed to import"
+	filename, reason = parseImportError("Failed to import /path/to/video.mp4")
+	if filename != "video.mp4" {
+		t.Errorf("expected filename 'video.mp4', got %q", filename)
+	}
+
+	// Should NOT match informational lines
+	_, reason = parseImportError("0 errors")
+	if reason != "" {
+		t.Errorf("expected no match for '0 errors', got reason %q", reason)
+	}
+
+	// Should NOT match success lines
+	_, reason = parseImportError("Imported photo.jpg")
+	if reason != "" {
+		t.Errorf("expected no match for success line, got reason %q", reason)
 	}
 }
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `go test ./internal/icloud/ -run "TestBuildUploadArgs|TestCollectFiles|TestParseImportLine|TestIsImportError" -v`
+Run: `go test ./internal/icloud/ -run "TestBuildUploadArgs|TestCollectFiles|TestParseImportLine|TestParseImportError" -v`
 Expected: FAIL — functions undefined
 
 - [ ] **Step 3: Write the implementation**
@@ -752,6 +787,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 
@@ -819,9 +855,9 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 			continue
 		}
 
-		if isImportError(line) {
+		if filename, reason := parseImportError(line); reason != "" {
 			c.log.Error("osxphotos: %s", line)
-			result.RecordError("", line)
+			result.RecordError(filename, reason)
 			continue
 		}
 
@@ -871,10 +907,12 @@ func collectFiles(inputDir string, limit int, dateRange *daterange.DateRange) ([
 
 		if dateRange != nil {
 			fileDate := mediadate.ResolveDate(path)
-			if !fileDate.IsZero() && !dateRange.Contains(fileDate) {
+			if fileDate.IsZero() {
+				// Can't resolve date — include file anyway (same as other services)
+				// Caller should enable --debug to see which files had unresolvable dates
+			} else if !dateRange.Contains(fileDate) {
 				return nil
 			}
-			// If date is zero (couldn't resolve), include the file (same as other services)
 		}
 
 		files = append(files, path)
@@ -902,9 +940,22 @@ func parseImportLine(line string) string {
 	return ""
 }
 
-func isImportError(line string) bool {
-	lower := strings.ToLower(line)
-	return strings.Contains(lower, "error") || strings.Contains(lower, "failed")
+// importErrorRe matches osxphotos error lines like "Error importing /path/to/file: reason"
+// or "Failed to import /path/to/file: reason". More targeted than broad substring matching
+// to avoid false positives on informational lines like "0 errors".
+var importErrorRe = regexp.MustCompile(`(?i)(?:error|failed)\s+(?:importing|to import)\s+(\S+)(?::\s*(.*))?`)
+
+func parseImportError(line string) (filename, reason string) {
+	m := importErrorRe.FindStringSubmatch(line)
+	if m == nil {
+		return "", ""
+	}
+	filename = filepath.Base(m[1])
+	reason = line
+	if len(m) > 2 && m[2] != "" {
+		reason = m[2]
+	}
+	return filename, reason
 }
 ```
 
