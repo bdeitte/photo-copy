@@ -29,7 +29,7 @@ func findRcloneBinary(binDir string) (string, error) {
 func rcloneBinDir() (string, error) {
 	exe, err := os.Executable()
 	if err == nil {
-		dir := filepath.Join(filepath.Dir(exe), "rclone-bin")
+		dir := filepath.Join(filepath.Dir(exe), "tools-bin", "rclone")
 		if _, err := os.Stat(dir); err == nil {
 			return dir, nil
 		}
@@ -37,13 +37,13 @@ func rcloneBinDir() (string, error) {
 
 	cwd, err := os.Getwd()
 	if err == nil {
-		dir := filepath.Join(cwd, "rclone-bin")
+		dir := filepath.Join(cwd, "tools-bin", "rclone")
 		if _, err := os.Stat(dir); err == nil {
 			return dir, nil
 		}
 	}
 
-	return "", fmt.Errorf("rclone-bin directory not found (checked next to executable and current directory)")
+	return "", fmt.Errorf("tools-bin/rclone directory not found (checked next to executable and current directory). Run ./tools-bin/rclone/update.sh to download rclone binaries")
 }
 
 func writeRcloneConfig(accessKeyID, secretAccessKey, region string) (string, error) {

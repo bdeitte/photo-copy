@@ -33,7 +33,7 @@ func TestRcloneBinaryName(t *testing.T) {
 
 func TestFindRcloneBinary(t *testing.T) {
 	tmpDir := t.TempDir()
-	binDir := filepath.Join(tmpDir, "rclone-bin")
+	binDir := filepath.Join(tmpDir, "tools-bin", "rclone")
 	_ = os.MkdirAll(binDir, 0755)
 
 	name := rcloneBinaryName(runtime.GOOS, runtime.GOARCH)
