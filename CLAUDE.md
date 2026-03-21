@@ -13,7 +13,7 @@ go test ./internal/flickr/                    # run tests for a single package
 go test ./internal/flickr/ -run TestBuildAPI  # run a single test
 ```
 
-Setup: `./setup.sh` (builds binary and verifies rclone binaries exist in `rclone-bin/`).
+Setup: `./setup.sh` (builds binary and verifies tool binaries exist in `tools-bin/`).
 
 ## Linting & Testing
 
@@ -38,7 +38,7 @@ Go CLI app using [cobra](https://github.com/spf13/cobra) for command structure. 
 - **flickr/** - Flickr API client with OAuth 1.0a signing (`oauth.go`). Uses transfer log files (`transfer.log`) for resumable downloads.
 - **google/** - Google Photos API client with OAuth2 flow. `takeout.go` handles extracting media from Google Takeout zip archives. Uses upload log files for resumable uploads.
 - **s3/** - S3 operations via bundled rclone binary subprocess. `rclone.go` handles binary resolution (checks next to executable, then cwd) and temp config generation. `s3.go` builds rclone command args and runs them.
-- **icloud/** — iCloud Photos client. Downloads via icloudpd subprocess (cross-platform). Uploads via osxphotos subprocess (macOS only, imports into Photos.app which syncs to iCloud). No direct Apple API — both operations delegate to external Python tools, similar to how S3 delegates to rclone.
+- **icloud/** — iCloud Photos client. Downloads via icloudpd subprocess (cross-platform). Uploads via osxphotos subprocess (macOS only, imports into Photos.app which syncs to iCloud). No direct Apple API — both operations delegate to bundled binaries: icloudpd binaries are in `tools-bin/icloudpd/` and osxphotos binaries are in `tools-bin/osxphotos/`, with PATH fallback for unsupported platforms.
 - **jpegmeta/** - Writes XMP metadata (title, description, tags) into JPEG files as APP1 segments using Dublin Core namespace. Used by Flickr downloads to embed Flickr metadata into downloaded photos. Also reads EXIF DateTimeOriginal via `rwcarlsen/goexif` for date-range filtering of uploads.
 - **mp4meta/** - Sets creation/modification timestamps in MP4/MOV container metadata (`mvhd`/`tkhd`/`mdhd` boxes) using `abema/go-mp4`, and writes XMP metadata (title, description, tags) as UUID boxes using raw I/O. Used by Flickr downloads to preserve original capture dates and embed Flickr metadata in video files. Also reads creation time from the `mvhd` box for date-range filtering of uploads.
 - **daterange/** - Parses `--date-range YYYY-MM-DD:YYYY-MM-DD` flag values into a `DateRange` struct with optional `After`/`Before` bounds. `Contains()` checks if a time falls within the range.
@@ -55,7 +55,7 @@ Go CLI app using [cobra](https://github.com/spf13/cobra) for command structure. 
 - Transfer results: All Download/Upload methods return `*transfer.Result`. The CLI calls `transfer.HandleResult(result, log, dir)` which runs validation, prints a summary, and writes a report file. S3 uses `ScanDir()` after rclone completes since it can't track per-file results.
 - Flickr rate limiting: Requests are throttled to 1/second (3,600/hour API limit). HTTP 429 and 5xx responses trigger exponential backoff retry (up to 5 attempts), honoring `Retry-After` headers. Implemented in `retryableGet()` and `throttle()` in `flickr.go`.
 - Uploads continue past failures: Both Flickr and Google uploads continue on per-file errors (logging them) rather than failing fast, with an abort threshold of 10 consecutive failures for Flickr.
-- S3 delegates to rclone subprocess rather than using the AWS SDK directly. Platform-specific rclone binaries live in `rclone-bin/` (Git LFS, downloaded via `rclone-bin/update-rclone.sh`). 6 platforms: linux/darwin/windows x amd64/arm64.
+- S3 delegates to rclone subprocess rather than using the AWS SDK directly. Platform-specific rclone binaries live in `tools-bin/rclone/` (Git LFS, downloaded via `tools-bin/rclone/update.sh`). 6 platforms: linux/darwin/windows x amd64/arm64.
 - The `--debug` flag on the root command enables verbose logging across all subcommands. CLI flags (`debug`, `limit`) are owned by a `rootOpts` struct (not package-level vars) for test isolation.
 - The `--no-metadata` flag on `flickr download` skips all metadata operations (XMP, MP4 creation time, filesystem timestamps).
 - The `--date-range` flag filters by date: Flickr download uses API dates, uploads use `mediadate.ResolveDate()`, S3 uses rclone `--min-age`/`--max-age` (file mod time, not metadata).
