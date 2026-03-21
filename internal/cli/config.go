@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -21,6 +22,7 @@ func newConfigCmd() *cobra.Command {
 	cmd.AddCommand(newConfigFlickrCmd())
 	cmd.AddCommand(newConfigGoogleCmd())
 	cmd.AddCommand(newConfigS3Cmd())
+	cmd.AddCommand(newConfigICloudCmd())
 	return cmd
 }
 
@@ -206,6 +208,80 @@ func readAWSCredentials(path string) (*config.S3Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func newConfigICloudCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "icloud",
+		Short: "Set up iCloud credentials and authenticate",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			reader := bufio.NewReader(os.Stdin)
+
+			fmt.Println("iCloud Setup")
+			fmt.Println()
+
+			// Check icloudpd is installed
+			icloudpdPath, err := exec.LookPath("icloudpd")
+			if err != nil {
+				return fmt.Errorf("icloudpd not found. Install it with: pipx install icloudpd")
+			}
+			fmt.Printf("Found icloudpd at: %s\n", icloudpdPath)
+
+			// Check osxphotos (optional)
+			if osxphotosPath, err := exec.LookPath("osxphotos"); err == nil {
+				fmt.Printf("Found osxphotos at: %s\n", osxphotosPath)
+			} else {
+				fmt.Println("Warning: osxphotos not found. Upload to iCloud will not be available.")
+				fmt.Println("Install with: pipx install osxphotos")
+			}
+			fmt.Println()
+
+			fmt.Print("Apple ID (email): ")
+			appleID, _ := reader.ReadString('\n')
+			appleID = strings.TrimSpace(appleID)
+
+			if appleID == "" {
+				return fmt.Errorf("apple ID is required")
+			}
+
+			configDir := config.DefaultDir()
+			cookieDir := filepath.Join(configDir, "icloud-cookies")
+			if err := os.MkdirAll(cookieDir, 0700); err != nil {
+				return fmt.Errorf("creating cookie directory: %w", err)
+			}
+
+			cfg := &config.ICloudConfig{
+				AppleID:   appleID,
+				CookieDir: cookieDir,
+			}
+
+			if err := config.SaveICloudConfig(configDir, cfg); err != nil {
+				return fmt.Errorf("saving config: %w", err)
+			}
+
+			fmt.Println("\nStarting icloudpd authentication (2FA required)...")
+			fmt.Println("Follow the prompts to complete authentication.")
+			fmt.Println()
+
+			authCmd := exec.Command(icloudpdPath,
+				"--username", appleID,
+				"--cookie-directory", cookieDir,
+				"--auth-only",
+			)
+			authCmd.Stdin = os.Stdin
+			authCmd.Stdout = os.Stdout
+			authCmd.Stderr = os.Stderr
+
+			if err := authCmd.Run(); err != nil {
+				return fmt.Errorf("icloudpd authentication failed: %w", err)
+			}
+
+			fmt.Println("\niCloud authentication complete! Credentials saved.")
+			fmt.Println("Session cookies are valid for approximately 2 months.")
+			fmt.Println("Re-run 'photo-copy config icloud' when they expire.")
+			return nil
+		},
+	}
 }
 
 func newConfigGoogleCmd() *cobra.Command {
