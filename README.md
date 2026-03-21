@@ -1,7 +1,7 @@
 <p align="center">
   <img src="photocopy.png" alt="photo copy logo"><br><br>
   <b>Copy and backup your photos and videos.</b><br>
-  <b>Copy between Google Photos, Flickr, AWS S3, and local directories.</b><br>
+  <b>Copy between iCloud Photos, Google Photos, Flickr, AWS S3, and local directories.</b><br>
   <a href="https://github.com/bdeitte/photo-copy/actions/workflows/ci.yml"><img src="https://github.com/bdeitte/photo-copy/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
@@ -27,6 +27,7 @@ Each command will tell you what you need to do. Credentials are saved to `~/.con
 ./photo-copy config flickr    # Flickr API key + OAuth
 ./photo-copy config google    # Google OAuth credentials for upload
 ./photo-copy config s3        # AWS credentials for S3
+./photo-copy config icloud   # iCloud authentication (requires icloudpd)
 ```
 
 ### Flickr
@@ -61,6 +62,32 @@ The Google Photos API only allows access to photos the app itself uploaded, so d
 ./photo-copy s3 download ../photos --bucket my-bucket --prefix photos/
 ```
 
+### iCloud Photos
+
+Download works on all platforms. Upload requires macOS with Photos.app and iCloud Photos sync enabled.
+
+**Prerequisites:** Install [icloudpd](https://github.com/icloud-photos-downloader/icloud_photos_downloader) for downloads and [osxphotos](https://github.com/RhetTbull/osxphotos) for uploads:
+
+```bash
+pipx install icloudpd       # Required for download (all platforms)
+pipx install osxphotos      # Required for upload (macOS only)
+```
+
+```bash
+# Download all photos from iCloud
+./photo-copy icloud download ../icloud-photos
+
+# Upload local photos to iCloud (macOS only — imports into Photos.app)
+./photo-copy icloud upload ../photos
+```
+
+**Notes:**
+- Download requires Apple ID with 2FA. Run `photo-copy config icloud` to authenticate.
+- Session cookies expire approximately every 2 months — re-run `config icloud` to re-authenticate.
+- Advanced Data Protection must be disabled for downloads.
+- Upload imports files into Photos.app. If iCloud Photos sync is enabled in System Settings, they automatically upload to iCloud.
+- `--no-metadata` has no effect on iCloud commands.
+
 ## Features
 
 ### Resumable transfers
@@ -70,6 +97,8 @@ All transfers are resumable — if a download or upload is interrupted, re-runni
 - **Flickr downloads** — A `transfer.log` file in the output directory tracks each successfully downloaded file. Already-downloaded files are skipped on restart.
 - **Google Photos uploads** — An upload log file tracks completed uploads the same way.
 - **S3 uploads/downloads** — Handled by rclone, which compares source and destination and only transfers changed or missing files.
+- **iCloud downloads** — Handled by icloudpd, which skips files that already exist in the output directory by filename matching.
+- **iCloud uploads** — Each run imports all files; Photos.app deduplicates automatically.
 
 Files that fail during transfer are not marked as completed in the log, so re-running the same command will automatically retry them while skipping files that already succeeded.
 
@@ -120,6 +149,8 @@ Add `--debug` to any command for verbose logging:
 - **Flickr download**: Uses `date_taken` (preferred) or `date_upload` from the Flickr API.
 - **Flickr/Google upload**: Reads EXIF DateTimeOriginal (JPEG) or MP4 creation time, falling back to file modification time.
 - **S3 upload/download**: Uses rclone's `--min-age`/`--max-age` flags, which filter by **file modification time** (or S3 object LastModified timestamp), not embedded metadata dates. This is a limitation of delegating to rclone.
+- **iCloud download**: Uses icloudpd's date filtering (photo creation date from iCloud). Note: `--limit` maps to icloudpd's `--recent` flag, which selects the N most recently uploaded photos.
+- **iCloud upload**: Reads EXIF DateTimeOriginal (JPEG) or MP4 creation time, falling back to file modification time (same as Flickr/Google upload).
 
 ### Supported file types
 
