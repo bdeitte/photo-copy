@@ -208,7 +208,8 @@ To update a specific tool:
 
 ## Acknowledgments
 
-photo-copy relies on these excellent open-source tools:
+photo-copy relies on these excellent open-source tools for parts of upload/download.
+You can check them out directly if you'd like more options for these cases:
 
 - **[rclone](https://rclone.org/)** — Used for S3 uploads and downloads
 - **[icloudpd](https://github.com/icloud-photos-downloader/icloud_photos_downloader)** — Used for iCloud Photos downloads
