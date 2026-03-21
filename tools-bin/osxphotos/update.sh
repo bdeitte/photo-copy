@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -e
 
+# osxphotos is macOS-only — skip on other platforms
+if [[ "$(uname)" != "Darwin" ]]; then
+    echo "Skipping osxphotos (macOS only, current platform: $(uname))"
+    exit 0
+fi
+
 OSXPHOTOS_VERSION="${1:-0.75.6}"
 OSXPHOTOS_VERSION="${OSXPHOTOS_VERSION#v}"  # Strip leading 'v' if present
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

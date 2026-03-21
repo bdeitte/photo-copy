@@ -358,6 +358,7 @@ func TestParseImportError(t *testing.T) {
 }
 
 func TestFindTool_BundledBinary(t *testing.T) {
+	t.Setenv("PHOTO_COPY_ICLOUDPD_PATH", "")
 	tmpDir := t.TempDir()
 	toolDir := filepath.Join(tmpDir, "tools-bin", "icloudpd")
 	_ = os.MkdirAll(toolDir, 0755)
@@ -382,6 +383,7 @@ func TestFindTool_RosettaFallback(t *testing.T) {
 		t.Skip("Rosetta fallback only applies on darwin/arm64")
 	}
 
+	t.Setenv("PHOTO_COPY_ICLOUDPD_PATH", "")
 	tmpDir := t.TempDir()
 	toolDir := filepath.Join(tmpDir, "tools-bin", "icloudpd")
 	_ = os.MkdirAll(toolDir, 0755)
