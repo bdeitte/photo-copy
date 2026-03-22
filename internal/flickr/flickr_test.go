@@ -148,8 +148,9 @@ func newTestClient() *Client {
 			OAuthToken:       "test-token",
 			OAuthTokenSecret: "test-token-secret",
 		},
-		http: &http.Client{},
-		log:  logging.New(false, nil),
+		http:             &http.Client{},
+		log:              logging.New(false, nil),
+		throttleInterval: minRequestInterval,
 	}
 }
 
@@ -301,6 +302,9 @@ func TestRetryableGet_RetriesOn429(t *testing.T) {
 
 	if attempts != 3 {
 		t.Errorf("expected 3 attempts, got %d", attempts)
+	}
+	if c.throttleInterval <= minRequestInterval {
+		t.Errorf("expected throttleInterval to increase after 429s, got %v", c.throttleInterval)
 	}
 }
 
@@ -539,5 +543,62 @@ func TestEstimateRemaining(t *testing.T) {
 				t.Errorf("estimateRemaining(%d, ...) = %d, want %d", tt.limit, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestOnRateLimited_DoublesInterval(t *testing.T) {
+	c := newTestClient()
+	c.throttleInterval = minRequestInterval
+
+	c.onRateLimited()
+	if c.throttleInterval != 2*minRequestInterval {
+		t.Errorf("expected %v, got %v", 2*minRequestInterval, c.throttleInterval)
+	}
+
+	c.onRateLimited()
+	if c.throttleInterval != 4*minRequestInterval {
+		t.Errorf("expected %v, got %v", 4*minRequestInterval, c.throttleInterval)
+	}
+}
+
+func TestOnRateLimited_CapsAtMax(t *testing.T) {
+	c := newTestClient()
+	c.throttleInterval = maxThrottleInterval
+
+	c.onRateLimited()
+	if c.throttleInterval != maxThrottleInterval {
+		t.Errorf("expected interval capped at %v, got %v", maxThrottleInterval, c.throttleInterval)
+	}
+}
+
+func TestOnRequestSuccess_ReducesInterval(t *testing.T) {
+	c := newTestClient()
+	c.throttleInterval = 4 * time.Second
+
+	c.onRequestSuccess()
+	expected := 3 * time.Second // 4s * 3/4 = 3s
+	if c.throttleInterval != expected {
+		t.Errorf("expected %v, got %v", expected, c.throttleInterval)
+	}
+}
+
+func TestOnRequestSuccess_ClampsToMin(t *testing.T) {
+	c := newTestClient()
+	c.throttleInterval = minRequestInterval
+
+	c.onRequestSuccess()
+	if c.throttleInterval != minRequestInterval {
+		t.Errorf("expected interval to stay at %v, got %v", minRequestInterval, c.throttleInterval)
+	}
+}
+
+func TestOnRequestSuccess_DoesNotGoBelowMin(t *testing.T) {
+	c := newTestClient()
+	// Set to a value where 3/4 would go below minRequestInterval
+	c.throttleInterval = minRequestInterval + 100*time.Millisecond
+
+	c.onRequestSuccess()
+	if c.throttleInterval < minRequestInterval {
+		t.Errorf("expected interval >= %v, got %v", minRequestInterval, c.throttleInterval)
 	}
 }
