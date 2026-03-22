@@ -42,3 +42,19 @@ func TestResolvePhotoDate_BothUnusable_BadValues(t *testing.T) {
 		t.Errorf("resolvePhotoDate = %v, want zero time", got)
 	}
 }
+
+func TestResolvePhotoDate_EpochSentinel(t *testing.T) {
+	// Flickr returns "1970-01-01 00:00:00" for videos with unknown dates
+	got := resolvePhotoDate("1970-01-01 00:00:00", "1592234567")
+	want := time.Unix(1592234567, 0)
+	if !got.Equal(want) {
+		t.Errorf("resolvePhotoDate = %v, want fallback to dateUpload %v", got, want)
+	}
+}
+
+func TestResolvePhotoDate_EpochSentinelNoFallback(t *testing.T) {
+	got := resolvePhotoDate("1970-01-01 00:00:00", "")
+	if !got.IsZero() {
+		t.Errorf("resolvePhotoDate = %v, want zero time", got)
+	}
+}
