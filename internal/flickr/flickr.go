@@ -262,7 +262,9 @@ type photosResponse struct {
 			Tags        string             `json:"tags"`
 		} `json:"photo"`
 	} `json:"photos"`
-	Stat string `json:"stat"`
+	Stat    string `json:"stat"`
+	Code    int    `json:"code"`
+	Message string `json:"message"`
 }
 
 // flexString handles JSON fields that may be a string or a number.
@@ -293,7 +295,9 @@ type sizesResponse struct {
 			Source string     `json:"source"`
 		} `json:"size"`
 	} `json:"sizes"`
-	Stat string `json:"stat"`
+	Stat    string `json:"stat"`
+	Code    int    `json:"code"`
+	Message string `json:"message"`
 }
 
 // Download fetches all photos from the authenticated user's Flickr account.
@@ -343,7 +347,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 		}
 
 		if photosResp.Stat != "ok" {
-			return result, fmt.Errorf("Flickr API error on page %d: stat=%s", page, photosResp.Stat) //nolint:staticcheck // proper noun
+			return result, fmt.Errorf("Flickr API error on page %d: %s (code %d)", page, photosResp.Message, photosResp.Code) //nolint:staticcheck // proper noun
 		}
 
 		c.log.Debug("page %d/%d: %d photos/videos", page, photosResp.Photos.Pages, len(photosResp.Photos.Photo))
@@ -557,7 +561,7 @@ func (c *Client) getOriginalURLs(ctx context.Context, photoID string) ([]origina
 	}
 
 	if sizesResp.Stat != "ok" {
-		return nil, fmt.Errorf("Flickr API error: stat=%s", sizesResp.Stat) //nolint:staticcheck // proper noun
+		return nil, fmt.Errorf("Flickr API error: %s (code %d)", sizesResp.Message, sizesResp.Code) //nolint:staticcheck // proper noun
 	}
 
 	// Build ordered list: preferred sizes first, then any remaining as fallbacks.
