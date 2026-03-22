@@ -531,6 +531,10 @@ func runOAuthFlow(ctx context.Context, cfg *oauth2.Config) (*oauth2.Token, error
 
 	authURL := cfg.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Println("Opening browser for Google authorization...")
+	fmt.Println("Note: Google will show an 'unverified app' warning because this is your")
+	fmt.Println("own personal OAuth app. Click 'Advanced' then 'Go to photo-copy (unsafe)'")
+	fmt.Println("to proceed — this is expected and safe.")
+	fmt.Println()
 	fmt.Println("If the browser doesn't open, visit this URL:")
 	fmt.Println(authURL)
 	fmt.Println()
