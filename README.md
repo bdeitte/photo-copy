@@ -103,7 +103,7 @@ Files that fail during transfer are not marked as completed in the log, so re-ru
 
 ### Rate limiting & retry
 
-- **Flickr** — Requests are throttled to 1/second (staying under Flickr's 3,600 requests/hour API limit). HTTP 429 and 5xx errors are retried up to 5 times with exponential backoff (2s, 4s, 8s, 16s, 32s), honoring the `Retry-After` header when present. This applies to both API calls and photo downloads.
+- **Flickr** — Requests are throttled to stay under Flickr's 3,600 requests/hour API limit, starting at 1 request/second. The interval adapts automatically: on HTTP 429 (rate limit) responses, the interval doubles (up to 30s between requests), then gradually decreases back to 1/second as requests succeed. HTTP 429 and 5xx errors are retried up to 7 times with exponential backoff, honoring the `Retry-After` header when present. This applies to both API calls and photo downloads.
 - **Google Photos** — Subject to a 10,000 uploads/day limit, enforced in code.
 
 ### Filtering Options
