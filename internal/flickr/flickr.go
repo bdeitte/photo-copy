@@ -753,8 +753,8 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 		estimator.Tick()
 		remaining := len(files) - (i + 1)
 		dateStr := ""
-		if info != nil {
-			dateStr = fmt.Sprintf(" (%s)", info.ModTime().Format("2006-01-02"))
+		if fileDate := mediadate.ResolveDate(filepath.Join(inputDir, filename)); !fileDate.IsZero() {
+			dateStr = fmt.Sprintf(" (%s)", fileDate.Format("2006-01-02"))
 		}
 		c.log.Info("[%d/%d] %suploaded %s%s", i+1, len(files), estimator.Estimate(remaining), filename, dateStr)
 	}
