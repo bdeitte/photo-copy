@@ -4,9 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -491,6 +494,9 @@ func saveToken(configDir string, token *oauth2.Token) error {
 // runOAuthFlow runs an OAuth2 flow using a localhost redirect.
 // It starts a temporary HTTP server to receive the authorization code from Google.
 func runOAuthFlow(ctx context.Context, cfg *oauth2.Config) (*oauth2.Token, error) {
+	// Copy the config to avoid mutating the caller's object
+	localCfg := *cfg
+
 	// Listen on a random available port
 	listener, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
@@ -498,21 +504,33 @@ func runOAuthFlow(ctx context.Context, cfg *oauth2.Config) (*oauth2.Token, error
 	}
 	port := listener.Addr().(*net.TCPAddr).Port
 
-	// Update the redirect URL with the actual port
-	cfg.RedirectURL = fmt.Sprintf("http://localhost:%d", port)
+	localCfg.RedirectURL = fmt.Sprintf("http://localhost:%d", port)
+
+	// Generate a random state parameter for CSRF protection
+	stateBytes := make([]byte, 16)
+	if _, err := rand.Read(stateBytes); err != nil {
+		_ = listener.Close()
+		return nil, fmt.Errorf("generating state token: %w", err)
+	}
+	state := base64.URLEncoding.EncodeToString(stateBytes)
 
 	codeCh := make(chan string, 1)
 	errCh := make(chan error, 1)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("state") != state {
+			_, _ = fmt.Fprint(w, "<html><body><h2>Authorization failed: invalid state parameter</h2><p>You can close this window.</p></body></html>")
+			errCh <- fmt.Errorf("authorization failed: state mismatch (possible CSRF)")
+			return
+		}
 		code := r.URL.Query().Get("code")
 		if code == "" {
 			errMsg := r.URL.Query().Get("error")
 			if errMsg == "" {
 				errMsg = "no authorization code received"
 			}
-			_, _ = fmt.Fprintf(w, "<html><body><h2>Authorization failed: %s</h2><p>You can close this window.</p></body></html>", errMsg)
+			_, _ = fmt.Fprintf(w, "<html><body><h2>Authorization failed: %s</h2><p>You can close this window.</p></body></html>", html.EscapeString(errMsg))
 			errCh <- fmt.Errorf("authorization failed: %s", errMsg)
 			return
 		}
@@ -529,7 +547,7 @@ func runOAuthFlow(ctx context.Context, cfg *oauth2.Config) (*oauth2.Token, error
 	}()
 	defer func() { _ = server.Close() }()
 
-	authURL := cfg.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
+	authURL := localCfg.AuthCodeURL(state, oauth2.AccessTypeOffline)
 	fmt.Println("Opening browser for Google authorization...")
 	fmt.Println("Note: Google will show an 'unverified app' warning because this is your")
 	fmt.Println("own personal OAuth app. Click 'Advanced' then 'Go to photo-copy (unsafe)'")
@@ -553,7 +571,7 @@ func runOAuthFlow(ctx context.Context, cfg *oauth2.Config) (*oauth2.Token, error
 		return nil, ctx.Err()
 	}
 
-	token, err := cfg.Exchange(ctx, code)
+	token, err := localCfg.Exchange(ctx, code)
 	if err != nil {
 		return nil, fmt.Errorf("exchanging code for token: %w", err)
 	}
