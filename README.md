@@ -38,8 +38,17 @@ Each command will tell you what you need to do. Credentials are saved to `~/.con
 # Download all photos from Flickr
 ./photo-copy flickr download ../flickr-photos
 
+# Download only photos taken in 2023
+./photo-copy flickr download --date-range 2023-01-01:2023-12-31 ../flickr-photos
+
+# Download the first 100 photos
+./photo-copy flickr download --limit 100 ../flickr-photos
+
 # Upload local photos to Flickr
 ./photo-copy flickr upload ../photos
+
+# Upload only photos from 2020 onward, limit to 500
+./photo-copy flickr upload --date-range 2020-01-01: --limit 500 ../photos
 ```
 
 ### Google Photos
@@ -49,6 +58,9 @@ The Google Photos API only allows access to photos the app itself uploaded, so d
 ```bash
 # Upload local photos to Google Photos
 ./photo-copy google upload ../photos
+
+# Upload only photos taken before 2024, limit to 1000
+./photo-copy google upload --date-range :2023-12-31 --limit 1000 ../photos
 
 # Download: export your library via Google Takeout, then extract the zips
 ./photo-copy google import-takeout ../takeout-zips ../google-photos
@@ -60,8 +72,14 @@ The Google Photos API only allows access to photos the app itself uploaded, so d
 # Upload local photos to S3
 ./photo-copy s3 upload ../photos --bucket my-bucket --prefix photos/
 
+# Upload only files modified in 2023, limit to 200
+./photo-copy s3 upload --date-range 2023-01-01:2023-12-31 --limit 200 ../photos --bucket my-bucket --prefix photos/
+
 # Download photos from S3
 ./photo-copy s3 download ../photos --bucket my-bucket --prefix photos/
+
+# Download only files modified since 2024
+./photo-copy s3 download --date-range 2024-01-01: ../photos --bucket my-bucket --prefix photos/
 ```
 
 ### iCloud Photos
@@ -72,8 +90,14 @@ Download works on all platforms. Upload requires macOS with Photos.app and iClou
 # Download all photos from iCloud
 ./photo-copy icloud download ../icloud-photos
 
+# Download the 50 most recently uploaded photos
+./photo-copy icloud download --limit 50 ../icloud-photos
+
 # Upload local photos to iCloud (macOS only — imports into Photos.app)
 ./photo-copy icloud upload ../photos
+
+# Upload only photos from 2022-2023
+./photo-copy icloud upload --date-range 2022-01-01:2023-12-31 ../photos
 ```
 
 **Notes on download:**
