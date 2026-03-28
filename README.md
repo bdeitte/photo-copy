@@ -26,15 +26,15 @@ setup.bat
 ## Quick Start
 
 1. Run `./setup.sh` (or `setup.bat` on Windows) to build the binary and verify tool dependencies.
-2. Configure credentials for the service you want to use (e.g., `./photo-copy config flickr`).
-3. Download or upload: `./photo-copy <service> download <dir>` or `./photo-copy <service> upload <dir>`.
+2. Configure credentials for the service you want to use (e.g., `./photo-copy config flickr`). Not all commands require config — see the table below.
+3. Download or upload: `./photo-copy <service> download <dir>` or `./photo-copy <service> upload <dir>`. (Google Photos downloads use `google import-takeout` instead — see [Google Photos](#google-photos).)
 
 ### Service capabilities
 
 | Service | Download | Upload | Config required | Platform limits | Date source (filtering) |
 |---------|----------|--------|-----------------|-----------------|------------------------|
 | Flickr | Yes | Yes | Yes (OAuth) | — | API `date_taken` / `date_upload` (download); EXIF/MP4/file mod time (upload) |
-| Google Photos | Takeout import only | Yes | Yes (OAuth) | 10,000 uploads/day | EXIF/MP4/file mod time (upload) |
+| Google Photos | Takeout import only | Yes | Upload only (OAuth) | 10,000 uploads/day | EXIF/MP4/file mod time (upload) |
 | S3 | Yes | Yes | Yes (AWS creds) | — | File modification time (rclone) |
 | iCloud | Yes | macOS only | Download only | Upload requires Photos.app | icloudpd date (download); EXIF/MP4/file mod time (upload) |
 
