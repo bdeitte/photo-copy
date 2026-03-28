@@ -129,6 +129,8 @@ All transfers are resumable — if a download or upload is interrupted, re-runni
 
 Files that fail during transfer are not marked as completed in the log, so re-running the same command will automatically retry them while skipping files that already succeeded.
 
+**Note on duplicates:** Resumable transfers skip files already completed in the current transfer run. However, Flickr and Google Photos uploads do not check whether a file already exists in the service — re-uploading the same files to a new directory will create duplicates. S3 avoids this via rclone's file comparison. iCloud uploads rely on Photos.app's built-in deduplication. Google Takeout import renames files on filename collision (e.g., `photo_1.jpg`).
+
 ### Rate limiting & retry
 
 - **Flickr** — Requests are throttled to stay under Flickr's 3,600 requests/hour API limit, starting at 1 request/second. The interval adapts automatically: on HTTP 429 (rate limit) responses, the interval doubles (up to 30s between requests), then gradually decreases back to 1/second as requests succeed. HTTP 429 and 5xx errors are retried up to 7 times with exponential backoff, honoring the `Retry-After` header when present. This applies to both API calls and photo downloads.
