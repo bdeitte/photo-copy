@@ -186,7 +186,9 @@ Add `--debug` to any command for verbose logging:
 
 ### Supported file types
 
-JPEG, PNG, TIFF, GIF, HEIC, WebP, MP4, MOV, AVI, MKV
+**Uploads and S3 downloads:** JPEG, PNG, TIFF, GIF, HEIC, WebP, MP4, MOV, AVI, MKV — files with other extensions are skipped.
+
+**Flickr and iCloud downloads:** All file types are downloaded as-is from the service, regardless of extension.
 
 ## Development
 
