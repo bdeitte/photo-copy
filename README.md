@@ -13,7 +13,7 @@ photo-copy copies photos and videos between cloud services and local directories
 
 > **Note:** This project is in active development. Google Photos and Flickr support has been well-tested and is in good shape. S3 and iCloud support is still in an alpha state.
 
-Requires Go 1.21+
+Requires Go 1.25+
 
 ```bash
 # macOS / Linux
@@ -23,11 +23,26 @@ Requires Go 1.21+
 setup.bat
 ```
 
+## Quick Start
+
+1. Run `./setup.sh` (or `setup.bat` on Windows) to build the binary and verify tool dependencies.
+2. Configure credentials for the service you want to use (e.g., `./photo-copy config flickr`).
+3. Download or upload: `./photo-copy <service> download <dir>` or `./photo-copy <service> upload <dir>`.
+
+### Service capabilities
+
+| Service | Download | Upload | Config required | Platform limits | Date source (filtering) |
+|---------|----------|--------|-----------------|-----------------|------------------------|
+| Flickr | Yes | Yes | Yes (OAuth) | — | API `date_taken` / `date_upload` (download); EXIF/MP4/file mod time (upload) |
+| Google Photos | Takeout import only | Yes | Yes (OAuth) | 10,000 uploads/day | EXIF/MP4/file mod time (upload) |
+| S3 | Yes | Yes | Yes (AWS creds) | — | File modification time (rclone) |
+| iCloud | Yes | macOS only | Download only | Upload requires Photos.app | icloudpd date (download); EXIF/MP4/file mod time (upload) |
+
 ## Usage
 
 ### Configure credentials
 
-Each command will tell you what you need to do. Credentials are saved to `~/.config/photo-copy/`.
+Each command will tell you what you need to do. Credentials are saved to `~/.config/photo-copy/` (override with `PHOTO_COPY_CONFIG_DIR`).
 
 ```bash
 ./photo-copy config flickr    # Flickr API key + OAuth
@@ -66,7 +81,7 @@ The Google Photos API only allows access to photos the app itself uploaded, so d
 # Upload only photos taken before 2024, limit to 1000
 ./photo-copy google upload --date-range :2023-12-31 --limit 1000 ../photos
 
-# Download: export your library via Google Takeout, then extract the zips
+# Download: export your library via Google Takeout, then point at the directory of zips
 ./photo-copy google import-takeout ../takeout-zips ../google-photos
 ```
 
@@ -196,10 +211,14 @@ See [AGENTS.md](AGENTS.md#architecture) for architecture details on the project.
 
 ### Linting & Testing
 
-Install golangci-lint:
+Install golangci-lint ([installation options](https://golangci-lint.run/welcome/install/)):
 
 ```bash
+# macOS
 brew install golangci-lint
+
+# or cross-platform
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 ```
 
 Run linting and unit tests:
