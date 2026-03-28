@@ -5,6 +5,10 @@
   <a href="https://github.com/bdeitte/photo-copy/actions/workflows/ci.yml"><img src="https://github.com/bdeitte/photo-copy/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
+## Overview
+
+photo-copy copies photos and videos between cloud services and local directories. Each service has its own `download` and `upload` command that transfers between a local directory and that service. To copy between two services (e.g., Flickr to S3), download to a local directory first, then upload from that directory — there is no direct service-to-service transfer.
+
 ## Setup
 
 > **Note:** This project is in active development. Google Photos and Flickr support has been well-tested and is in good shape. S3 and iCloud support is still in an alpha state.
