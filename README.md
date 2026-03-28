@@ -137,6 +137,7 @@ Files that fail during transfer are not marked as completed in the log, so re-ru
 ### Filtering Options
 
 - `--date-range YYYY-MM-DD:YYYY-MM-DD` — Only process files within the specified date range. Either side can be omitted for open-ended ranges (e.g., `2020-01-01:` for everything from 2020 onward, `:2023-12-31` for everything up to end of 2023).
+- `--limit N` — Only process the first N files. Useful for testing a transfer before running the full batch, or for processing files incrementally. For iCloud downloads, this maps to icloudpd's `--recent` flag, which selects the N most recently uploaded photos.
 
 **Date sources by command:**
 - **Flickr download**: Uses `date_taken` (preferred) or `date_upload` from the Flickr API.
