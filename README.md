@@ -192,7 +192,7 @@ Add `--debug` to any command for verbose logging:
 
 ## Development
 
-See [CLAUDE.md](CLAUDE.md#architecture) for some details on the project.
+See [AGENTS.md](AGENTS.md#architecture) for architecture details on the project.
 
 ### Linting & Testing
 
