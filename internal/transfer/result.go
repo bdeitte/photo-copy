@@ -55,7 +55,7 @@ func NewResult(service, operation, dir string) *Result {
 }
 
 // RecordSuccess increments the success counter and accumulates bytes.
-func (r *Result) RecordSuccess(_ string, sizeBytes int64) {
+func (r *Result) RecordSuccess(sizeBytes int64) {
 	r.Succeeded++
 	r.TotalBytes += sizeBytes
 }

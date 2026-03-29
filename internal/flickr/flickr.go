@@ -476,9 +476,9 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 			info, statErr := os.Stat(filepath.Join(outputDir, filename))
 			if statErr != nil {
 				c.log.Error("stat after download for %s: %v", filename, statErr)
-				result.RecordSuccess(filename, 0)
+				result.RecordSuccess(0)
 			} else {
-				result.RecordSuccess(filename, info.Size())
+				result.RecordSuccess(info.Size())
 			}
 
 			filePath := filepath.Join(outputDir, filename)
@@ -758,9 +758,9 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 		info, statErr := os.Stat(filepath.Join(inputDir, filename))
 		if statErr != nil {
 			c.log.Error("stat after upload for %s: %v", filename, statErr)
-			result.RecordSuccess(filename, 0)
+			result.RecordSuccess(0)
 		} else {
-			result.RecordSuccess(filename, info.Size())
+			result.RecordSuccess(info.Size())
 		}
 		estimator.Tick()
 		remaining := len(files) - (i + 1)

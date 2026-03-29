@@ -95,7 +95,7 @@ func (c *Client) runImportBatch(ctx context.Context, osxphotosPath string, files
 			estimator.Tick()
 			remaining := total - *imported
 			c.log.Info("[%d/%d] %suploaded %s", *imported, total, estimator.Estimate(remaining), filename)
-			result.RecordSuccess(filename, 0)
+			result.RecordSuccess(0)
 			continue
 		}
 

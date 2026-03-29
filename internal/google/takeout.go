@@ -116,9 +116,9 @@ func extractMediaFromZip(zipPath, outputDir string, log *logging.Logger, result 
 
 		info, statErr := os.Stat(destPath)
 		if statErr == nil {
-			result.RecordSuccess(name, info.Size())
+			result.RecordSuccess(info.Size())
 		} else {
-			result.RecordSuccess(name, 0)
+			result.RecordSuccess(0)
 		}
 		_ = bar.Add(1)
 	}

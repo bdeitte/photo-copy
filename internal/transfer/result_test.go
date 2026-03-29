@@ -26,8 +26,8 @@ func TestNewResult(t *testing.T) {
 
 func TestResult_RecordSuccess(t *testing.T) {
 	r := NewResult("flickr", "download", "/tmp")
-	r.RecordSuccess("photo1.jpg", 1024)
-	r.RecordSuccess("photo2.jpg", 2048)
+	r.RecordSuccess(1024)
+	r.RecordSuccess(2048)
 	if r.Succeeded != 2 {
 		t.Fatalf("expected 2 succeeded, got %d", r.Succeeded)
 	}
@@ -76,8 +76,8 @@ func TestValidate_ZeroSizeFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := NewResult("flickr", "download", dir)
-	r.RecordSuccess("empty.jpg", 0)
-	r.RecordSuccess("ok.jpg", 4)
+	r.RecordSuccess(0)
+	r.RecordSuccess(4)
 	r.Finish()
 	r.Validate()
 	if len(r.Warnings) != 1 {
@@ -91,7 +91,7 @@ func TestValidate_ZeroSizeFiles(t *testing.T) {
 func TestValidate_CountMismatch(t *testing.T) {
 	r := NewResult("flickr", "download", t.TempDir())
 	r.Expected = 10
-	r.RecordSuccess("a.jpg", 100)
+	r.RecordSuccess(100)
 	r.Finish()
 	r.Validate()
 	found := false
@@ -135,7 +135,7 @@ func TestValidate_NoWarningsWhenClean(t *testing.T) {
 	}
 	r := NewResult("flickr", "download", dir)
 	r.Expected = 1
-	r.RecordSuccess("ok.jpg", 4)
+	r.RecordSuccess(4)
 	r.Finish()
 	r.Validate()
 	if len(r.Warnings) != 0 {
@@ -150,7 +150,7 @@ func TestValidate_NoMismatchWhenFailuresAccountedFor(t *testing.T) {
 	}
 	r := NewResult("flickr", "download", dir)
 	r.Expected = 2
-	r.RecordSuccess("ok.jpg", 4)
+	r.RecordSuccess(4)
 	r.RecordError("bad.jpg", "HTTP 500")
 	r.Finish()
 	r.Validate()
@@ -265,7 +265,7 @@ func TestValidate_ZeroSizeFiles_SkippedForUpload(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := NewResult("flickr", "upload", dir)
-	r.RecordSuccess("empty.jpg", 0)
+	r.RecordSuccess(0)
 	r.Finish()
 	r.Validate()
 	for _, w := range r.Warnings {

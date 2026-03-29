@@ -224,9 +224,9 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 
 		info, statErr := os.Stat(filePath)
 		if statErr == nil {
-			result.RecordSuccess(filename, info.Size())
+			result.RecordSuccess(info.Size())
 		} else {
-			result.RecordSuccess(filename, 0)
+			result.RecordSuccess(0)
 		}
 		c.log.Debug("successfully uploaded %s", filename)
 		estimator.Tick()

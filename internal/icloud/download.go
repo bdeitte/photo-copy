@@ -60,7 +60,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, date
 		if filename := parseDownloadLine(line); filename != "" {
 			downloaded++
 			estimator.Tick()
-			result.RecordSuccess(filename, 0)
+			result.RecordSuccess(0)
 			if total > 0 {
 				remaining := total - downloaded
 				c.log.Info("[%d/%d] %sdownloaded %s", downloaded, total, estimator.Estimate(remaining), filename)
