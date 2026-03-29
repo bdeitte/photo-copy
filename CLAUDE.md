@@ -64,10 +64,10 @@ Go CLI app using [cobra](https://github.com/spf13/cobra) for command structure. 
 
 ### Key patterns
 
-- All service clients follow the same pattern: `NewClient(config, logger)` returning a `*Client` with `Upload`/`Download` methods taking `context.Context`.
-- Resumable transfers: Flickr and Google Photos use append-only log files (`transfer.log`) to track completed files, skipping them on restart. Failed files are not logged, so re-running retries them automatically. S3 relies on rclone's built-in diffing.
+- All service clients follow the same pattern: `NewClient(config, logger)` returning a `*Client` with `Upload`/`Download` methods taking `context.Context`. Google's `NewClient` additionally takes `ctx` and `configDir` parameters and returns `(*Client, error)` because it performs OAuth2 token exchange during construction.
+- Resumable transfers: Flickr uses an append-only `transfer.log` for resumable downloads; Google Photos uses `.photo-copy-upload.log` for resumable uploads. Failed files are not logged, so re-running retries them automatically. S3 relies on rclone's built-in diffing.
 - Transfer results: All Download/Upload methods return `*transfer.Result`. The CLI calls `transfer.HandleResult(result, log, dir)` which runs validation, prints a summary, and writes a report file. S3 uses `ScanDir()` after rclone completes since it can't track per-file results.
-- Flickr rate limiting: Requests are throttled to 1/second (3,600/hour API limit). HTTP 429 and 5xx responses trigger exponential backoff retry (up to 5 attempts), honoring `Retry-After` headers. Implemented in `retryableGet()` and `throttle()` in `flickr.go`.
+- Flickr rate limiting: Requests are throttled to 1/second (3,600/hour API limit). HTTP 429 and 5xx responses trigger exponential backoff retry (up to 8 attempts), honoring `Retry-After` headers. Implemented in `retryableGet()` and `throttle()` in `flickr.go`.
 - Uploads continue past failures: Both Flickr and Google uploads continue on per-file errors (logging them) rather than failing fast, with an abort threshold of 10 consecutive failures for Flickr.
 - S3 delegates to rclone subprocess rather than using the AWS SDK directly. Platform-specific rclone binaries live in `tools-bin/rclone/` (Git LFS, downloaded via `tools-bin/rclone/update.sh`). 6 platforms: linux/darwin/windows x amd64/arm64.
 - The `--debug` flag on the root command enables verbose logging across all subcommands. CLI flags (`debug`, `limit`) are owned by a `rootOpts` struct (not package-level vars) for test isolation.
