@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 func rcloneBinaryName(goos, goarch string) string {
@@ -47,6 +48,10 @@ func rcloneBinDir() (string, error) {
 }
 
 func writeRcloneConfig(accessKeyID, secretAccessKey, region string) (string, error) {
+	if strings.ContainsAny(accessKeyID+secretAccessKey+region, "\n\r") {
+		return "", fmt.Errorf("credentials must not contain newline characters")
+	}
+
 	content := fmt.Sprintf("[s3]\ntype = s3\nprovider = AWS\naccess_key_id = %s\nsecret_access_key = %s\nregion = %s\n",
 		accessKeyID, secretAccessKey, region)
 

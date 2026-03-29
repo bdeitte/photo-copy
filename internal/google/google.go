@@ -278,6 +278,10 @@ func (c *Client) retryableDo(ctx context.Context, buildReq func() (*http.Request
 
 		c.log.Debug("HTTP %s %s", req.Method, req.URL.String())
 		for key, vals := range req.Header {
+			if strings.EqualFold(key, "Authorization") {
+				c.log.Debug("  %s: [redacted]", key)
+				continue
+			}
 			c.log.Debug("  %s: %s", key, strings.Join(vals, ", "))
 		}
 

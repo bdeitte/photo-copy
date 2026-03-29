@@ -122,11 +122,13 @@ func (c *Client) runImportBatch(ctx context.Context, osxphotosPath string, files
 
 func buildUploadArgs(files []string, debug bool) []string {
 	args := []string{"import"}
-	args = append(args, files...)
 
 	if debug {
 		args = append(args, "--verbose")
 	}
+
+	args = append(args, "--")
+	args = append(args, files...)
 
 	return args
 }

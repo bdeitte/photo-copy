@@ -136,6 +136,7 @@ func extractFile(f *zip.File, destPath string) (err error) {
 		}
 	}()
 
-	_, err = io.Copy(out, rc)
+	const maxFileSize = 10 << 30 // 10 GB
+	_, err = io.Copy(out, io.LimitReader(rc, maxFileSize))
 	return err
 }
