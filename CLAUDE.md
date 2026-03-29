@@ -6,6 +6,8 @@ After any loop of work, always commit the changes. This allows usage of roborev 
 
 ## Build & Run
 
+Go version: 1.25 (see `go.mod`).
+
 ```bash
 go build -o photo-copy ./cmd/photo-copy     # build binary
 go test ./...                                 # run all tests
@@ -25,7 +27,19 @@ go test ./internal/cli/ -tags integration    # run integration tests
 
 Always run `golangci-lint run ./...` and `go test ./...` after making code changes, before committing. Fix any lint errors or test failures before proceeding.
 
-A Claude Code pre-commit hook (`.claude/settings.json`) enforces this — commits will be blocked if lint or tests fail.
+A Claude Code PreToolUse hook (`.claude/settings.json` + `.claude/hooks/pre-commit.sh`) runs lint, tests, and integration tests before any `git commit` Bash command — commits will be blocked if any fail.
+
+## Go Coding Standards
+
+Follow [Effective Go](https://go.dev/doc/effective_go) conventions:
+
+- **Formatting:** `gofmt` is the standard. The `golangci-lint` config (`.golangci.yml`) enables: govet, staticcheck, errcheck, unused, ineffassign, gocritic.
+- **Naming:** MixedCaps/mixedCaps only, no underscores. No `Get` prefix on getters. One-method interfaces use `-er` suffix.
+- **Errors:** Always check errors immediately. Return `(value, error)` pairs. Never silently ignore errors.
+- **Comments:** Doc comments on all exported identifiers. No intervening blank line between comment and declaration.
+- **Control flow:** Eliminate error cases early (guard clauses), keep the success path unindented. Omit `else` when the `if` body ends in `return`.
+- **Concurrency:** Share memory by communicating (channels), not by communicating via shared memory.
+- **Zero values:** Design types so zero values are useful without further initialization.
 
 ## Architecture
 
