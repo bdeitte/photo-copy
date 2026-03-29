@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -335,7 +336,7 @@ func newConfigGoogleCmd() *cobra.Command {
 			}
 
 			// Remove any existing token so the next upload triggers a fresh OAuth flow
-			if err := config.RemoveGoogleToken(configDir); err != nil && !os.IsNotExist(err) {
+			if err := config.RemoveGoogleToken(configDir); err != nil && !errors.Is(err, os.ErrNotExist) {
 				return fmt.Errorf("removing old token: %w", err)
 			}
 
