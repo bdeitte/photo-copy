@@ -507,9 +507,11 @@ func TestRetryableGet_NoRetryOn403(t *testing.T) {
 }
 
 func TestRetryableGet_ExhaustsRetries(t *testing.T) {
+	t.Setenv("PHOTO_COPY_TEST_MODE", "1")
+	attempts := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Retry-After", "0")
-		w.WriteHeader(http.StatusTooManyRequests)
+		attempts++
+		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer server.Close()
 
@@ -519,6 +521,59 @@ func TestRetryableGet_ExhaustsRetries(t *testing.T) {
 	_, err := c.retryableGet(context.Background(), server.URL)
 	if err == nil {
 		t.Fatal("expected error after exhausting retries")
+	}
+	if attempts != 8 {
+		t.Errorf("expected 8 attempts (1 initial + 7 retries), got %d", attempts)
+	}
+}
+
+func TestRetryableGet_429RetriesIndefinitely(t *testing.T) {
+	t.Setenv("PHOTO_COPY_TEST_MODE", "1")
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts <= 10 {
+			w.Header().Set("Retry-After", "0")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	c := newTestClient()
+	c.http = server.Client()
+
+	resp, err := c.retryableGet(context.Background(), server.URL)
+	if err != nil {
+		t.Fatalf("expected success after 429s clear, got error: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if attempts != 11 {
+		t.Errorf("expected 11 attempts (10 x 429 + 1 success), got %d", attempts)
+	}
+}
+
+func TestRetryableGet_5xxStillLimitedTo7Retries(t *testing.T) {
+	t.Setenv("PHOTO_COPY_TEST_MODE", "1")
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	c := newTestClient()
+	c.http = server.Client()
+
+	_, err := c.retryableGet(context.Background(), server.URL)
+	if err == nil {
+		t.Fatal("expected error after exhausting 5xx retries")
+	}
+	// 1 initial + 7 retries = 8 total attempts
+	if attempts != 8 {
+		t.Errorf("expected 8 attempts for 5xx, got %d", attempts)
 	}
 }
 

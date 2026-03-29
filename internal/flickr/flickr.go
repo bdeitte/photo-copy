@@ -152,9 +152,14 @@ func sanitizeURL(rawURL string) string {
 	return u.String()
 }
 
-// retryableGet performs an HTTP GET with retry on 429 and 5xx errors.
+// retryableGet performs an HTTP GET with retry logic.
+// HTTP 429 (rate limited) responses are retried indefinitely with escalating backoff
+// capped at 5 minutes. HTTP 5xx (server error) responses are retried up to 7 times.
 func (c *Client) retryableGet(ctx context.Context, url string) (*http.Response, error) {
-	for attempt := 0; attempt <= maxRetries; attempt++ {
+	serverErrors := 0
+	rateLimitAttempt := 0
+
+	for {
 		c.throttle()
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -170,16 +175,28 @@ func (c *Client) retryableGet(ctx context.Context, url string) (*http.Response, 
 		}
 		c.log.Debug("HTTP response: %d %s", resp.StatusCode, resp.Status)
 
-		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+		if resp.StatusCode == http.StatusTooManyRequests {
 			_ = resp.Body.Close()
-			if resp.StatusCode == http.StatusTooManyRequests {
-				c.onRateLimited()
+			c.onRateLimited()
+			rateLimitAttempt++
+			delay := c.retryDelay(rateLimitAttempt-1, resp)
+			c.log.Info("HTTP 429, retrying in %v (attempt %d)", delay, rateLimitAttempt)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
 			}
-			if attempt == maxRetries {
+			continue
+		}
+
+		if resp.StatusCode >= 500 {
+			_ = resp.Body.Close()
+			serverErrors++
+			if serverErrors > maxRetries {
 				return nil, fmt.Errorf("HTTP %d after %d retries: %s", resp.StatusCode, maxRetries, url)
 			}
-			delay := c.retryDelay(attempt, resp)
-			c.log.Info("HTTP %d, retrying in %v (attempt %d/%d)", resp.StatusCode, delay, attempt+1, maxRetries)
+			delay := c.retryDelay(serverErrors-1, resp)
+			c.log.Info("HTTP %d, retrying in %v (attempt %d/%d)", resp.StatusCode, delay, serverErrors, maxRetries)
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
@@ -191,8 +208,6 @@ func (c *Client) retryableGet(ctx context.Context, url string) (*http.Response, 
 		c.onRequestSuccess()
 		return resp, nil
 	}
-	// unreachable
-	return nil, fmt.Errorf("retries exhausted for %s", url)
 }
 
 // retryDelay calculates the backoff delay, honoring the Retry-After header if present.
