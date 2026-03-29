@@ -1083,7 +1083,9 @@ func createTestZip(t *testing.T, dir, name string, files map[string]string) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, _ = fw.Write([]byte(content))
+		if _, err := fw.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
