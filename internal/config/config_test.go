@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -158,6 +159,12 @@ func TestDefaultDir(t *testing.T) {
 }
 
 func TestSaveConfig_PermissionDenied(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod not effective on Windows")
+	}
+	if os.Getuid() == 0 {
+		t.Skip("test ineffective when running as root")
+	}
 	tmpDir := t.TempDir()
 	readOnlyDir := filepath.Join(tmpDir, "readonly")
 	if err := os.MkdirAll(readOnlyDir, 0500); err != nil {
