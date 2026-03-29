@@ -137,6 +137,16 @@ func extractFile(f *zip.File, destPath string) (err error) {
 	}()
 
 	const maxFileSize = 10 << 30 // 10 GB
-	_, err = io.Copy(out, io.LimitReader(rc, maxFileSize))
-	return err
+	written, err := io.Copy(out, io.LimitReader(rc, maxFileSize+1))
+	if err != nil {
+		_ = out.Close()
+		_ = os.Remove(destPath)
+		return err
+	}
+	if written > maxFileSize {
+		_ = out.Close()
+		_ = os.Remove(destPath)
+		return fmt.Errorf("zip entry exceeds %d byte limit: %s", maxFileSize, f.Name)
+	}
+	return nil
 }
