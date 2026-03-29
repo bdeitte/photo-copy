@@ -7,7 +7,7 @@
 
 ## Overview
 
-photo-copy copies photos and videos between cloud services and local directories. Each service has its own `download` and `upload` command that transfers between a local directory and that service. To copy between two services (e.g., Flickr to S3), download to a local directory first, then upload from that directory.
+photo-copy copies photos and videos between cloud services and local directories. Most services have `download` and `upload` commands that transfer between a local directory and that service (Google Photos uses `import-takeout` instead of `download` — see [Google Photos](#google-photos)). To copy between two services (e.g., Flickr to S3), download to a local directory first, then upload from that directory.
 
 ## Quick Start
 
@@ -198,7 +198,7 @@ Add `--debug` to any command for verbose logging:
 ## Development
 
 You can read [architecture details](CLAUDE.md#architecture) on the project.
-
+
 ### Linting & Testing
 
 Install golangci-lint ([installation options](https://golangci-lint.run/welcome/install/)):
