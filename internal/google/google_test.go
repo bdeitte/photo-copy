@@ -244,6 +244,61 @@ func TestRetryableDo_InvalidGrantFailsImmediately(t *testing.T) {
 	}
 }
 
+func TestRetryableDo_WrappedInvalidGrantFailsImmediately(t *testing.T) {
+	t.Setenv("PHOTO_COPY_TEST_MODE", "1")
+	calls := 0
+	c := &Client{
+		httpClient: &http.Client{
+			Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+				calls++
+				innerErr := &oauth2.RetrieveError{
+					ErrorCode: "invalid_grant",
+				}
+				return nil, fmt.Errorf("oauth2: token refresh failed: %w", innerErr)
+			}),
+		},
+		log: logging.New(false, nil),
+	}
+
+	_, err := c.retryableDo(context.Background(), func() (*http.Request, error) {
+		return http.NewRequest("GET", "http://example.com", nil)
+	})
+
+	if !errors.Is(err, errTokenExpired) {
+		t.Errorf("expected errTokenExpired for wrapped RetrieveError, got: %v", err)
+	}
+	if calls != 1 {
+		t.Errorf("expected 1 call (no retries), got %d", calls)
+	}
+}
+
+func TestRetryableDo_NonInvalidGrantRetries(t *testing.T) {
+	t.Setenv("PHOTO_COPY_TEST_MODE", "1")
+	calls := 0
+	c := &Client{
+		httpClient: &http.Client{
+			Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+				calls++
+				return nil, &oauth2.RetrieveError{
+					ErrorCode: "invalid_client",
+				}
+			}),
+		},
+		log: logging.New(false, nil),
+	}
+
+	_, err := c.retryableDo(context.Background(), func() (*http.Request, error) {
+		return http.NewRequest("GET", "http://example.com", nil)
+	})
+
+	if errors.Is(err, errTokenExpired) {
+		t.Error("non-invalid_grant error should not be treated as token expiry")
+	}
+	if calls != maxRetries+1 {
+		t.Errorf("expected %d calls (full retries), got %d", maxRetries+1, calls)
+	}
+}
+
 func TestCollectMediaFiles_SkipsDirectories(t *testing.T) {
 	tmpDir := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(tmpDir, "subdir"), 0755)

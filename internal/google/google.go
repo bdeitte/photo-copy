@@ -291,7 +291,7 @@ func (c *Client) retryableDo(ctx context.Context, buildReq func() (*http.Request
 				return nil, ctx.Err()
 			}
 			var retrieveErr *oauth2.RetrieveError
-			if errors.As(err, &retrieveErr) && strings.Contains(string(retrieveErr.Body), "invalid_grant") {
+			if errors.As(err, &retrieveErr) && retrieveErr.ErrorCode == "invalid_grant" {
 				c.log.Debug("OAuth error: %v", err)
 				return nil, errTokenExpired
 			}
