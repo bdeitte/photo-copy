@@ -74,10 +74,6 @@ Go CLI app using [cobra](https://github.com/spf13/cobra) for command structure. 
 - **iCloud Photos upload:** macOS only — imports into Photos.app via osxphotos, relies on iCloud Photos sync to upload to cloud. No cross-platform upload API exists.
 - **iCloud Photos authentication:** Requires Apple ID with 2FA. Session cookies expire ~2 months. Advanced Data Protection must be disabled.
 
-### Design docs
-
-Detailed design and implementation plans live in `plans/`.
-
 ## Feature overview
 
 Details on the features can be read in README.md
