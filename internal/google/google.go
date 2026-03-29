@@ -43,14 +43,14 @@ const (
 	minUploadInterval     = 2 * time.Second // Throttle uploads to avoid rate limiting
 )
 
-func getUploadURL() string {
+func uploadURL() string {
 	if base := os.Getenv("PHOTO_COPY_GOOGLE_API_URL"); base != "" {
 		return base + "/v1/uploads"
 	}
 	return defaultUploadURL
 }
 
-func getBatchCreateURL() string {
+func batchCreateURL() string {
 	if base := os.Getenv("PHOTO_COPY_GOOGLE_API_URL"); base != "" {
 		return base + "/v1/mediaItems:batchCreate"
 	}
@@ -290,7 +290,8 @@ func (c *Client) retryableDo(ctx context.Context, buildReq func() (*http.Request
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
-			if strings.Contains(strings.ToLower(err.Error()), "invalid_grant") {
+			var retrieveErr *oauth2.RetrieveError
+			if errors.As(err, &retrieveErr) && strings.Contains(string(retrieveErr.Body), "invalid_grant") {
 				c.log.Debug("OAuth error: %v", err)
 				return nil, errTokenExpired
 			}
@@ -337,7 +338,7 @@ func (c *Client) uploadBytes(ctx context.Context, filePath, filename string) (st
 	}
 
 	resp, err := c.retryableDo(ctx, func() (*http.Request, error) {
-		req, err := http.NewRequest("POST", getUploadURL(), bytes.NewReader(data))
+		req, err := http.NewRequest("POST", uploadURL(), bytes.NewReader(data))
 		if err != nil {
 			return nil, fmt.Errorf("creating request: %w", err)
 		}
@@ -385,7 +386,7 @@ func (c *Client) createMediaItem(ctx context.Context, uploadToken, filename stri
 	c.log.Debug("createMediaItem request body: %s", string(data))
 
 	resp, err := c.retryableDo(ctx, func() (*http.Request, error) {
-		req, err := http.NewRequest("POST", getBatchCreateURL(), bytes.NewReader(data))
+		req, err := http.NewRequest("POST", batchCreateURL(), bytes.NewReader(data))
 		if err != nil {
 			return nil, fmt.Errorf("creating request: %w", err)
 		}

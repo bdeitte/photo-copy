@@ -3,7 +3,6 @@ package google
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/briandeitte/photo-copy/internal/config"
 	"github.com/briandeitte/photo-copy/internal/logging"
+	"golang.org/x/oauth2"
 )
 
 func TestLoadUploadLog_Empty(t *testing.T) {
@@ -71,33 +71,33 @@ func newTestGoogleClient() *Client {
 	}
 }
 
-func TestGetUploadURL_Default(t *testing.T) {
-	got := getUploadURL()
+func TestUploadURL_Default(t *testing.T) {
+	got := uploadURL()
 	if got != "https://photoslibrary.googleapis.com/v1/uploads" {
-		t.Errorf("getUploadURL() = %q, want default", got)
+		t.Errorf("uploadURL() = %q, want default", got)
 	}
 }
 
-func TestGetUploadURL_EnvOverride(t *testing.T) {
+func TestUploadURL_EnvOverride(t *testing.T) {
 	t.Setenv("PHOTO_COPY_GOOGLE_API_URL", "http://localhost:9999")
-	got := getUploadURL()
+	got := uploadURL()
 	if got != "http://localhost:9999/v1/uploads" {
-		t.Errorf("getUploadURL() = %q, want override", got)
+		t.Errorf("uploadURL() = %q, want override", got)
 	}
 }
 
-func TestGetBatchCreateURL_Default(t *testing.T) {
-	got := getBatchCreateURL()
+func TestBatchCreateURL_Default(t *testing.T) {
+	got := batchCreateURL()
 	if got != "https://photoslibrary.googleapis.com/v1/mediaItems:batchCreate" {
-		t.Errorf("getBatchCreateURL() = %q, want default", got)
+		t.Errorf("batchCreateURL() = %q, want default", got)
 	}
 }
 
-func TestGetBatchCreateURL_EnvOverride(t *testing.T) {
+func TestBatchCreateURL_EnvOverride(t *testing.T) {
 	t.Setenv("PHOTO_COPY_GOOGLE_API_URL", "http://localhost:9999")
-	got := getBatchCreateURL()
+	got := batchCreateURL()
 	if got != "http://localhost:9999/v1/mediaItems:batchCreate" {
-		t.Errorf("getBatchCreateURL() = %q, want override", got)
+		t.Errorf("batchCreateURL() = %q, want override", got)
 	}
 }
 
@@ -220,7 +220,10 @@ func TestRetryableDo_InvalidGrantFailsImmediately(t *testing.T) {
 		httpClient: &http.Client{
 			Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 				calls++
-				return nil, fmt.Errorf("oauth2: \"invalid_grant\" \"Token has been expired or revoked.\"")
+				return nil, &oauth2.RetrieveError{
+					Body:      []byte(`{"error":"invalid_grant","error_description":"Token has been expired or revoked."}`),
+					ErrorCode: "invalid_grant",
+				}
 			}),
 		},
 		log: logging.New(false, nil),
