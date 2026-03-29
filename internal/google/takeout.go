@@ -2,6 +2,7 @@ package google
 
 import (
 	"archive/zip"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +15,8 @@ import (
 	"github.com/schollz/progressbar/v3"
 )
 
+// ImportTakeout extracts media files from Google Takeout zip archives in takeoutDir
+// into outputDir, skipping non-media files and JSON metadata.
 func ImportTakeout(takeoutDir, outputDir string, log *logging.Logger) (*transfer.Result, error) {
 	if log == nil {
 		log = logging.New(false, nil)
@@ -91,11 +94,15 @@ func extractMediaFromZip(zipPath, outputDir string, log *logging.Logger, result 
 			ext := filepath.Ext(name)
 			for i := 1; ; i++ {
 				destPath = filepath.Join(outputDir, fmt.Sprintf("%s_%d%s", base, i, ext))
-				if _, err := os.Stat(destPath); err != nil {
+				if _, err := os.Stat(destPath); errors.Is(err, os.ErrNotExist) {
 					break
+				} else if err != nil {
+					return fmt.Errorf("checking destination %s: %w", destPath, err)
 				}
 			}
 			log.Debug("duplicate filename %s, saving as %s", name, filepath.Base(destPath))
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("checking destination %s: %w", destPath, err)
 		}
 
 		log.Debug("extracting %s -> %s", f.Name, destPath)
