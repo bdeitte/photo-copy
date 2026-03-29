@@ -107,6 +107,9 @@ func (c *Client) throttle() {
 // maxThrottleInterval is the maximum adaptive throttle interval (30 seconds between requests).
 const maxThrottleInterval = 30 * time.Second
 
+// maxRateLimitBackoff is the maximum backoff between retries for 429 responses (5 minutes).
+const maxRateLimitBackoff = 5 * time.Minute
+
 // onRateLimited increases the throttle interval when a 429 is received.
 func (c *Client) onRateLimited() {
 	newInterval := c.throttleInterval * 2
@@ -202,7 +205,11 @@ func (c *Client) retryDelay(attempt int, resp *http.Response) time.Duration {
 			return time.Duration(seconds) * time.Second
 		}
 	}
-	return baseRetryDelay * time.Duration(math.Pow(2, float64(attempt)))
+	delay := baseRetryDelay * time.Duration(math.Pow(2, float64(attempt)))
+	if delay > maxRateLimitBackoff {
+		delay = maxRateLimitBackoff
+	}
+	return delay
 }
 
 // buildAPIURL constructs a Flickr REST API URL (unsigned, for non-authenticated calls).

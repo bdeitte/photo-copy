@@ -257,6 +257,24 @@ func TestRetryDelay_InvalidRetryAfterFallsBackToExponential(t *testing.T) {
 	}
 }
 
+func TestRetryDelay_CapsAt5MinutesForHighAttempts(t *testing.T) {
+	t.Setenv("PHOTO_COPY_TEST_MODE", "")
+	c := newTestClient()
+	resp := &http.Response{Header: http.Header{}}
+
+	// At attempt 20, uncapped exponential would be enormous.
+	// With 429 cap, it should be maxRateLimitBackoff (5 minutes).
+	delay := c.retryDelay(20, resp)
+
+	// Without the cap, 2s * 2^20 = ~2097152s. With cap, should be 5m.
+	if delay > 5*time.Minute {
+		t.Errorf("expected delay capped at 5m, got %v", delay)
+	}
+	if delay < 5*time.Minute {
+		t.Errorf("expected delay to reach 5m cap at attempt 20, got %v", delay)
+	}
+}
+
 func TestRetryableGet_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
