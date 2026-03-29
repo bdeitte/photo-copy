@@ -20,6 +20,7 @@ var supportedExtensions = map[string]bool{
 	".mkv":  true,
 }
 
+// IsSupportedFile reports whether filename has a supported media file extension.
 func IsSupportedFile(filename string) bool {
 	ext := strings.ToLower(filepath.Ext(filename))
 	return supportedExtensions[ext]

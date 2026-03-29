@@ -57,7 +57,7 @@ func generateNonce() string {
 }
 
 // GetRequestToken initiates the OAuth 1.0a flow by obtaining a request token.
-func GetRequestToken(cfg *config.FlickrConfig) (string, string, string, error) {
+func GetRequestToken(cfg *config.FlickrConfig) (token, tokenSecret, authURL string, err error) {
 	params := map[string]string{
 		"oauth_callback": "oob",
 	}
@@ -89,9 +89,9 @@ func GetRequestToken(cfg *config.FlickrConfig) (string, string, string, error) {
 		return "", "", "", fmt.Errorf("parsing token response: %w", err)
 	}
 
-	token := vals.Get("oauth_token")
-	tokenSecret := vals.Get("oauth_token_secret")
-	authURL := "https://www.flickr.com/services/oauth/authorize?oauth_token=" + token
+	token = vals.Get("oauth_token")
+	tokenSecret = vals.Get("oauth_token_secret")
+	authURL = "https://www.flickr.com/services/oauth/authorize?oauth_token=" + token
 
 	return token, tokenSecret, authURL, nil
 }
