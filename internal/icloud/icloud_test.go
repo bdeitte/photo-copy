@@ -153,10 +153,12 @@ func TestParseDownloadLine(t *testing.T) {
 		{"", ""},
 	}
 	for _, tt := range tests {
-		got := parseDownloadLine(tt.line)
-		if got != tt.expected {
-			t.Errorf("parseDownloadLine(%q) = %q, want %q", tt.line, got, tt.expected)
-		}
+		t.Run(tt.line, func(t *testing.T) {
+			got := parseDownloadLine(tt.line)
+			if got != tt.expected {
+				t.Errorf("parseDownloadLine(%q) = %q, want %q", tt.line, got, tt.expected)
+			}
+		})
 	}
 }
 
@@ -218,10 +220,12 @@ func TestParsePhotoCount(t *testing.T) {
 		{"", 0},
 	}
 	for _, tt := range tests {
-		got := parsePhotoCount(tt.line)
-		if got != tt.expected {
-			t.Errorf("parsePhotoCount(%q) = %d, want %d", tt.line, got, tt.expected)
-		}
+		t.Run(tt.line, func(t *testing.T) {
+			got := parsePhotoCount(tt.line)
+			if got != tt.expected {
+				t.Errorf("parsePhotoCount(%q) = %d, want %d", tt.line, got, tt.expected)
+			}
+		})
 	}
 }
 
@@ -322,10 +326,12 @@ func TestParseImportLine(t *testing.T) {
 		{"Finished importing batch", ""},
 	}
 	for _, tt := range tests {
-		got := parseImportLine(tt.line)
-		if got != tt.expected {
-			t.Errorf("parseImportLine(%q) = %q, want %q", tt.line, got, tt.expected)
-		}
+		t.Run(tt.line, func(t *testing.T) {
+			got := parseImportLine(tt.line)
+			if got != tt.expected {
+				t.Errorf("parseImportLine(%q) = %q, want %q", tt.line, got, tt.expected)
+			}
+		})
 	}
 }
 

@@ -3,6 +3,7 @@ package google
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -148,10 +149,12 @@ func TestGoogleRetryDelay_ExponentialBackoff(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := c.retryDelay(tt.attempt, nil)
-		if got != tt.expected {
-			t.Errorf("retryDelay(%d) = %v, want %v", tt.attempt, got, tt.expected)
-		}
+		t.Run(fmt.Sprintf("attempt_%d", tt.attempt), func(t *testing.T) {
+			got := c.retryDelay(tt.attempt, nil)
+			if got != tt.expected {
+				t.Errorf("retryDelay(%d) = %v, want %v", tt.attempt, got, tt.expected)
+			}
+		})
 	}
 }
 
