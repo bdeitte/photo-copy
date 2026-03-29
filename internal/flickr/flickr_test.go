@@ -602,3 +602,109 @@ func TestOnRequestSuccess_DoesNotGoBelowMin(t *testing.T) {
 		t.Errorf("expected interval >= %v, got %v", minRequestInterval, c.throttleInterval)
 	}
 }
+
+func TestDownload_404FallbackToAlternativeSize(t *testing.T) {
+	t.Setenv("PHOTO_COPY_TEST_MODE", "1")
+
+	originalHits := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		method := q.Get("method")
+
+		switch {
+		case method == "flickr.people.getPhotos":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"photos":{"page":1,"pages":1,"total":1,"photo":[{"id":"111","secret":"abc","title":"test","datetaken":"2024-01-01 00:00:00","dateupload":"1704067200","description":{"_content":""},"tags":""}]},"stat":"ok"}`))
+
+		case method == "flickr.photos.getSizes":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"sizes":{"size":[{"label":"Original","source":"` + "http://" + r.Host + `/download/original.jpg"},{"label":"Large","source":"` + "http://" + r.Host + `/download/large.jpg"}]},"stat":"ok"}`))
+
+		case r.URL.Path == "/download/original.jpg":
+			originalHits++
+			w.WriteHeader(http.StatusNotFound)
+
+		case r.URL.Path == "/download/large.jpg":
+			_, _ = w.Write([]byte("fallback image data"))
+
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("PHOTO_COPY_FLICKR_API_URL", server.URL)
+	outputDir := t.TempDir()
+
+	c := newTestClient()
+	c.cfg.APIKey = "test-key"
+	c.http = server.Client()
+
+	result, err := c.Download(context.Background(), outputDir, 0, true, nil)
+	if err != nil {
+		t.Fatalf("Download failed: %v", err)
+	}
+
+	if result.Succeeded != 1 {
+		t.Errorf("expected 1 succeeded, got %d", result.Succeeded)
+	}
+	if result.Failed != 0 {
+		t.Errorf("expected 0 failed, got %d", result.Failed)
+	}
+	if originalHits != 1 {
+		t.Errorf("expected original URL to be hit once, got %d", originalHits)
+	}
+}
+
+func TestDownload_Non404ErrorDoesNotFallback(t *testing.T) {
+	t.Setenv("PHOTO_COPY_TEST_MODE", "1")
+
+	fallbackHits := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		method := q.Get("method")
+
+		switch {
+		case method == "flickr.people.getPhotos":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"photos":{"page":1,"pages":1,"total":1,"photo":[{"id":"222","secret":"def","title":"test2","datetaken":"2024-01-01 00:00:00","dateupload":"1704067200","description":{"_content":""},"tags":""}]},"stat":"ok"}`))
+
+		case method == "flickr.photos.getSizes":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"sizes":{"size":[{"label":"Original","source":"` + "http://" + r.Host + `/download/original.jpg"},{"label":"Large","source":"` + "http://" + r.Host + `/download/large.jpg"}]},"stat":"ok"}`))
+
+		case r.URL.Path == "/download/original.jpg":
+			w.WriteHeader(http.StatusForbidden)
+
+		case r.URL.Path == "/download/large.jpg":
+			fallbackHits++
+			_, _ = w.Write([]byte("fallback data"))
+
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("PHOTO_COPY_FLICKR_API_URL", server.URL)
+	outputDir := t.TempDir()
+
+	c := newTestClient()
+	c.cfg.APIKey = "test-key"
+	c.http = server.Client()
+
+	result, err := c.Download(context.Background(), outputDir, 0, true, nil)
+	if err != nil {
+		t.Fatalf("Download failed: %v", err)
+	}
+
+	if result.Failed != 1 {
+		t.Errorf("expected 1 failed (403 should not fallback), got %d", result.Failed)
+	}
+	if result.Succeeded != 0 {
+		t.Errorf("expected 0 succeeded, got %d", result.Succeeded)
+	}
+	if fallbackHits != 0 {
+		t.Errorf("expected fallback URL to not be hit, got %d hits", fallbackHits)
+	}
+}
