@@ -109,13 +109,13 @@ Download works on all platforms. Upload requires macOS with Photos.app and iClou
 ./photo-copy icloud upload --date-range 2022-01-01:2023-12-31 ../photos
 ```
 
-**Notes on download:**
+**Notes on iCloud download:**
 - Download requires Apple ID with 2FA. Run `photo-copy config icloud` to authenticate.
 - Session cookies expire approximately every 2 months — re-run config to re-authenticate.
 - Advanced Data Protection must be disabled for downloads.
 - icloudpd for downloads bundled for Linux amd64/arm64, macOS amd64 (Apple Silicon runs via Rosetta 2), and Windows amd64. Other platforms: `pipx install icloudpd`.
 
-**Notes on upload:**
+**Notes on iCloud upload:**
 - Upload does not require `config icloud` — it imports files directly into Photos.app via osxphotos. If iCloud Photos sync is enabled in System Settings, they automatically upload to iCloud.
 - `--no-metadata` has no effect on iCloud commands.
 - osxphotos for uploads bundled for macOS ARM64 only. Intel Macs: `pipx install osxphotos`.
