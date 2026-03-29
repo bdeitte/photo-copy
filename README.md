@@ -7,25 +7,15 @@
 
 ## Overview
 
-photo-copy copies photos and videos between cloud services and local directories. Each service has its own `download` and `upload` command that transfers between a local directory and that service. To copy between two services (e.g., Flickr to S3), download to a local directory first, then upload from that directory — there is no direct service-to-service transfer.
+photo-copy copies photos and videos between cloud services and local directories. Each service has its own `download` and `upload` command that transfers between a local directory and that service. To copy between two services (e.g., Flickr to S3), download to a local directory first, then upload from that directory.
 
-## Setup
+## Quick Start
 
 > **Note:** This project is in active development. Google Photos and Flickr support has been well-tested and is in good shape. S3 and iCloud support is still in an alpha state.
 
 Requires Go 1.25+
 
-```bash
-# macOS / Linux
-./setup.sh
-
-# Windows
-setup.bat
-```
-
-## Quick Start
-
-1. Run `./setup.sh` (or `setup.bat` on Windows) to build the binary and verify tool dependencies.
+1. Run `./setup.sh` (or `setup.bat` on Windows)
 2. Configure credentials for the service you want to use (e.g., `./photo-copy config flickr`). Not all commands require config — see the table below.
 3. Download or upload: `./photo-copy <service> download <dir>` or `./photo-copy <service> upload <dir>`. (Google Photos downloads use `google import-takeout` instead — see [Google Photos](#google-photos).)
 
@@ -38,7 +28,7 @@ setup.bat
 | S3 | Yes | Yes | Yes (AWS creds) | — | File modification time (rclone) |
 | iCloud | Yes | macOS only | Download only | Upload requires Photos.app | icloudpd date (download); EXIF/MP4/file mod time (upload) |
 
-## Usage
+## Usage Details
 
 ### Configure credentials
 
@@ -207,8 +197,8 @@ Add `--debug` to any command for verbose logging:
 
 ## Development
 
-See [AGENTS.md](AGENTS.md#architecture) for architecture details on the project.
-
+You can read [architecture details](CLAUDE.md#architecture) on the project.
+
 ### Linting & Testing
 
 Install golangci-lint ([installation options](https://golangci-lint.run/welcome/install/)):
