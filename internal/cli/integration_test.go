@@ -1085,8 +1085,12 @@ func createTestZip(t *testing.T, dir, name string, files map[string]string) {
 		}
 		_, _ = fw.Write([]byte(content))
 	}
-	_ = w.Close()
-	_ = f.Close()
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestGoogleImportTakeout_HappyPath(t *testing.T) {

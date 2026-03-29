@@ -22,8 +22,12 @@ func createTestZip(t *testing.T, dir string, files map[string]string) string {
 		}
 		_, _ = fw.Write([]byte(content))
 	}
-	_ = w.Close()
-	_ = f.Close()
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 	return zipPath
 }
 
