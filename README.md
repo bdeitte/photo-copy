@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="photocopy.png" alt="photo copy logo"><br><br>
+  <img src="photocopy.png" alt="photo copy logo"><br>
   <b>Copy and backup your photos and videos.</b><br>
   <b>Copy between iCloud Photos, Google Photos, Flickr, AWS S3, and local directories.</b><br>
   <a href="https://github.com/bdeitte/photo-copy/actions/workflows/ci.yml"><img src="https://github.com/bdeitte/photo-copy/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -21,12 +21,12 @@ Requires Go 1.25+
 
 ### Service capabilities
 
-| Service | Download | Upload | Config required | Platform limits | Date source (filtering) |
-|---------|----------|--------|-----------------|-----------------|------------------------|
-| Flickr | Yes | Yes | Yes (OAuth) | — | API `date_taken` / `date_upload` (download); EXIF/MP4/file mod time (upload) |
-| Google Photos | Takeout import only | Yes | Upload only (OAuth) | 10,000 uploads/day | EXIF/MP4/file mod time (upload) |
-| S3 | Yes | Yes | Yes (AWS creds) | — | File modification time (rclone) |
-| iCloud | Yes | macOS only | Download only | Upload requires Photos.app | icloudpd date (download); EXIF/MP4/file mod time (upload) |
+| Service | Download | Upload | Config required | Platform limits |
+|---------|----------|--------|-----------------|-----------------|
+| Flickr | Yes | Yes | Yes (OAuth) | — |
+| Google Photos | Takeout import only | Yes | Upload only (OAuth) | 10,000 uploads/day |
+| S3 | Yes | Yes | Yes (AWS creds) | — |
+| iCloud | Yes | macOS only | Download only | Upload requires Photos.app |
 
 ## Usage Details
 
