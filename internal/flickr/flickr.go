@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -40,6 +41,16 @@ const (
 	defaultUploadURL  = "https://up.flickr.com/services/upload/"
 	transferLogFile   = "transfer.log"
 )
+
+// HTTPStatusError records a non-OK HTTP status code from a download.
+type HTTPStatusError struct {
+	StatusCode int
+	URL        string
+}
+
+func (e *HTTPStatusError) Error() string {
+	return fmt.Sprintf("HTTP %d downloading %s", e.StatusCode, e.URL)
+}
 
 func apiURL() string {
 	if u := os.Getenv("PHOTO_COPY_FLICKR_API_URL"); u != "" {
@@ -437,14 +448,15 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 
 			// Try downloading with fallback to alternative sizes on 404.
 			downloadErr := c.downloadFile(ctx, origResult.URL, filepath.Join(outputDir, filename))
-			if downloadErr != nil && len(candidates) > 1 && strings.Contains(downloadErr.Error(), "HTTP 404") {
+			var httpErr *HTTPStatusError
+			if downloadErr != nil && len(candidates) > 1 && errors.As(downloadErr, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
 				for i := 1; i < len(candidates); i++ {
 					alt := candidates[i]
 					c.log.Info("download 404 for %s (%s), trying fallback: %s", photo.ID, origResult.Label, alt.Label)
 					ext = extensionFromURL(alt.URL, defaultExtForLabel(alt.Label))
 					filename = fmt.Sprintf("%s_%s%s", photo.ID, photo.Secret, ext)
 					downloadErr = c.downloadFile(ctx, alt.URL, filepath.Join(outputDir, filename))
-					if downloadErr == nil || !strings.Contains(downloadErr.Error(), "HTTP 404") {
+					if downloadErr == nil || !errors.As(downloadErr, &httpErr) || httpErr.StatusCode != http.StatusNotFound {
 						break
 					}
 				}
@@ -639,7 +651,7 @@ func (c *Client) downloadFile(ctx context.Context, fileURL, destPath string) (er
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d downloading %s", resp.StatusCode, fileURL)
+		return &HTTPStatusError{StatusCode: resp.StatusCode, URL: fileURL}
 	}
 
 	f, err := os.Create(destPath)
@@ -812,7 +824,10 @@ func (c *Client) uploadFile(ctx context.Context, filePath string) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		c.log.Debug("reading upload response body: %v", readErr)
+	}
 	c.log.Debug("HTTP response: %d %s", resp.StatusCode, resp.Status)
 	c.log.Debug("upload response body: %s", string(respBody))
 
