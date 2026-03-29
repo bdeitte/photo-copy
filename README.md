@@ -23,9 +23,9 @@ Requires Go 1.25+
 
 | Service | Download | Upload | Config required | Platform limits |
 |---------|----------|--------|-----------------|-----------------|
-| Flickr | Yes | Yes | Yes (OAuth) | — |
-| Google Photos | Takeout import only | Yes | Upload only (OAuth) | 10,000 uploads/day |
-| S3 | Yes | Yes | Yes (AWS creds) | — |
+| Flickr | Yes | Yes | Yes | — |
+| Google Photos | Yes, through Takeout import | Yes | Upload only | 10,000 uploads/day |
+| S3 | Yes | Yes | Yes | — |
 | iCloud | Yes | macOS only | Download only | Upload requires Photos.app |
 
 ## Usage Details
