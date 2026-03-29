@@ -220,8 +220,9 @@ func (c *Client) retryDelay(attempt int, resp *http.Response) time.Duration {
 			return time.Duration(seconds) * time.Second
 		}
 	}
-	// Cap attempt to avoid overflow: 2s * 2^27 ≈ 4.5 min, 2s * 2^28 ≈ 9 min.
-	// Any attempt >= 28 would exceed maxRateLimitBackoff anyway.
+	// Guard against time.Duration (int64 nanoseconds) overflow.
+	// baseRetryDelay * (1<<attempt) overflows int64 around attempt 33.
+	// The cap kicks in much earlier (attempt 8), so 28 is conservative.
 	if attempt >= 28 {
 		return maxRateLimitBackoff
 	}

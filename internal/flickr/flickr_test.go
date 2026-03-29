@@ -262,9 +262,21 @@ func TestRetryDelay_CapsAt5MinutesForHighAttempts(t *testing.T) {
 	c := newTestClient()
 	resp := &http.Response{Header: http.Header{}}
 
-	// Test various high attempt counts including values that would overflow
-	// time.Duration (int64) if not handled: 2s * 2^40 overflows int64.
-	for _, attempt := range []int{20, 40, 100, 1000} {
+	// Attempt 7: 2s * 2^7 = 256s (under 5m cap, should NOT be capped)
+	delay7 := c.retryDelay(7, resp)
+	if delay7 != 256*time.Second {
+		t.Errorf("attempt 7: expected 256s, got %v", delay7)
+	}
+
+	// Attempt 8: 2s * 2^8 = 512s (over 5m cap, should be capped)
+	delay8 := c.retryDelay(8, resp)
+	if delay8 != maxRateLimitBackoff {
+		t.Errorf("attempt 8: expected %v, got %v", maxRateLimitBackoff, delay8)
+	}
+
+	// High attempts including values around and beyond the int64 overflow
+	// boundary (~attempt 33) must all return the cap.
+	for _, attempt := range []int{20, 32, 33, 40, 100, 1000} {
 		delay := c.retryDelay(attempt, resp)
 		if delay != maxRateLimitBackoff {
 			t.Errorf("attempt %d: expected %v, got %v", attempt, maxRateLimitBackoff, delay)
