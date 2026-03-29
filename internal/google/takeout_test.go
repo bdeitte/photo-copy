@@ -20,7 +20,9 @@ func createTestZip(t *testing.T, dir string, files map[string]string) string {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, _ = fw.Write([]byte(content))
+		if _, err := fw.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
@@ -100,5 +102,46 @@ func TestImportTakeout_MultipleZips(t *testing.T) {
 
 	if result.Succeeded != 2 {
 		t.Fatalf("expected 2 files, got %d", result.Succeeded)
+	}
+}
+
+func TestImportTakeout_DuplicateFilenameRenames(t *testing.T) {
+	takeoutDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	// Pre-create a file that will collide with the zip's photo.jpg
+	if err := os.WriteFile(filepath.Join(outputDir, "photo.jpg"), []byte("existing"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	createTestZip(t, takeoutDir, map[string]string{
+		"Google Photos/Album/photo.jpg": "new data",
+	})
+
+	result, err := ImportTakeout(takeoutDir, outputDir, nil)
+	if err != nil {
+		t.Fatalf("import failed: %v", err)
+	}
+
+	if result.Succeeded != 1 {
+		t.Fatalf("expected 1 file extracted, got %d", result.Succeeded)
+	}
+
+	// Original file should be untouched
+	data, err := os.ReadFile(filepath.Join(outputDir, "photo.jpg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "existing" {
+		t.Errorf("original file was overwritten, got %q", string(data))
+	}
+
+	// New file should be renamed to photo_1.jpg
+	data, err = os.ReadFile(filepath.Join(outputDir, "photo_1.jpg"))
+	if err != nil {
+		t.Fatal("photo_1.jpg not found — duplicate rename did not work")
+	}
+	if string(data) != "new data" {
+		t.Errorf("renamed file has wrong content: %q", string(data))
 	}
 }
