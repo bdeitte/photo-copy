@@ -7,7 +7,7 @@
 
 ## Overview
 
-photo-copy copies photos and videos between cloud services and local directories. Each service has `download` and `upload` commands that transfer between a local directory and that service. To copy between two services (e.g., Flickr to S3), download to a local directory first, then upload from that directory.
+photo-copy copies photos and videos between cloud services and local directories. Each service has `download` and `upload` commands that transfer between a local directory and that service (`google download` takes a Takeout zip directory and output directory — see [Google Photos](#google-photos)). To copy between two services (e.g., Flickr to S3), download to a local directory first, then upload from that directory.
 
 ## Quick Start
 
@@ -17,7 +17,7 @@ Requires Go 1.25+
 
 1. Run `./setup.sh` (or `setup.bat` on Windows)
 2. Configure credentials for the service you want to use (e.g., `./photo-copy config flickr`). Not all commands require config — see the table below.
-3. Download or upload: `./photo-copy <service> download <dir>` or `./photo-copy <service> upload <dir>`.
+3. Download or upload: `./photo-copy <service> download <dir>` or `./photo-copy <service> upload <dir>`. (Google Photos download takes two directories: `./photo-copy google download <takeout-dir> <output-dir>` — see [Google Photos](#google-photos).)
 
 ### Service capabilities
 
