@@ -91,7 +91,7 @@ func GetRequestToken(cfg *config.FlickrConfig) (token, tokenSecret, authURL stri
 
 	token = vals.Get("oauth_token")
 	tokenSecret = vals.Get("oauth_token_secret")
-	authURL = "https://www.flickr.com/services/oauth/authorize?oauth_token=" + token
+	authURL = "https://www.flickr.com/services/oauth/authorize?perms=write&oauth_token=" + token
 
 	return token, tokenSecret, authURL, nil
 }
