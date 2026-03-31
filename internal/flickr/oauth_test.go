@@ -1,6 +1,9 @@
 package flickr
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/briandeitte/photo-copy/internal/config"
@@ -169,6 +172,39 @@ func TestOAuthSign_EmptyParams(t *testing.T) {
 
 	if params["oauth_signature"] != sig {
 		t.Errorf("returned signature %q != params signature %q", sig, params["oauth_signature"])
+	}
+}
+
+func TestGetRequestToken_AuthURLIncludesPermsWrite(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-www-form-urlencoded")
+		_, _ = w.Write([]byte("oauth_token=test-req-token&oauth_token_secret=test-req-secret&oauth_callback_confirmed=true"))
+	}))
+	defer server.Close()
+
+	t.Setenv("PHOTO_COPY_FLICKR_OAUTH_URL", server.URL)
+
+	cfg := &config.FlickrConfig{
+		APIKey:    "test-key",
+		APISecret: "test-secret",
+	}
+
+	token, tokenSecret, authURL, err := GetRequestToken(cfg)
+	if err != nil {
+		t.Fatalf("GetRequestToken failed: %v", err)
+	}
+
+	if token != "test-req-token" {
+		t.Errorf("token = %q, want %q", token, "test-req-token")
+	}
+	if tokenSecret != "test-req-secret" {
+		t.Errorf("tokenSecret = %q, want %q", tokenSecret, "test-req-secret")
+	}
+	if !strings.Contains(authURL, "perms=write") {
+		t.Errorf("authURL missing perms=write: %s", authURL)
+	}
+	if !strings.Contains(authURL, "oauth_token=test-req-token") {
+		t.Errorf("authURL missing oauth_token: %s", authURL)
 	}
 }
 

@@ -38,9 +38,10 @@ const (
 )
 
 const (
-	defaultAPIBaseURL = "https://api.flickr.com/services/rest/"
-	defaultUploadURL  = "https://up.flickr.com/services/upload/"
-	transferLogFile   = "transfer.log"
+	defaultAPIBaseURL  = "https://api.flickr.com/services/rest/"
+	defaultUploadURL   = "https://up.flickr.com/services/upload/"
+	defaultOAuthURL    = "https://www.flickr.com/services/oauth"
+	transferLogFile    = "transfer.log"
 )
 
 // HTTPStatusError records a non-OK HTTP status code from a download.
@@ -65,6 +66,13 @@ func flickrUploadURL() string {
 		return u
 	}
 	return defaultUploadURL
+}
+
+func oauthBaseURL() string {
+	if u := os.Getenv("PHOTO_COPY_FLICKR_OAUTH_URL"); u != "" {
+		return u
+	}
+	return defaultOAuthURL
 }
 
 func isTestMode() bool {

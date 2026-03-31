@@ -67,14 +67,15 @@ func GetRequestToken(cfg *config.FlickrConfig) (token, tokenSecret, authURL stri
 		APISecret: cfg.APISecret,
 	}
 
-	oauthSign("GET", "https://www.flickr.com/services/oauth/request_token", params, tempCfg)
+	base := oauthBaseURL()
+	oauthSign("GET", base+"/request_token", params, tempCfg)
 
 	v := url.Values{}
 	for k, val := range params {
 		v.Set(k, val)
 	}
 
-	resp, err := http.Get("https://www.flickr.com/services/oauth/request_token?" + v.Encode())
+	resp, err := http.Get(base + "/request_token?" + v.Encode())
 	if err != nil {
 		return "", "", "", err
 	}
@@ -91,7 +92,7 @@ func GetRequestToken(cfg *config.FlickrConfig) (token, tokenSecret, authURL stri
 
 	token = vals.Get("oauth_token")
 	tokenSecret = vals.Get("oauth_token_secret")
-	authURL = "https://www.flickr.com/services/oauth/authorize?perms=write&oauth_token=" + token
+	authURL = base + "/authorize?perms=write&oauth_token=" + token
 
 	return token, tokenSecret, authURL, nil
 }
@@ -109,14 +110,15 @@ func ExchangeToken(cfg *config.FlickrConfig, requestToken, requestTokenSecret, v
 		"oauth_verifier": verifier,
 	}
 
-	oauthSign("GET", "https://www.flickr.com/services/oauth/access_token", params, tempCfg)
+	base := oauthBaseURL()
+	oauthSign("GET", base+"/access_token", params, tempCfg)
 
 	v := url.Values{}
 	for k, val := range params {
 		v.Set(k, val)
 	}
 
-	resp, err := http.Get("https://www.flickr.com/services/oauth/access_token?" + v.Encode())
+	resp, err := http.Get(base + "/access_token?" + v.Encode())
 	if err != nil {
 		return "", "", err
 	}
