@@ -208,6 +208,38 @@ func TestGetRequestToken_AuthURLIncludesPermsWrite(t *testing.T) {
 	}
 }
 
+func TestGetRequestToken_TrailingSlashInOAuthURL(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify the request path doesn't have a double slash
+		if strings.Contains(r.URL.Path, "//") {
+			t.Errorf("request path contains double slash: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/x-www-form-urlencoded")
+		_, _ = w.Write([]byte("oauth_token=tok123&oauth_token_secret=sec456&oauth_callback_confirmed=true"))
+	}))
+	defer server.Close()
+
+	// Set the OAuth URL with a trailing slash
+	t.Setenv("PHOTO_COPY_FLICKR_OAUTH_URL", server.URL+"/")
+
+	cfg := &config.FlickrConfig{
+		APIKey:    "test-key",
+		APISecret: "test-secret",
+	}
+
+	_, _, authURL, err := GetRequestToken(cfg)
+	if err != nil {
+		t.Fatalf("GetRequestToken failed: %v", err)
+	}
+
+	if strings.Contains(authURL, "//authorize") {
+		t.Errorf("authURL has double slash before authorize: %s", authURL)
+	}
+	if !strings.Contains(authURL, "/authorize?") {
+		t.Errorf("authURL missing /authorize path: %s", authURL)
+	}
+}
+
 func TestGenerateNonce(t *testing.T) {
 	nonce := generateNonce()
 	if len(nonce) != 32 {

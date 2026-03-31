@@ -69,10 +69,11 @@ func flickrUploadURL() string {
 }
 
 func oauthBaseURL() string {
+	base := defaultOAuthURL
 	if u := os.Getenv("PHOTO_COPY_FLICKR_OAUTH_URL"); u != "" {
-		return u
+		base = u
 	}
-	return defaultOAuthURL
+	return strings.TrimRight(base, "/")
 }
 
 func isTestMode() bool {
