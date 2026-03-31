@@ -841,3 +841,62 @@ func TestDownload_XMLPermissionDeniedNoRetry(t *testing.T) {
 		t.Errorf("expected getSizes to be called exactly once (no retries for permanent XML errors), got %d", getSizesHits)
 	}
 }
+
+func TestDownload_TransientXMLErrorIsRetried(t *testing.T) {
+	t.Setenv("PHOTO_COPY_TEST_MODE", "1")
+
+	getSizesHits := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		method := q.Get("method")
+
+		switch method {
+		case "flickr.people.getPhotos":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"photos":{"page":1,"pages":1,"total":1,"photo":[{"id":"444","secret":"jkl","title":"transient test","datetaken":"2024-01-01 00:00:00","dateupload":"1704067200","description":{"_content":""},"tags":""}]},"stat":"ok"}`))
+
+		case "flickr.photos.getSizes":
+			getSizesHits++
+			if getSizesHits <= 2 {
+				// First two calls return transient XML error (code 105 = service unavailable)
+				w.Header().Set("Content-Type", "text/xml; charset=utf-8")
+				_, _ = w.Write([]byte(`<?xml version="1.0" encoding="utf-8" ?>
+<rsp stat="fail">
+    <err code="105" msg="Service currently unavailable" />
+</rsp>`))
+				return
+			}
+			// Third call succeeds
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"sizes":{"size":[{"label":"Original","source":"` + "http://" + r.Host + `/download/original.jpg"}]},"stat":"ok"}`))
+
+		default:
+			if r.URL.Path == "/download/original.jpg" {
+				_, _ = w.Write([]byte("image data"))
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("PHOTO_COPY_FLICKR_API_URL", server.URL)
+	outputDir := t.TempDir()
+
+	c := newTestClient()
+	c.cfg.APIKey = "test-key"
+	c.http = server.Client()
+
+	result, err := c.Download(context.Background(), outputDir, 0, true, nil)
+	if err != nil {
+		t.Fatalf("Download failed: %v", err)
+	}
+
+	if result.Succeeded != 1 {
+		t.Errorf("expected 1 succeeded after transient retries, got %d", result.Succeeded)
+	}
+	// getSizes should be called 3 times: 2 transient failures + 1 success
+	if getSizesHits != 3 {
+		t.Errorf("expected getSizes to be called 3 times (2 retries + 1 success), got %d", getSizesHits)
+	}
+}

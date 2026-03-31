@@ -71,6 +71,28 @@ func isTestMode() bool {
 	return os.Getenv("PHOTO_COPY_TEST_MODE") != ""
 }
 
+// isFlickrPermanentError returns true for Flickr API error codes that are permanent
+// and should not be retried. Transient errors like "Service currently unavailable"
+// (code 105) are not in this list and will be retried.
+func isFlickrPermanentError(code int) bool {
+	switch code {
+	case 1, // Photo/resource not found
+		2,  // Permission denied
+		95, // SSL required
+		96, // Invalid signature
+		97, // Missing signature
+		98, // Login failed / Invalid auth token
+		99, // Insufficient permissions
+		100, // Invalid API key
+		111, // Format not found
+		112, // Method not found
+		116: // Bad URL found
+		return true
+	default:
+		return false
+	}
+}
+
 // Client provides Flickr API operations.
 type Client struct {
 	cfg             *config.FlickrConfig
@@ -288,8 +310,9 @@ func (c *Client) signedAPIGet(ctx context.Context, method string, extra map[stri
 			if readErr == nil && len(bodyBytes) > 0 {
 				bodySnippet = string(bodyBytes)
 			}
-			// Check if this is a structured Flickr XML error response (e.g. permission denied).
-			// These are permanent errors — retrying won't help.
+			// Check if this is a structured Flickr XML error response.
+			// Only skip retries for known permanent errors (permission, auth, not found).
+			// Transient errors like "Service currently unavailable" (code 105) should still retry.
 			if strings.Contains(ct, "xml") && len(bodyBytes) > 0 {
 				var rsp struct {
 					Stat string `xml:"stat,attr"`
@@ -299,7 +322,9 @@ func (c *Client) signedAPIGet(ctx context.Context, method string, extra map[stri
 					} `xml:"err"`
 				}
 				if xmlErr := xml.Unmarshal(bodyBytes, &rsp); xmlErr == nil && rsp.Stat == "fail" {
-					return nil, fmt.Errorf("Flickr API error: %s (code %d)", rsp.Err.Msg, rsp.Err.Code) //nolint:staticcheck // proper noun
+					if isFlickrPermanentError(rsp.Err.Code) {
+						return nil, fmt.Errorf("Flickr API error: %s (code %d)", rsp.Err.Msg, rsp.Err.Code) //nolint:staticcheck // proper noun
+					}
 				}
 			}
 
