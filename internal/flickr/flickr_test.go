@@ -790,3 +790,54 @@ func TestDownload_Non404ErrorDoesNotFallback(t *testing.T) {
 		t.Errorf("expected fallback URL to not be hit, got %d hits", fallbackHits)
 	}
 }
+
+func TestDownload_XMLPermissionDeniedNoRetry(t *testing.T) {
+	t.Setenv("PHOTO_COPY_TEST_MODE", "1")
+
+	getSizesHits := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		method := q.Get("method")
+
+		switch method {
+		case "flickr.people.getPhotos":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"photos":{"page":1,"pages":1,"total":1,"photo":[{"id":"333","secret":"ghi","title":"private photo","datetaken":"2024-01-01 00:00:00","dateupload":"1704067200","description":{"_content":""},"tags":""}]},"stat":"ok"}`))
+
+		case "flickr.photos.getSizes":
+			getSizesHits++
+			w.Header().Set("Content-Type", "text/xml; charset=utf-8")
+			_, _ = w.Write([]byte(`<?xml version="1.0" encoding="utf-8" ?>
+<rsp stat="fail">
+    <err code="2" msg="Permission denied" />
+</rsp>`))
+
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("PHOTO_COPY_FLICKR_API_URL", server.URL)
+	outputDir := t.TempDir()
+
+	c := newTestClient()
+	c.cfg.APIKey = "test-key"
+	c.http = server.Client()
+
+	result, err := c.Download(context.Background(), outputDir, 0, true, nil)
+	if err != nil {
+		t.Fatalf("Download failed: %v", err)
+	}
+
+	if result.Failed != 1 {
+		t.Errorf("expected 1 failed, got %d", result.Failed)
+	}
+	if result.Succeeded != 0 {
+		t.Errorf("expected 0 succeeded, got %d", result.Succeeded)
+	}
+	// The key assertion: getSizes should only be called once, not retried
+	if getSizesHits != 1 {
+		t.Errorf("expected getSizes to be called exactly once (no retries for permanent XML errors), got %d", getSizesHits)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -287,6 +288,21 @@ func (c *Client) signedAPIGet(ctx context.Context, method string, extra map[stri
 			if readErr == nil && len(bodyBytes) > 0 {
 				bodySnippet = string(bodyBytes)
 			}
+			// Check if this is a structured Flickr XML error response (e.g. permission denied).
+			// These are permanent errors — retrying won't help.
+			if strings.Contains(ct, "xml") && len(bodyBytes) > 0 {
+				var rsp struct {
+					Stat string `xml:"stat,attr"`
+					Err  struct {
+						Code int    `xml:"code,attr"`
+						Msg  string `xml:"msg,attr"`
+					} `xml:"err"`
+				}
+				if xmlErr := xml.Unmarshal(bodyBytes, &rsp); xmlErr == nil && rsp.Stat == "fail" {
+					return nil, fmt.Errorf("Flickr API error: %s (code %d)", rsp.Err.Msg, rsp.Err.Code) //nolint:staticcheck // proper noun
+				}
+			}
+
 			if attempt == maxRetries {
 				return nil, fmt.Errorf("API returned non-JSON response (Content-Type: %s, status: %d, body: %s) after %d retries", ct, resp.StatusCode, bodySnippet, maxRetries)
 			}
