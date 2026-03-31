@@ -1095,7 +1095,7 @@ func createTestZip(t *testing.T, dir, name string, files map[string]string) {
 	}
 }
 
-func TestGoogleImportTakeout_HappyPath(t *testing.T) {
+func TestGoogleDownload_HappyPath(t *testing.T) {
 	takeoutDir := t.TempDir()
 	outputDir := t.TempDir()
 
@@ -1104,7 +1104,7 @@ func TestGoogleImportTakeout_HappyPath(t *testing.T) {
 		"Google Photos/Trip/video.mp4":  "mp4-content",
 	})
 
-	err := executeCmd(t, "google", "import-takeout", takeoutDir, outputDir)
+	err := executeCmd(t, "google", "download", takeoutDir, outputDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1117,7 +1117,7 @@ func TestGoogleImportTakeout_HappyPath(t *testing.T) {
 	}
 }
 
-func TestGoogleImportTakeout_FiltersNonMedia(t *testing.T) {
+func TestGoogleDownload_FiltersNonMedia(t *testing.T) {
 	takeoutDir := t.TempDir()
 	outputDir := t.TempDir()
 
@@ -1127,7 +1127,7 @@ func TestGoogleImportTakeout_FiltersNonMedia(t *testing.T) {
 		"Google Photos/Trip/metadata.json":  `{"albums":[]}`,
 	})
 
-	err := executeCmd(t, "google", "import-takeout", takeoutDir, outputDir)
+	err := executeCmd(t, "google", "download", takeoutDir, outputDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1686,7 +1686,7 @@ func TestFlickrDownload_AllPhotosFilteredByDateRange(t *testing.T) {
 	}
 }
 
-func TestGoogleImportTakeout_DuplicateFilenames(t *testing.T) {
+func TestGoogleDownload_DuplicateFilenames(t *testing.T) {
 	takeoutDir := t.TempDir()
 	outputDir := t.TempDir()
 
@@ -1695,7 +1695,7 @@ func TestGoogleImportTakeout_DuplicateFilenames(t *testing.T) {
 		"Google Photos/Album2/sunset.jpg": "jpeg-from-album2",
 	})
 
-	err := executeCmd(t, "google", "import-takeout", takeoutDir, outputDir)
+	err := executeCmd(t, "google", "download", takeoutDir, outputDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1784,7 +1784,7 @@ func TestFlickrDownload_PermanentDownloadFailure(t *testing.T) {
 	}
 }
 
-func TestGoogleImportTakeout_MultipleZips(t *testing.T) {
+func TestGoogleDownload_MultipleZips(t *testing.T) {
 	takeoutDir := t.TempDir()
 	outputDir := t.TempDir()
 
@@ -1795,7 +1795,7 @@ func TestGoogleImportTakeout_MultipleZips(t *testing.T) {
 		"Google Photos/Vacation/photo2.jpg": "jpeg-from-zip2",
 	})
 
-	err := executeCmd(t, "google", "import-takeout", takeoutDir, outputDir)
+	err := executeCmd(t, "google", "download", takeoutDir, outputDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

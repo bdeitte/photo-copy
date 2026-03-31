@@ -81,7 +81,7 @@ Go CLI app using [cobra](https://github.com/spf13/cobra) for command structure. 
 
 ### Design constraints
 
-- **Google Photos download:** The API only allows access to photos the app itself uploaded (since March 2025). Full library export requires Google Takeout (manual zip export), hence the `import-takeout` command.
+- **Google Photos download:** The API only allows access to photos the app itself uploaded (since March 2025). Full library export requires Google Takeout (manual zip export), hence the `google download` command requires Google Takeout zip files.
 - **Google Photos upload limit:** 10,000 uploads/day, enforced in code.
 - **Cross-service copies** (e.g., Flickr -> S3) go through a local directory as an intermediate step — there is no direct service-to-service transfer.
 - **`config s3`** can import credentials from `~/.aws/credentials` (reads the `[default]` profile).

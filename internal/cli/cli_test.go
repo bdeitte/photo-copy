@@ -100,14 +100,31 @@ func TestGoogleUploadCmd_RequiresArg(t *testing.T) {
 	}
 }
 
-func TestGoogleImportTakeoutCmd_RequiresTwoArgs(t *testing.T) {
+func TestGoogleDownloadCmd_ShowsTakeoutInstructions(t *testing.T) {
 	cmd := NewRootCmd()
-	cmd.SetArgs([]string{"google", "import-takeout", "/only/one"})
+	cmd.SetArgs([]string{"google", "download"})
+	buf := new(bytes.Buffer)
+	cmd.SetErr(buf)
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when no args provided")
+	}
+	if !strings.Contains(err.Error(), "Google Takeout") {
+		t.Fatalf("expected Takeout instructions in error, got: %s", err.Error())
+	}
+}
+
+func TestGoogleDownloadCmd_ShowsTakeoutInstructionsOneArg(t *testing.T) {
+	cmd := NewRootCmd()
+	cmd.SetArgs([]string{"google", "download", "/only/one"})
 	buf := new(bytes.Buffer)
 	cmd.SetErr(buf)
 	err := cmd.Execute()
 	if err == nil {
 		t.Fatal("expected error for missing second arg")
+	}
+	if !strings.Contains(err.Error(), "Google Takeout") {
+		t.Fatalf("expected Takeout instructions in error, got: %s", err.Error())
 	}
 }
 

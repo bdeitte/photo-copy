@@ -7,7 +7,7 @@
 
 ## Overview
 
-photo-copy copies photos and videos between cloud services and local directories. Most services have `download` and `upload` commands that transfer between a local directory and that service (Google Photos uses `import-takeout` instead of `download` — see [Google Photos](#google-photos)). To copy between two services (e.g., Flickr to S3), download to a local directory first, then upload from that directory.
+photo-copy copies photos and videos between cloud services and local directories. Each service has `download` and `upload` commands that transfer between a local directory and that service. To copy between two services (e.g., Flickr to S3), download to a local directory first, then upload from that directory.
 
 ## Quick Start
 
@@ -17,7 +17,7 @@ Requires Go 1.25+
 
 1. Run `./setup.sh` (or `setup.bat` on Windows)
 2. Configure credentials for the service you want to use (e.g., `./photo-copy config flickr`). Not all commands require config — see the table below.
-3. Download or upload: `./photo-copy <service> download <dir>` or `./photo-copy <service> upload <dir>`. (Google Photos downloads use `google import-takeout` instead — see [Google Photos](#google-photos).)
+3. Download or upload: `./photo-copy <service> download <dir>` or `./photo-copy <service> upload <dir>`.
 
 ### Service capabilities
 
@@ -72,7 +72,7 @@ The Google Photos API only allows access to photos the app itself uploaded, so d
 ./photo-copy google upload --date-range :2023-12-31 --limit 1000 ../photos
 
 # Download: export your library via Google Takeout, then point at the directory of zips
-./photo-copy google import-takeout ../takeout-zips ../google-photos
+./photo-copy google download ../takeout-zips ../google-photos
 ```
 
 ### S3

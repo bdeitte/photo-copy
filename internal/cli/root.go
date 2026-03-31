@@ -54,8 +54,8 @@ func NewRootCmd() *cobra.Command {
 		}
 
 		if opts.parsedDateRange != nil {
-			if cmd.Name() == "import-takeout" {
-				_, _ = fmt.Fprintln(errW, "Warning: --date-range has no effect on import-takeout")
+			if cmd.Name() == "download" && cmd.Parent() != nil && cmd.Parent().Name() == "google" {
+				_, _ = fmt.Fprintln(errW, "Warning: --date-range has no effect on google download")
 				opts.parsedDateRange = nil
 			} else if cmd.Name() == "config" || (cmd.Parent() != nil && cmd.Parent().Name() == "config") {
 				_, _ = fmt.Fprintln(errW, "Warning: --date-range has no effect on config commands")

@@ -342,7 +342,7 @@ func newConfigGoogleCmd() *cobra.Command {
 
 			fmt.Printf("\nGoogle credentials saved to %s\n", configDir)
 			fmt.Println("These credentials are used for uploading to Google Photos.")
-			fmt.Println("To download photos/videos, use Google Takeout and then 'photo-copy google import-takeout'.")
+			fmt.Println("To download photos/videos, use Google Takeout and then 'photo-copy google download'.")
 			return nil
 		},
 	}

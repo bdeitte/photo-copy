@@ -15,11 +15,11 @@ import (
 func newGooglePhotosCmd(opts *rootOpts) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "google",
-		Short: "Google Photos commands (upload via API, download via Takeout import)",
+		Short: "Google Photos commands (upload via API, download via Takeout)",
 	}
 
 	cmd.AddCommand(newGoogleUploadCmd(opts))
-	cmd.AddCommand(newGoogleImportTakeoutCmd(opts))
+	cmd.AddCommand(newGoogleDownloadCmd(opts))
 	return cmd
 }
 
@@ -34,7 +34,7 @@ func newGoogleUploadCmd(opts *rootOpts) *cobra.Command {
 			cfg, err := config.LoadGoogleConfig(config.DefaultDir())
 			if err != nil {
 				if errors.Is(err, config.ErrNotConfigured) {
-					return fmt.Errorf("Google credentials not configured. Run 'photo-copy config google' to set up (required for uploads only; to download, use Google Takeout with 'photo-copy google import-takeout')") //nolint:staticcheck // proper noun
+					return fmt.Errorf("Google credentials not configured. Run 'photo-copy config google' to set up (required for uploads only; to download, use Google Takeout with 'photo-copy google download')") //nolint:staticcheck // proper noun
 				}
 				return fmt.Errorf("loading Google config: %w", err)
 			}
@@ -58,12 +58,32 @@ func newGoogleUploadCmd(opts *rootOpts) *cobra.Command {
 	return cmd
 }
 
-func newGoogleImportTakeoutCmd(opts *rootOpts) *cobra.Command {
+func newGoogleDownloadCmd(opts *rootOpts) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "import-takeout <takeout-dir> <output-dir>",
-		Short: "Import photos/videos from Google Takeout zip files",
-		Args:  cobra.ExactArgs(2),
+		Use:   "download <takeout-dir> <output-dir>",
+		Short: "Download photos/videos from Google Takeout zip files",
+		Args:  cobra.RangeArgs(0, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) < 2 {
+				//nolint:staticcheck // user-facing message, capitalization is intentional
+				return fmt.Errorf(`Google Photos download requires Google Takeout zip files.
+
+The Google Photos API only allows access to photos the app itself uploaded,
+so downloading your full library requires Google Takeout (a manual zip export).
+
+To get your photos:
+  1. Go to https://takeout.google.com
+  2. Deselect all, then select only "Google Photos"
+  3. Choose your export format (zip) and file size
+  4. Click "Create export" and wait for Google to prepare your files
+  5. Download the zip files to a local directory
+
+Then run:
+  photo-copy google download <takeout-dir> <output-dir>
+
+  <takeout-dir>  Directory containing the downloaded Takeout zip files
+  <output-dir>   Directory where photos/videos will be extracted`)
+			}
 			log := logging.New(opts.debug, nil)
 			result, err := google.ImportTakeout(args[0], args[1], log)
 			if err != nil {
