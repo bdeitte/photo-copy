@@ -125,8 +125,6 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 			if transferred[photo.ID] {
 				result.RecordSkip(1)
 				pageSkipped++
-				processed := result.Succeeded + result.Skipped + result.Failed
-				c.log.Info("[%d/%d] skipping already downloaded: %s", processed, result.Expected, photo.ID)
 				continue
 			}
 
@@ -140,8 +138,6 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 				} else if !dateRange.Contains(photoDate) {
 					result.RecordSkip(1)
 					pageDateFiltered++
-					processed := result.Succeeded + result.Skipped + result.Failed
-					c.log.Info("[%d/%d] skipping %s: date %s outside range", processed, result.Expected, photo.ID, photoDate.Format("2006-01-02"))
 					continue
 				}
 			}
