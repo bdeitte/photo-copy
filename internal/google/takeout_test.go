@@ -211,33 +211,33 @@ func TestImportTakeout_CancelledDuringExtraction(t *testing.T) {
 
 func TestImportTakeout_CancelledDuringExtractFile(t *testing.T) {
 	// Exercises the ctx.Err() check after extractFile fails due to cancellation.
-	// Files are >32KB so copyWithContext loops and detects the cancelled context
-	// mid-copy, causing extractFile to return an error that triggers the
-	// immediate-return path in extractMediaFromZip.
+	// Uses beforeExtract to cancel the context right before the second file's
+	// extractFile call (after the top-of-loop ctx.Err() check has already passed).
+	// extractFile then fails inside copyWithContext, and the post-failure
+	// ctx.Err() check returns context.Canceled immediately.
 	takeoutDir := t.TempDir()
 	outputDir := t.TempDir()
 
-	payload := strings.Repeat("x", 64*1024) // larger than copyWithContext buffer
 	files := make(map[string]string, 5)
 	for i := range 5 {
-		files[fmt.Sprintf("Google Photos/Album/photo%d.jpg", i)] = payload
+		files[fmt.Sprintf("Google Photos/Album/photo%d.jpg", i)] = strings.Repeat("x", 1024)
 	}
 	createTestZip(t, takeoutDir, files)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Cancel after the first successful extraction. The next extractFile call
-	// will fail inside copyWithContext, and the post-failure ctx.Err() check
-	// should return context.Canceled immediately.
-	extracted := 0
-	afterExtract := func() {
-		extracted++
-		if extracted == 1 {
+	// Cancel right before the second extractFile call, after the top-of-loop
+	// ctx.Err() check has passed. This ensures extractFile runs with a
+	// cancelled context and fails, hitting the post-failure ctx.Err() branch.
+	extractCount := 0
+	beforeExtract := func() {
+		extractCount++
+		if extractCount == 2 {
 			cancel()
 		}
 	}
 
-	result, err := ImportTakeout(ctx, takeoutDir, outputDir, nil, withAfterExtract(afterExtract))
+	result, err := ImportTakeout(ctx, takeoutDir, outputDir, nil, withBeforeExtract(beforeExtract))
 	if err == nil {
 		t.Fatal("expected error from cancelled context")
 	}

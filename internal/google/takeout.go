@@ -20,13 +20,20 @@ import (
 type importOption func(*importConfig)
 
 type importConfig struct {
-	afterExtract func() // called after each successful file extraction; nil in production
+	afterExtract  func() // called after each successful file extraction; nil in production
+	beforeExtract func() // called before each extractFile call; nil in production
 }
 
-// withAfterExtract returns an option that calls fn after each file extraction.
+// withAfterExtract returns an option that calls fn after each successful extraction.
 // Used by tests for deterministic cancellation.
 func withAfterExtract(fn func()) importOption {
 	return func(cfg *importConfig) { cfg.afterExtract = fn }
+}
+
+// withBeforeExtract returns an option that calls fn before each extractFile call,
+// after the top-of-loop context check. Used by tests to cancel mid-extraction.
+func withBeforeExtract(fn func()) importOption {
+	return func(cfg *importConfig) { cfg.beforeExtract = fn }
 }
 
 // ImportTakeout extracts media files from Google Takeout zip archives in takeoutDir
@@ -70,7 +77,7 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 		}
 		log.Debug("processing %s", zipPath)
 
-		if err := extractMediaFromZip(ctx, zipPath, outputDir, log, result, cfg.afterExtract); err != nil {
+		if err := extractMediaFromZip(ctx, zipPath, outputDir, log, result, cfg.beforeExtract, cfg.afterExtract); err != nil {
 			if ctx.Err() != nil {
 				return result, ctx.Err()
 			}
@@ -84,8 +91,8 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 }
 
 // extractMediaFromZip extracts supported media files from a zip archive.
-// afterExtract, if non-nil, is called after each successful extraction (used by tests).
-func extractMediaFromZip(ctx context.Context, zipPath, outputDir string, log *logging.Logger, result *transfer.Result, afterExtract func()) error {
+// beforeExtract/afterExtract, if non-nil, are called around each extraction (used by tests).
+func extractMediaFromZip(ctx context.Context, zipPath, outputDir string, log *logging.Logger, result *transfer.Result, beforeExtract, afterExtract func()) error {
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return fmt.Errorf("opening zip: %w", err)
@@ -136,6 +143,9 @@ func extractMediaFromZip(ctx context.Context, zipPath, outputDir string, log *lo
 
 		log.Debug("extracting %s -> %s", f.Name, destPath)
 
+		if beforeExtract != nil {
+			beforeExtract()
+		}
 		if err := extractFile(ctx, f, destPath); err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
