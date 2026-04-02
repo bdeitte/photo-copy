@@ -52,7 +52,7 @@ type Client struct {
 func NewClient(ctx context.Context, cfg *config.GoogleConfig, configDir string, log *logging.Logger) (*Client, error) {
 	if os.Getenv("PHOTO_COPY_GOOGLE_TOKEN") == "skip" {
 		return &Client{
-			httpClient: &http.Client{},
+			httpClient: &http.Client{Timeout: 60 * time.Second},
 			log:        log,
 			configDir:  configDir,
 		}, nil
@@ -79,6 +79,7 @@ func NewClient(ctx context.Context, cfg *config.GoogleConfig, configDir string, 
 	}
 
 	client := oauthCfg.Client(ctx, token)
+	client.Timeout = 60 * time.Second
 
 	return &Client{
 		httpClient: client,

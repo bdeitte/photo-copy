@@ -74,7 +74,7 @@ type Client struct {
 func NewClient(cfg *config.FlickrConfig, log *logging.Logger) *Client {
 	return &Client{
 		cfg:              cfg,
-		http:             &http.Client{},
+		http:             &http.Client{Timeout: 60 * time.Second},
 		log:              log,
 		throttleInterval: minRequestInterval,
 	}
