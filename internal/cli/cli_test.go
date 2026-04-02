@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"strings"
 	"testing"
@@ -218,5 +219,25 @@ func TestRootCmd_DateRangeWarningOnConfigSubcommand(t *testing.T) {
 	_ = cmd.Execute()
 	if !strings.Contains(buf.String(), "--date-range has no effect on photo-copy config flickr") {
 		t.Errorf("expected date-range warning on stderr, got: %q", buf.String())
+	}
+}
+
+func TestPromptUser_EOFWithoutNewline(t *testing.T) {
+	// Simulate piped input where the last line has no trailing newline.
+	reader := bufio.NewReader(strings.NewReader("my-value"))
+	got, err := promptUser(reader, "Enter: ")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "my-value" {
+		t.Errorf("got %q, want %q", got, "my-value")
+	}
+}
+
+func TestPromptUser_EOFEmpty(t *testing.T) {
+	reader := bufio.NewReader(strings.NewReader(""))
+	_, err := promptUser(reader, "Enter: ")
+	if err == nil {
+		t.Fatal("expected error for empty EOF input")
 	}
 }

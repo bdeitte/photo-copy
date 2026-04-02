@@ -53,7 +53,7 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 		}
 		log.Debug("processing %s", zipPath)
 
-		if err := extractMediaFromZip(zipPath, outputDir, log, result); err != nil {
+		if err := extractMediaFromZip(ctx, zipPath, outputDir, log, result); err != nil {
 			log.Error("processing %s: %v", zipPath, err)
 			continue
 		}
@@ -63,7 +63,7 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 	return result, nil
 }
 
-func extractMediaFromZip(zipPath, outputDir string, log *logging.Logger, result *transfer.Result) error {
+func extractMediaFromZip(ctx context.Context, zipPath, outputDir string, log *logging.Logger, result *transfer.Result) error {
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return fmt.Errorf("opening zip: %w", err)
@@ -90,6 +90,9 @@ func extractMediaFromZip(zipPath, outputDir string, log *logging.Logger, result 
 	bar := progressbar.Default(int64(len(mediaFiles)), filepath.Base(zipPath))
 
 	for _, f := range mediaFiles {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		name := filepath.Base(f.Name)
 		destPath := filepath.Join(outputDir, name)
 
@@ -111,7 +114,7 @@ func extractMediaFromZip(zipPath, outputDir string, log *logging.Logger, result 
 
 		log.Debug("extracting %s -> %s", f.Name, destPath)
 
-		if err := extractFile(f, destPath); err != nil {
+		if err := extractFile(ctx, f, destPath); err != nil {
 			log.Error("extracting %s: %v", f.Name, err)
 			result.RecordError(name, err.Error())
 			_ = bar.Add(1)
@@ -130,7 +133,7 @@ func extractMediaFromZip(zipPath, outputDir string, log *logging.Logger, result 
 	return nil
 }
 
-func extractFile(f *zip.File, destPath string) (err error) {
+func extractFile(ctx context.Context, f *zip.File, destPath string) (err error) {
 	rc, err := f.Open()
 	if err != nil {
 		return fmt.Errorf("opening zip entry: %w", err)
@@ -148,7 +151,8 @@ func extractFile(f *zip.File, destPath string) (err error) {
 	}()
 
 	const maxFileSize = 10 << 30 // 10 GB
-	written, err := io.Copy(out, io.LimitReader(rc, maxFileSize+1))
+	reader := io.LimitReader(rc, maxFileSize+1)
+	written, err := copyWithContext(ctx, out, reader)
 	if err != nil {
 		_ = out.Close()
 		_ = os.Remove(destPath)
@@ -160,4 +164,32 @@ func extractFile(f *zip.File, destPath string) (err error) {
 		return fmt.Errorf("zip entry exceeds %d byte limit: %s", maxFileSize, f.Name)
 	}
 	return nil
+}
+
+// copyWithContext copies from src to dst, checking for context cancellation
+// between chunks to allow prompt cancellation of large file copies.
+func copyWithContext(ctx context.Context, dst io.Writer, src io.Reader) (int64, error) {
+	buf := make([]byte, 32*1024)
+	var written int64
+	for {
+		if err := ctx.Err(); err != nil {
+			return written, err
+		}
+		nr, er := src.Read(buf)
+		if nr > 0 {
+			nw, ew := dst.Write(buf[:nr])
+			if nw > 0 {
+				written += int64(nw)
+			}
+			if ew != nil {
+				return written, ew
+			}
+		}
+		if er != nil {
+			if er == io.EOF {
+				return written, nil
+			}
+			return written, er
+		}
+	}
 }
