@@ -145,7 +145,9 @@ func (c *Client) uploadFile(ctx context.Context, filePath string) error {
 
 	upURL := c.flickrUploadURL()
 	params := map[string]string{}
-	oauthSign("POST", upURL, params, c.cfg)
+	if _, err := oauthSign("POST", upURL, params, c.cfg); err != nil {
+		return fmt.Errorf("signing upload request: %w", err)
+	}
 
 	for k, v := range params {
 		if strings.HasPrefix(k, "oauth_") {

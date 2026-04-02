@@ -21,7 +21,10 @@ func TestOAuthSign_SetsRequiredParams(t *testing.T) {
 		"method": "flickr.test.echo",
 	}
 
-	sig := oauthSign("GET", "https://api.flickr.com/services/rest/", params, cfg)
+	sig, err := oauthSign("GET", "https://api.flickr.com/services/rest/", params, cfg)
+	if err != nil {
+		t.Fatalf("oauthSign failed: %v", err)
+	}
 
 	// Verify all required OAuth params are set
 	required := []string{
@@ -70,8 +73,14 @@ func TestOAuthSign_DeterministicWithSameInputs(t *testing.T) {
 	params1 := map[string]string{"method": "test"}
 	params2 := map[string]string{"method": "test"}
 
-	sig1 := oauthSign("GET", "https://example.com/", params1, cfg)
-	sig2 := oauthSign("GET", "https://example.com/", params2, cfg)
+	sig1, err := oauthSign("GET", "https://example.com/", params1, cfg)
+	if err != nil {
+		t.Fatalf("oauthSign failed: %v", err)
+	}
+	sig2, err := oauthSign("GET", "https://example.com/", params2, cfg)
+	if err != nil {
+		t.Fatalf("oauthSign failed: %v", err)
+	}
 
 	if sig1 == "" || sig2 == "" {
 		t.Error("signatures should not be empty")
@@ -97,7 +106,9 @@ func TestOAuthSign_PreservesExistingParams(t *testing.T) {
 		"nojsoncallback": "1",
 	}
 
-	oauthSign("GET", "https://api.flickr.com/services/rest/", params, cfg)
+	if _, err := oauthSign("GET", "https://api.flickr.com/services/rest/", params, cfg); err != nil {
+		t.Fatalf("oauthSign failed: %v", err)
+	}
 
 	if params["method"] != "flickr.photos.getInfo" {
 		t.Error("method param was overwritten")
@@ -124,7 +135,9 @@ func TestOAuthSign_SpecialCharactersInParams(t *testing.T) {
 		"text":   "hello world+foo=bar&baz",
 	}
 
-	oauthSign("GET", "https://api.flickr.com/services/rest/", params, cfg)
+	if _, err := oauthSign("GET", "https://api.flickr.com/services/rest/", params, cfg); err != nil {
+		t.Fatalf("oauthSign failed: %v", err)
+	}
 
 	// The text param should be preserved as-is in the params map (encoding
 	// happens only during base string construction).
@@ -148,7 +161,10 @@ func TestOAuthSign_EmptyParams(t *testing.T) {
 
 	params := map[string]string{}
 
-	sig := oauthSign("GET", "https://api.flickr.com/services/rest/", params, cfg)
+	sig, err := oauthSign("GET", "https://api.flickr.com/services/rest/", params, cfg)
+	if err != nil {
+		t.Fatalf("oauthSign failed: %v", err)
+	}
 
 	if sig == "" {
 		t.Fatal("expected non-empty signature")
@@ -241,7 +257,10 @@ func TestGetRequestToken_TrailingSlashInOAuthURL(t *testing.T) {
 }
 
 func TestGenerateNonce(t *testing.T) {
-	nonce := generateNonce()
+	nonce, err := generateNonce()
+	if err != nil {
+		t.Fatalf("generateNonce failed: %v", err)
+	}
 	if len(nonce) != 32 {
 		t.Errorf("nonce length = %d, want 32", len(nonce))
 	}
@@ -252,7 +271,10 @@ func TestGenerateNonce(t *testing.T) {
 		}
 	}
 
-	nonce2 := generateNonce()
+	nonce2, err := generateNonce()
+	if err != nil {
+		t.Fatalf("generateNonce failed: %v", err)
+	}
 	if nonce == nonce2 {
 		t.Error("two nonces should not be identical")
 	}

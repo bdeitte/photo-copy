@@ -169,7 +169,9 @@ func (c *Client) signedAPIGet(ctx context.Context, method string, extra map[stri
 			params[k] = v
 		}
 
-		oauthSign("GET", baseURL, params, c.cfg)
+		if _, err := oauthSign("GET", baseURL, params, c.cfg); err != nil {
+			return nil, fmt.Errorf("signing request: %w", err)
+		}
 
 		v := url.Values{}
 		for k, val := range params {

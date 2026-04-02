@@ -17,12 +17,16 @@ import (
 	"github.com/briandeitte/photo-copy/internal/config"
 )
 
-func oauthSign(method, endpoint string, params map[string]string, cfg *config.FlickrConfig) string {
+func oauthSign(method, endpoint string, params map[string]string, cfg *config.FlickrConfig) (string, error) {
+	nonce, err := generateNonce()
+	if err != nil {
+		return "", err
+	}
 	params["oauth_consumer_key"] = cfg.APIKey
 	params["oauth_token"] = cfg.OAuthToken
 	params["oauth_signature_method"] = "HMAC-SHA1"
 	params["oauth_timestamp"] = fmt.Sprintf("%d", time.Now().Unix())
-	params["oauth_nonce"] = generateNonce()
+	params["oauth_nonce"] = nonce
 	params["oauth_version"] = "1.0"
 
 	keys := make([]string, 0, len(params))
@@ -45,15 +49,15 @@ func oauthSign(method, endpoint string, params map[string]string, cfg *config.Fl
 	signature := base64.StdEncoding.EncodeToString(mac.Sum(nil))
 
 	params["oauth_signature"] = signature
-	return signature
+	return signature, nil
 }
 
-func generateNonce() string {
+func generateNonce() (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		panic("crypto/rand failed: " + err.Error())
+		return "", fmt.Errorf("crypto/rand failed: %w", err)
 	}
-	return hex.EncodeToString(b)
+	return hex.EncodeToString(b), nil
 }
 
 // GetRequestToken initiates the OAuth 1.0a flow by obtaining a request token.
@@ -68,7 +72,9 @@ func GetRequestToken(cfg *config.FlickrConfig) (token, tokenSecret, authURL stri
 	}
 
 	base := oauthBaseURL()
-	oauthSign("GET", base+"/request_token", params, tempCfg)
+	if _, err := oauthSign("GET", base+"/request_token", params, tempCfg); err != nil {
+		return "", "", "", fmt.Errorf("signing request token: %w", err)
+	}
 
 	v := url.Values{}
 	for k, val := range params {
@@ -111,7 +117,9 @@ func ExchangeToken(cfg *config.FlickrConfig, requestToken, requestTokenSecret, v
 	}
 
 	base := oauthBaseURL()
-	oauthSign("GET", base+"/access_token", params, tempCfg)
+	if _, err := oauthSign("GET", base+"/access_token", params, tempCfg); err != nil {
+		return "", "", fmt.Errorf("signing access token: %w", err)
+	}
 
 	v := url.Values{}
 	for k, val := range params {
