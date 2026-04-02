@@ -22,6 +22,22 @@ func newGooglePhotosCmd(opts *rootOpts) *cobra.Command {
 	return cmd
 }
 
+func newGoogleClient(cmd *cobra.Command, opts *rootOpts) (*google.Client, *logging.Logger, error) {
+	cfg, err := config.LoadGoogleConfig(config.DefaultDir())
+	if err != nil {
+		if errors.Is(err, config.ErrNotConfigured) {
+			return nil, nil, fmt.Errorf("Google credentials not configured. Run 'photo-copy config google' to set up (required for uploads only; to download, use Google Takeout with 'photo-copy google download')") //nolint:staticcheck // proper noun
+		}
+		return nil, nil, fmt.Errorf("loading Google config: %w", err)
+	}
+	log := logging.New(opts.debug, nil)
+	client, err := google.NewClient(cmd.Context(), cfg, config.DefaultDir(), log)
+	if err != nil {
+		return nil, nil, fmt.Errorf("creating Google Photos client: %w", err)
+	}
+	return client, log, nil
+}
+
 func newGoogleUploadCmd(opts *rootOpts) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "upload <input-dir>",
@@ -31,22 +47,12 @@ func newGoogleUploadCmd(opts *rootOpts) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			inputDir := args[0]
 
-			cfg, err := config.LoadGoogleConfig(config.DefaultDir())
+			client, log, err := newGoogleClient(cmd, opts)
 			if err != nil {
-				if errors.Is(err, config.ErrNotConfigured) {
-					return fmt.Errorf("Google credentials not configured. Run 'photo-copy config google' to set up (required for uploads only; to download, use Google Takeout with 'photo-copy google download')") //nolint:staticcheck // proper noun
-				}
-				return fmt.Errorf("loading Google config: %w", err)
+				return err
 			}
 
-			log := logging.New(opts.debug, nil)
-			ctx := cmd.Context()
-			client, err := google.NewClient(ctx, cfg, config.DefaultDir(), log)
-			if err != nil {
-				return fmt.Errorf("creating Google Photos client: %w", err)
-			}
-
-			result, err := client.Upload(ctx, inputDir, opts.limit, opts.parsedDateRange)
+			result, err := client.Upload(cmd.Context(), inputDir, opts.limit, opts.parsedDateRange)
 			if err != nil {
 				return err
 			}
