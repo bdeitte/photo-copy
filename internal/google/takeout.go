@@ -54,6 +54,9 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 		log.Debug("processing %s", zipPath)
 
 		if err := extractMediaFromZip(ctx, zipPath, outputDir, log, result); err != nil {
+			if ctx.Err() != nil {
+				return result, ctx.Err()
+			}
 			log.Error("processing %s: %v", zipPath, err)
 			continue
 		}

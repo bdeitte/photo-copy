@@ -3,8 +3,13 @@ package cli
 import (
 	"bufio"
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/briandeitte/photo-copy/internal/logging"
+	"github.com/briandeitte/photo-copy/internal/transfer"
 )
 
 func TestRootCmd_HasExpectedSubcommands(t *testing.T) {
@@ -239,5 +244,53 @@ func TestPromptUser_EOFEmpty(t *testing.T) {
 	_, err := promptUser(reader, "Enter: ")
 	if err == nil {
 		t.Fatal("expected error for empty EOF input")
+	}
+}
+
+func TestValidateFlickrTransferLog_MissingEntry(t *testing.T) {
+	dir := t.TempDir()
+	// Write a transfer log with two IDs
+	logPath := filepath.Join(dir, "transfer.log")
+	if err := os.WriteFile(logPath, []byte("111\n222\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Only create a file matching ID 222
+	if err := os.WriteFile(filepath.Join(dir, "222_abc.jpg"), []byte("data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := transfer.NewResult("flickr", "download", dir)
+	result.Finish()
+	log := logging.New(false, nil)
+	validateFlickrTransferLog(result, dir, log)
+
+	if len(result.Warnings) != 1 {
+		t.Fatalf("expected 1 warning for missing file, got %d: %v", len(result.Warnings), result.Warnings)
+	}
+	if !strings.Contains(result.Warnings[0].Message, "111") {
+		t.Errorf("warning should mention missing ID 111, got: %s", result.Warnings[0].Message)
+	}
+}
+
+func TestValidateFlickrTransferLog_AllPresent(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "transfer.log")
+	if err := os.WriteFile(logPath, []byte("111\n222\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "111_photo.jpg"), []byte("data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "222_photo.jpg"), []byte("data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := transfer.NewResult("flickr", "download", dir)
+	result.Finish()
+	log := logging.New(false, nil)
+	validateFlickrTransferLog(result, dir, log)
+
+	if len(result.Warnings) != 0 {
+		t.Fatalf("expected 0 warnings, got %d: %v", len(result.Warnings), result.Warnings)
 	}
 }
