@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"os"
 	"strings"
 	"testing"
 )
@@ -176,48 +175,6 @@ func TestRootCmd_NoMetadataWarningOnS3Upload(t *testing.T) {
 	_ = cmd.Execute()
 	if !strings.Contains(buf.String(), "--no-metadata has no effect") {
 		t.Errorf("expected no-metadata warning on stderr, got: %q", buf.String())
-	}
-}
-
-func TestReadAWSCredentials_ValidFile(t *testing.T) {
-	content := "[default]\naws_access_key_id = AKIAIOSFODNN7EXAMPLE\naws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\n"
-	f := t.TempDir() + "/credentials"
-	if err := os.WriteFile(f, []byte(content), 0600); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := readAWSCredentials(f)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.AccessKeyID != "AKIAIOSFODNN7EXAMPLE" {
-		t.Errorf("AccessKeyID = %q, want AKIAIOSFODNN7EXAMPLE", cfg.AccessKeyID)
-	}
-	if cfg.SecretAccessKey != "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" {
-		t.Errorf("SecretAccessKey = %q, want wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", cfg.SecretAccessKey)
-	}
-}
-
-func TestReadAWSCredentials_MissingFile(t *testing.T) {
-	_, err := readAWSCredentials("/nonexistent/path/credentials")
-	if err == nil {
-		t.Fatal("expected error for missing file")
-	}
-}
-
-func TestReadAWSCredentials_NoDefaultProfile(t *testing.T) {
-	content := "[other-profile]\naws_access_key_id = AKID\naws_secret_access_key = SECRET\n"
-	f := t.TempDir() + "/credentials"
-	if err := os.WriteFile(f, []byte(content), 0600); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err := readAWSCredentials(f)
-	if err == nil {
-		t.Fatal("expected error when [default] profile is missing")
-	}
-	if !strings.Contains(err.Error(), "default") {
-		t.Errorf("error = %q, want mention of 'default'", err.Error())
 	}
 }
 

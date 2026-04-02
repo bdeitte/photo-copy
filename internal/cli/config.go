@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/briandeitte/photo-copy/internal/config"
 	"github.com/briandeitte/photo-copy/internal/flickr"
@@ -39,13 +38,15 @@ func newConfigFlickrCmd() *cobra.Command {
 			fmt.Println("Get your API key at: https://www.flickr.com/services/apps/create/")
 			fmt.Println()
 
-			fmt.Print("API Key: ")
-			apiKey, _ := reader.ReadString('\n')
-			apiKey = strings.TrimSpace(apiKey)
+			apiKey, err := promptUser(reader, "API Key: ")
+			if err != nil {
+				return err
+			}
 
-			fmt.Print("API Secret: ")
-			apiSecret, _ := reader.ReadString('\n')
-			apiSecret = strings.TrimSpace(apiSecret)
+			apiSecret, err := promptUser(reader, "API Secret: ")
+			if err != nil {
+				return err
+			}
 
 			if apiKey == "" || apiSecret == "" {
 				return fmt.Errorf("API key and secret are required")
@@ -68,9 +69,10 @@ func newConfigFlickrCmd() *cobra.Command {
 			}
 
 			fmt.Printf("\nOpen this URL in your browser:\n%s\n\n", authURL)
-			fmt.Print("Enter the verification code: ")
-			verifier, _ := reader.ReadString('\n')
-			verifier = strings.TrimSpace(verifier)
+			verifier, err := promptUser(reader, "Enter the verification code: ")
+			if err != nil {
+				return err
+			}
 
 			accessToken, accessSecret, err := flickr.ExchangeToken(cfg, reqToken, reqSecret, verifier)
 			if err != nil {
@@ -104,19 +106,21 @@ func newConfigS3Cmd() *cobra.Command {
 			home, _ := os.UserHomeDir()
 			awsCredsPath := filepath.Join(home, ".aws", "credentials")
 			if _, err := os.Stat(awsCredsPath); err == nil {
-				fmt.Print("Found existing AWS credentials at ~/.aws/credentials. Use these? (y/n): ")
-				answer, _ := reader.ReadString('\n')
-				answer = strings.TrimSpace(strings.ToLower(answer))
+				useExisting, err := promptYesNo(reader, "Found existing AWS credentials at ~/.aws/credentials. Use these? (y/n): ")
+				if err != nil {
+					return err
+				}
 
-				if answer == "y" || answer == "yes" {
-					cfg, err := readAWSCredentials(awsCredsPath)
+				if useExisting {
+					cfg, err := config.ReadAWSCredentials(awsCredsPath)
 					if err != nil {
 						fmt.Printf("Warning: could not read AWS credentials: %v\n", err)
 						fmt.Println("Falling back to manual entry.")
 					} else {
-						fmt.Print("AWS Region (e.g., us-east-1): ")
-						region, _ := reader.ReadString('\n')
-						region = strings.TrimSpace(region)
+						region, err := promptUser(reader, "AWS Region (e.g., us-east-1): ")
+						if err != nil {
+							return err
+						}
 						if region == "" {
 							region = "us-east-1"
 						}
@@ -131,17 +135,20 @@ func newConfigS3Cmd() *cobra.Command {
 				}
 			}
 
-			fmt.Print("AWS Access Key ID: ")
-			accessKey, _ := reader.ReadString('\n')
-			accessKey = strings.TrimSpace(accessKey)
+			accessKey, err := promptUser(reader, "AWS Access Key ID: ")
+			if err != nil {
+				return err
+			}
 
-			fmt.Print("AWS Secret Access Key: ")
-			secretKey, _ := reader.ReadString('\n')
-			secretKey = strings.TrimSpace(secretKey)
+			secretKey, err := promptUser(reader, "AWS Secret Access Key: ")
+			if err != nil {
+				return err
+			}
 
-			fmt.Print("AWS Region (e.g., us-east-1): ")
-			region, _ := reader.ReadString('\n')
-			region = strings.TrimSpace(region)
+			region, err := promptUser(reader, "AWS Region (e.g., us-east-1): ")
+			if err != nil {
+				return err
+			}
 			if region == "" {
 				region = "us-east-1"
 			}
@@ -164,52 +171,6 @@ func newConfigS3Cmd() *cobra.Command {
 			return nil
 		},
 	}
-}
-
-func readAWSCredentials(path string) (*config.S3Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-
-	cfg := &config.S3Config{}
-	lines := strings.Split(string(data), "\n")
-	inDefault := false
-
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "[default]" {
-			inDefault = true
-			continue
-		}
-		if strings.HasPrefix(line, "[") {
-			inDefault = false
-			continue
-		}
-		if !inDefault {
-			continue
-		}
-
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		val := strings.TrimSpace(parts[1])
-
-		switch key {
-		case "aws_access_key_id":
-			cfg.AccessKeyID = val
-		case "aws_secret_access_key":
-			cfg.SecretAccessKey = val
-		}
-	}
-
-	if cfg.AccessKeyID == "" || cfg.SecretAccessKey == "" {
-		return nil, fmt.Errorf("could not find access key and secret in [default] profile")
-	}
-
-	return cfg, nil
 }
 
 func newConfigICloudCmd() *cobra.Command {
@@ -239,9 +200,10 @@ func newConfigICloudCmd() *cobra.Command {
 			}
 			fmt.Println()
 
-			fmt.Print("Apple ID (email): ")
-			appleID, _ := reader.ReadString('\n')
-			appleID = strings.TrimSpace(appleID)
+			appleID, err := promptUser(reader, "Apple ID (email): ")
+			if err != nil {
+				return err
+			}
 
 			if appleID == "" {
 				return fmt.Errorf("apple ID is required")
@@ -313,13 +275,15 @@ func newConfigGoogleCmd() *cobra.Command {
 			fmt.Println("     https://console.cloud.google.com/apis/library/photoslibrary.googleapis.com")
 			fmt.Println()
 
-			fmt.Print("Client ID: ")
-			clientID, _ := reader.ReadString('\n')
-			clientID = strings.TrimSpace(clientID)
+			clientID, err := promptUser(reader, "Client ID: ")
+			if err != nil {
+				return err
+			}
 
-			fmt.Print("Client Secret: ")
-			clientSecret, _ := reader.ReadString('\n')
-			clientSecret = strings.TrimSpace(clientSecret)
+			clientSecret, err := promptUser(reader, "Client Secret: ")
+			if err != nil {
+				return err
+			}
 
 			if clientID == "" || clientSecret == "" {
 				return fmt.Errorf("client ID and secret are required")
