@@ -16,6 +16,10 @@ import (
 	"github.com/schollz/progressbar/v3"
 )
 
+// afterExtractHook is called after each file extraction in extractMediaFromZip.
+// Nil in production; tests set this to synchronize cancellation deterministically.
+var afterExtractHook func()
+
 // ImportTakeout extracts media files from Google Takeout zip archives in takeoutDir
 // into outputDir, skipping non-media files and JSON metadata.
 func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *logging.Logger) (*transfer.Result, error) {
@@ -131,6 +135,10 @@ func extractMediaFromZip(ctx context.Context, zipPath, outputDir string, log *lo
 			result.RecordSuccess(0)
 		}
 		_ = bar.Add(1)
+
+		if afterExtractHook != nil {
+			afterExtractHook()
+		}
 	}
 
 	return nil

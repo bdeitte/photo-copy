@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 func createTestZip(t *testing.T, dir string, files map[string]string) string {
@@ -175,30 +174,25 @@ func TestImportTakeout_CancelledDuringExtraction(t *testing.T) {
 	takeoutDir := t.TempDir()
 	outputDir := t.TempDir()
 
-	// Use 1000 files so extraction takes enough wall-clock time for the
-	// polling goroutine to observe progress and cancel mid-extraction.
-	const fileCount = 1000
+	const fileCount = 20
 	files := make(map[string]string, fileCount)
-	payload := strings.Repeat("x", 4096)
 	for i := range fileCount {
-		files[fmt.Sprintf("Google Photos/Album/photo%d.jpg", i)] = payload
+		files[fmt.Sprintf("Google Photos/Album/photo%d.jpg", i)] = strings.Repeat("x", 1024)
 	}
 	createTestZip(t, takeoutDir, files)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Cancel once at least one file has been extracted. Poll the output dir
-	// to synchronize rather than relying on sleep timing.
-	go func() {
-		for {
-			entries, _ := os.ReadDir(outputDir)
-			if len(entries) > 0 {
-				cancel()
-				return
-			}
-			time.Sleep(50 * time.Microsecond)
+	// Use the test hook to cancel deterministically after the first
+	// file is extracted, guaranteeing mid-extraction cancellation.
+	extracted := 0
+	afterExtractHook = func() {
+		extracted++
+		if extracted == 1 {
+			cancel()
 		}
-	}()
+	}
+	defer func() { afterExtractHook = nil }()
 
 	result, err := ImportTakeout(ctx, takeoutDir, outputDir, nil)
 	if err == nil {
