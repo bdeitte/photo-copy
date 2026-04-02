@@ -1,9 +1,7 @@
-<p align="center">
-  <img src="photocopy.png" alt="photo copy logo"><br>
-  <b>Copy and backup your photos and videos.</b><br>
-  <b>Copy between iCloud Photos, Google Photos, Flickr, AWS S3, and local directories.</b><br>
-  <a href="https://github.com/bdeitte/photo-copy/actions/workflows/ci.yml"><img src="https://github.com/bdeitte/photo-copy/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-</p>
+<img src="photocopy.png" alt="photo copy logo">
+Copy and backup your photos and videos.
+Copy between iCloud Photos, Google Photos, Flickr, AWS S3, and local directories.
+<a href="https://github.com/bdeitte/photo-copy/actions/workflows/ci.yml"><img src="https://github.com/bdeitte/photo-copy/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 
 ## Overview
 
