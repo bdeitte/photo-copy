@@ -125,7 +125,8 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 			if transferred[photo.ID] {
 				result.RecordSkip(1)
 				pageSkipped++
-				c.log.Debug("skipping already downloaded: %s", photo.ID)
+				processed := result.Succeeded + result.Skipped + result.Failed
+				c.log.Info("[%d/%d] skipping already downloaded: %s", processed, result.Expected, photo.ID)
 				continue
 			}
 
@@ -139,7 +140,8 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 				} else if !dateRange.Contains(photoDate) {
 					result.RecordSkip(1)
 					pageDateFiltered++
-					c.log.Debug("skipping %s: date %s outside range", photo.ID, photoDate.Format("2006-01-02"))
+					processed := result.Succeeded + result.Skipped + result.Failed
+					c.log.Info("[%d/%d] skipping %s: date %s outside range", processed, result.Expected, photo.ID, photoDate.Format("2006-01-02"))
 					continue
 				}
 			}
@@ -252,6 +254,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 			c.log.Info("[%d/%d] %sdownloaded %s%s", processed, result.Expected, estimator.Estimate(estimateRemaining(limit, result)), filename, detail)
 
 			if limit > 0 && result.Succeeded+result.Failed >= limit {
+				result.Limited = true
 				c.log.Info("reached limit of %d files (%d downloaded, %d errors)", limit, result.Succeeded, result.Failed)
 				break
 			}

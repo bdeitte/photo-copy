@@ -175,26 +175,41 @@ func TestImportTakeout_CancelledDuringExtraction(t *testing.T) {
 	takeoutDir := t.TempDir()
 	outputDir := t.TempDir()
 
-	// Create a zip with multiple files so cancellation can occur between them.
-	files := make(map[string]string, 20)
-	for i := range 20 {
+	// Create a zip with many files so cancellation fires between file extractions.
+	files := make(map[string]string, 100)
+	for i := range 100 {
 		files[fmt.Sprintf("Google Photos/Album/photo%d.jpg", i)] = strings.Repeat("x", 1024)
 	}
 	createTestZip(t, takeoutDir, files)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Cancel after a very short delay so it fires during extraction
+	// Cancel once at least one file has been extracted. Poll the output dir
+	// to synchronize rather than relying on sleep timing.
 	go func() {
-		time.Sleep(time.Millisecond)
-		cancel()
+		for {
+			entries, _ := os.ReadDir(outputDir)
+			if len(entries) > 0 {
+				cancel()
+				return
+			}
+			time.Sleep(100 * time.Microsecond)
+		}
 	}()
 
-	_, err := ImportTakeout(ctx, takeoutDir, outputDir, nil)
+	result, err := ImportTakeout(ctx, takeoutDir, outputDir, nil)
 	if err == nil {
 		t.Fatal("expected error from cancelled context during extraction")
 	}
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected context.Canceled, got: %v", err)
+	}
+	// Verify partial extraction — some files should exist but not all
+	entries, _ := os.ReadDir(outputDir)
+	if len(entries) == 0 {
+		t.Error("expected at least one extracted file before cancellation")
+	}
+	if result != nil && result.Succeeded >= 100 {
+		t.Error("expected partial extraction, but all files were extracted")
 	}
 }

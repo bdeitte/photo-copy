@@ -35,6 +35,7 @@ type Result struct {
 	TotalBytes int64
 
 	ScanLabel string // when set, PrintSummary uses this label instead of "succeeded" (e.g., "files in directory")
+	Limited   bool   // true when transfer was stopped by --limit; suppresses expected-vs-actual warning
 
 	Errors []FileError
 	Warnings []ValidationWarning
@@ -87,7 +88,7 @@ func (r *Result) Duration() time.Duration {
 func (r *Result) Validate() {
 	// Check expected vs actual count — includes failed since those were accounted for
 	accounted := r.Succeeded + r.Skipped + r.Failed
-	if r.Expected > 0 && accounted != r.Expected {
+	if r.Expected > 0 && !r.Limited && accounted != r.Expected {
 		r.Warnings = append(r.Warnings, ValidationWarning{
 			Message: fmt.Sprintf("expected %d files but processed %d (succeeded=%d, skipped=%d, failed=%d)",
 				r.Expected, accounted, r.Succeeded, r.Skipped, r.Failed),
@@ -202,7 +203,11 @@ func (r *Result) WriteReport(dir string) (string, error) {
 	fmt.Fprintf(&b, "directory: %s\n\n", r.Dir)
 
 	fmt.Fprintf(&b, "--- counts ---\n")
-	fmt.Fprintf(&b, "succeeded: %d\n", r.Succeeded)
+	countLabel := "succeeded"
+	if r.ScanLabel != "" {
+		countLabel = r.ScanLabel
+	}
+	fmt.Fprintf(&b, "%s: %d\n", countLabel, r.Succeeded)
 	fmt.Fprintf(&b, "skipped:   %d\n", r.Skipped)
 	fmt.Fprintf(&b, "failed:    %d\n", r.Failed)
 	if r.Expected > 0 {
