@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/briandeitte/photo-copy/internal/daterange"
 	"github.com/spf13/cobra"
@@ -90,8 +93,11 @@ func NewRootCmd() *cobra.Command {
 }
 
 func Execute() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+
 	rootCmd := NewRootCmd()
-	if err := rootCmd.Execute(); err != nil {
+	if err := rootCmd.ExecuteContext(ctx); err != nil {
+		stop()
 		// NOTE: Depends on cobra's internal error message format for unknown commands.
 		if strings.Contains(err.Error(), "unknown command") {
 			printAvailableCommands(os.Stderr, rootCmd)
@@ -99,6 +105,7 @@ func Execute() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	stop()
 }
 
 // printAvailableCommands writes the list of available commands to w.

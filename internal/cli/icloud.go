@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"fmt"
 
@@ -39,7 +38,7 @@ func newICloudDownloadCmd(opts *rootOpts) *cobra.Command {
 
 			log := logging.New(opts.debug, nil)
 			client := icloud.NewClient(cfg, log)
-			result, err := client.Download(context.Background(), args[0], opts.limit, opts.parsedDateRange)
+			result, err := client.Download(cmd.Context(), args[0], opts.limit, opts.parsedDateRange)
 			if err != nil {
 				return err
 			}
@@ -67,7 +66,7 @@ func newICloudUploadCmd(opts *rootOpts) *cobra.Command {
 			}
 
 			client := icloud.NewClient(cfg, log)
-			result, err := client.Upload(context.Background(), args[0], opts.limit, opts.parsedDateRange)
+			result, err := client.Upload(cmd.Context(), args[0], opts.limit, opts.parsedDateRange)
 			if err != nil {
 				return err
 			}

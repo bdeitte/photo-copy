@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"fmt"
 
@@ -40,7 +39,7 @@ func newGoogleUploadCmd(opts *rootOpts) *cobra.Command {
 			}
 
 			log := logging.New(opts.debug, nil)
-			ctx := context.Background()
+			ctx := cmd.Context()
 			client, err := google.NewClient(ctx, cfg, config.DefaultDir(), log)
 			if err != nil {
 				return fmt.Errorf("creating Google Photos client: %w", err)

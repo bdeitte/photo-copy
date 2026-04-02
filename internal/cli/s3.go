@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"fmt"
 
@@ -41,7 +40,7 @@ func newS3UploadCmd(opts *rootOpts) *cobra.Command {
 
 			log := logging.New(opts.debug, nil)
 			client := s3.NewClient(cfg, log)
-			result, err := client.Upload(context.Background(), args[0], bucket, prefix, true, opts.limit, opts.parsedDateRange)
+			result, err := client.Upload(cmd.Context(), args[0], bucket, prefix, true, opts.limit, opts.parsedDateRange)
 			if err != nil {
 				return err
 			}
@@ -74,7 +73,7 @@ func newS3DownloadCmd(opts *rootOpts) *cobra.Command {
 
 			log := logging.New(opts.debug, nil)
 			client := s3.NewClient(cfg, log)
-			result, err := client.Download(context.Background(), bucket, prefix, args[0], true, opts.limit, opts.parsedDateRange)
+			result, err := client.Download(cmd.Context(), bucket, prefix, args[0], true, opts.limit, opts.parsedDateRange)
 			if err != nil {
 				return err
 			}
