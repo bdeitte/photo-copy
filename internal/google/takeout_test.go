@@ -175,10 +175,13 @@ func TestImportTakeout_CancelledDuringExtraction(t *testing.T) {
 	takeoutDir := t.TempDir()
 	outputDir := t.TempDir()
 
-	// Create a zip with many files so cancellation fires between file extractions.
-	files := make(map[string]string, 100)
-	for i := range 100 {
-		files[fmt.Sprintf("Google Photos/Album/photo%d.jpg", i)] = strings.Repeat("x", 1024)
+	// Use 1000 files so extraction takes enough wall-clock time for the
+	// polling goroutine to observe progress and cancel mid-extraction.
+	const fileCount = 1000
+	files := make(map[string]string, fileCount)
+	payload := strings.Repeat("x", 4096)
+	for i := range fileCount {
+		files[fmt.Sprintf("Google Photos/Album/photo%d.jpg", i)] = payload
 	}
 	createTestZip(t, takeoutDir, files)
 
@@ -193,7 +196,7 @@ func TestImportTakeout_CancelledDuringExtraction(t *testing.T) {
 				cancel()
 				return
 			}
-			time.Sleep(100 * time.Microsecond)
+			time.Sleep(50 * time.Microsecond)
 		}
 	}()
 
@@ -209,7 +212,7 @@ func TestImportTakeout_CancelledDuringExtraction(t *testing.T) {
 	if len(entries) == 0 {
 		t.Error("expected at least one extracted file before cancellation")
 	}
-	if result != nil && result.Succeeded >= 100 {
+	if result != nil && result.Succeeded >= fileCount {
 		t.Error("expected partial extraction, but all files were extracted")
 	}
 }

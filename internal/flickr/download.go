@@ -125,6 +125,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 			if transferred[photo.ID] {
 				result.RecordSkip(1)
 				pageSkipped++
+				c.log.Debug("skipping already downloaded: %s", photo.ID)
 				continue
 			}
 
@@ -138,6 +139,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 				} else if !dateRange.Contains(photoDate) {
 					result.RecordSkip(1)
 					pageDateFiltered++
+					c.log.Debug("skipping %s: date %s outside range", photo.ID, photoDate.Format("2006-01-02"))
 					continue
 				}
 			}
@@ -148,6 +150,9 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 				estimator.Tick()
 				processed := result.Succeeded + result.Skipped + result.Failed
 				c.log.Error("[%d/%d] %sgetting original URL for %s: %v", processed, result.Expected, estimator.Estimate(estimateRemaining(limit, result)), photo.ID, err)
+				if limitReached(limit, result) {
+					break
+				}
 				continue
 			}
 
@@ -179,6 +184,9 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 				estimator.Tick()
 				processed := result.Succeeded + result.Skipped + result.Failed
 				c.log.Error("[%d/%d] %sdownloading %s: %v", processed, result.Expected, estimator.Estimate(estimateRemaining(limit, result)), filename, downloadErr)
+				if limitReached(limit, result) {
+					break
+				}
 				continue
 			}
 
@@ -249,9 +257,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 			}
 			c.log.Info("[%d/%d] %sdownloaded %s%s", processed, result.Expected, estimator.Estimate(estimateRemaining(limit, result)), filename, detail)
 
-			if limit > 0 && result.Succeeded+result.Failed >= limit {
-				result.Limited = true
-				c.log.Info("reached limit of %d files (%d downloaded, %d errors)", limit, result.Succeeded, result.Failed)
+			if limitReached(limit, result) {
 				break
 			}
 		}
@@ -263,7 +269,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 			c.log.Info("[%d/%d] skipped %d photos/videos outside date range on page %d", result.Succeeded+result.Skipped+result.Failed, result.Expected, pageDateFiltered, page)
 		}
 
-		if limit > 0 && result.Succeeded+result.Failed >= limit {
+		if result.Limited {
 			break
 		}
 
@@ -290,6 +296,17 @@ func estimateRemaining(limit int, result *transfer.Result) int {
 		return remaining
 	}
 	return result.Expected - result.Succeeded - result.Skipped - result.Failed
+}
+
+// limitReached checks whether the download limit has been hit and, if so,
+// marks the result as limited and logs a summary. Returns true when the
+// caller should break out of the photo loop.
+func limitReached(limit int, result *transfer.Result) bool {
+	if limit <= 0 || result.Succeeded+result.Failed < limit {
+		return false
+	}
+	result.Limited = true
+	return true
 }
 
 // getOriginalURLs retrieves available URLs for a photo or video in preference order.
