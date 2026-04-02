@@ -34,7 +34,9 @@ type Result struct {
 	Skipped    int
 	TotalBytes int64
 
-	Errors   []FileError
+	ScanLabel string // when set, PrintSummary uses this label instead of "succeeded" (e.g., "files in directory")
+
+	Errors []FileError
 	Warnings []ValidationWarning
 
 	StartTime time.Time
@@ -121,7 +123,11 @@ func (r *Result) PrintSummary(log *logging.Logger) {
 	log.Info("")
 	log.Info("=== %s %s summary ===", r.Service, r.Operation)
 
-	parts := []string{fmt.Sprintf("%d succeeded", r.Succeeded)}
+	label := "succeeded"
+	if r.ScanLabel != "" {
+		label = r.ScanLabel
+	}
+	parts := []string{fmt.Sprintf("%d %s", r.Succeeded, label)}
 	if r.Skipped > 0 {
 		parts = append(parts, fmt.Sprintf("%d skipped", r.Skipped))
 	}
@@ -231,7 +237,9 @@ func (r *Result) WriteReport(dir string) (string, error) {
 }
 
 // ScanDir counts files and sizes in r.Dir. Used by S3 after rclone completes.
+// Sets ScanLabel so PrintSummary labels results as directory contents.
 func (r *Result) ScanDir() error {
+	r.ScanLabel = "files in directory"
 	entries, err := os.ReadDir(r.Dir)
 	if err != nil {
 		return err

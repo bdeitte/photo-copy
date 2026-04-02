@@ -4,9 +4,12 @@ import (
 	"archive/zip"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 func createTestZip(t *testing.T, dir string, files map[string]string) string {
@@ -148,7 +151,7 @@ func TestImportTakeout_DuplicateFilenameRenames(t *testing.T) {
 	}
 }
 
-func TestImportTakeout_CancelledContextReturnsError(t *testing.T) {
+func TestImportTakeout_CancelledBeforeStart(t *testing.T) {
 	takeoutDir := t.TempDir()
 	outputDir := t.TempDir()
 
@@ -162,6 +165,34 @@ func TestImportTakeout_CancelledContextReturnsError(t *testing.T) {
 	_, err := ImportTakeout(ctx, takeoutDir, outputDir, nil)
 	if err == nil {
 		t.Fatal("expected error from cancelled context")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled, got: %v", err)
+	}
+}
+
+func TestImportTakeout_CancelledDuringExtraction(t *testing.T) {
+	takeoutDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	// Create a zip with multiple files so cancellation can occur between them.
+	files := make(map[string]string, 20)
+	for i := range 20 {
+		files[fmt.Sprintf("Google Photos/Album/photo%d.jpg", i)] = strings.Repeat("x", 1024)
+	}
+	createTestZip(t, takeoutDir, files)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Cancel after a very short delay so it fires during extraction
+	go func() {
+		time.Sleep(time.Millisecond)
+		cancel()
+	}()
+
+	_, err := ImportTakeout(ctx, takeoutDir, outputDir, nil)
+	if err == nil {
+		t.Fatal("expected error from cancelled context during extraction")
 	}
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected context.Canceled, got: %v", err)

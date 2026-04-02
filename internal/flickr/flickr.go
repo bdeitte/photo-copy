@@ -12,6 +12,17 @@ import (
 	"github.com/briandeitte/photo-copy/internal/logging"
 )
 
+// defaultTimeoutTransport clones http.DefaultTransport and overrides
+// connection-level timeouts to prevent indefinite hangs, while preserving
+// proxy support, HTTP/2, keep-alive, and idle connection settings.
+func defaultTimeoutTransport() *http.Transport {
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.DialContext = (&net.Dialer{Timeout: 30 * time.Second}).DialContext
+	tr.TLSHandshakeTimeout = 15 * time.Second
+	tr.ResponseHeaderTimeout = 60 * time.Second
+	return tr
+}
+
 const (
 	maxRetries             = 7
 	baseRetryDelay         = 2 * time.Second
@@ -93,11 +104,7 @@ func NewClient(cfg *config.FlickrConfig, log *logging.Logger) *Client {
 	return &Client{
 		cfg:              cfg,
 		http: &http.Client{
-			Transport: &http.Transport{
-				DialContext:           (&net.Dialer{Timeout: 30 * time.Second}).DialContext,
-				TLSHandshakeTimeout:  15 * time.Second,
-				ResponseHeaderTimeout: 60 * time.Second,
-			},
+			Transport: defaultTimeoutTransport(),
 		},
 		log:              log,
 		throttleInterval: minRequestInterval,

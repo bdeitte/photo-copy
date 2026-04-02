@@ -83,14 +83,11 @@ func NewClient(ctx context.Context, cfg *config.GoogleConfig, configDir string, 
 		}
 	}
 
+	// Inject a timeout-configured HTTP client into the context so that both
+	// API requests and OAuth token refresh use connection-level timeouts.
+	baseClient := &http.Client{Transport: defaultTimeoutTransport()}
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, baseClient)
 	client := oauthCfg.Client(ctx, token)
-	// The oauth2 client wraps the default transport to inject tokens.
-	// Replace the underlying transport with one that has connection timeouts
-	// while allowing long-running body transfers to proceed without a
-	// client-wide deadline.
-	if tr, ok := client.Transport.(*oauth2.Transport); ok {
-		tr.Base = defaultTimeoutTransport()
-	}
 
 	return &Client{
 		httpClient: client,
@@ -322,13 +319,13 @@ func openBrowser(url string) {
 	_ = cmd.Start()
 }
 
-// defaultTimeoutTransport returns an http.Transport with connection-level
-// timeouts that prevent indefinite hangs on connect/TLS/response-header,
-// while allowing long-running body transfers (uploads/downloads) to proceed.
+// defaultTimeoutTransport clones http.DefaultTransport and overrides
+// connection-level timeouts to prevent indefinite hangs, while preserving
+// proxy support, HTTP/2, keep-alive, and idle connection settings.
 func defaultTimeoutTransport() *http.Transport {
-	return &http.Transport{
-		DialContext:            (&net.Dialer{Timeout: 30 * time.Second}).DialContext,
-		TLSHandshakeTimeout:   15 * time.Second,
-		ResponseHeaderTimeout: 60 * time.Second,
-	}
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.DialContext = (&net.Dialer{Timeout: 30 * time.Second}).DialContext
+	tr.TLSHandshakeTimeout = 15 * time.Second
+	tr.ResponseHeaderTimeout = 60 * time.Second
+	return tr
 }
