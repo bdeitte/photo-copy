@@ -16,10 +16,6 @@ import (
 	"github.com/schollz/progressbar/v3"
 )
 
-// afterExtractHook is called after each file extraction in extractMediaFromZip.
-// Nil in production; tests set this to synchronize cancellation deterministically.
-var afterExtractHook func()
-
 // ImportTakeout extracts media files from Google Takeout zip archives in takeoutDir
 // into outputDir, skipping non-media files and JSON metadata.
 func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *logging.Logger) (*transfer.Result, error) {
@@ -57,7 +53,7 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 		}
 		log.Debug("processing %s", zipPath)
 
-		if err := extractMediaFromZip(ctx, zipPath, outputDir, log, result); err != nil {
+		if err := extractMediaFromZip(ctx, zipPath, outputDir, log, result, nil); err != nil {
 			if ctx.Err() != nil {
 				return result, ctx.Err()
 			}
@@ -70,7 +66,9 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 	return result, nil
 }
 
-func extractMediaFromZip(ctx context.Context, zipPath, outputDir string, log *logging.Logger, result *transfer.Result) error {
+// extractMediaFromZip extracts supported media files from a zip archive.
+// afterExtract, if non-nil, is called after each successful extraction (used by tests).
+func extractMediaFromZip(ctx context.Context, zipPath, outputDir string, log *logging.Logger, result *transfer.Result, afterExtract func()) error {
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return fmt.Errorf("opening zip: %w", err)
@@ -136,8 +134,8 @@ func extractMediaFromZip(ctx context.Context, zipPath, outputDir string, log *lo
 		}
 		_ = bar.Add(1)
 
-		if afterExtractHook != nil {
-			afterExtractHook()
+		if afterExtract != nil {
+			afterExtract()
 		}
 	}
 
