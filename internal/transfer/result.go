@@ -34,8 +34,6 @@ type Result struct {
 	Skipped    int
 	TotalBytes int64
 
-	Scanned bool // true when counts come from directory scan (S3) rather than per-file tracking
-
 	Errors   []FileError
 	Warnings []ValidationWarning
 
@@ -123,18 +121,14 @@ func (r *Result) PrintSummary(log *logging.Logger) {
 	log.Info("")
 	log.Info("=== %s %s summary ===", r.Service, r.Operation)
 
-	if r.Scanned {
-		log.Info("files in directory: %d", r.Succeeded)
-	} else {
-		parts := []string{fmt.Sprintf("%d succeeded", r.Succeeded)}
-		if r.Skipped > 0 {
-			parts = append(parts, fmt.Sprintf("%d skipped", r.Skipped))
-		}
-		if r.Failed > 0 {
-			parts = append(parts, fmt.Sprintf("%d failed", r.Failed))
-		}
-		log.Info("files: %s", strings.Join(parts, ", "))
+	parts := []string{fmt.Sprintf("%d succeeded", r.Succeeded)}
+	if r.Skipped > 0 {
+		parts = append(parts, fmt.Sprintf("%d skipped", r.Skipped))
 	}
+	if r.Failed > 0 {
+		parts = append(parts, fmt.Sprintf("%d failed", r.Failed))
+	}
+	log.Info("files: %s", strings.Join(parts, ", "))
 
 	if r.Expected > 0 {
 		log.Info("expected: %d", r.Expected)
@@ -238,7 +232,6 @@ func (r *Result) WriteReport(dir string) (string, error) {
 
 // ScanDir counts files and sizes in r.Dir. Used by S3 after rclone completes.
 func (r *Result) ScanDir() error {
-	r.Scanned = true
 	entries, err := os.ReadDir(r.Dir)
 	if err != nil {
 		return err

@@ -231,9 +231,6 @@ func TestScanDir(t *testing.T) {
 	if r.TotalBytes != 11 {
 		t.Fatalf("expected 11 bytes, got %d", r.TotalBytes)
 	}
-	if !r.Scanned {
-		t.Fatal("expected Scanned to be true")
-	}
 }
 
 func TestValidate_ZeroSizeFiles_SkippedForUpload(t *testing.T) {
