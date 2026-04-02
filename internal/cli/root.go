@@ -47,23 +47,15 @@ func NewRootCmd() *cobra.Command {
 			opts.parsedDateRange = dr
 		}
 
-		// No-op warnings — match on cmd.Name() and parent for robustness
+		// No-op warnings — use command annotations instead of name matching
 		errW := cmd.ErrOrStderr()
-		if opts.noMetadata {
-			isFlickrDownload := cmd.Name() == "download" && cmd.Parent() != nil && cmd.Parent().Name() == "flickr"
-			if !isFlickrDownload {
-				_, _ = fmt.Fprintln(errW, "Warning: --no-metadata has no effect on "+cmd.Name()+"; metadata embedding only occurs during Flickr downloads")
-			}
+		if opts.noMetadata && cmd.Annotations["supportsMetadata"] != "true" {
+			_, _ = fmt.Fprintln(errW, "Warning: --no-metadata has no effect on "+cmd.Name()+"; metadata embedding only occurs during Flickr downloads")
 		}
 
-		if opts.parsedDateRange != nil {
-			if cmd.Name() == "download" && cmd.Parent() != nil && cmd.Parent().Name() == "google" {
-				_, _ = fmt.Fprintln(errW, "Warning: --date-range has no effect on google download")
-				opts.parsedDateRange = nil
-			} else if cmd.Name() == "config" || (cmd.Parent() != nil && cmd.Parent().Name() == "config") {
-				_, _ = fmt.Fprintln(errW, "Warning: --date-range has no effect on config commands")
-				opts.parsedDateRange = nil
-			}
+		if opts.parsedDateRange != nil && cmd.Annotations["supportsDateRange"] != "true" {
+			_, _ = fmt.Fprintf(errW, "Warning: --date-range has no effect on %s\n", cmd.Name())
+			opts.parsedDateRange = nil
 		}
 
 		return nil

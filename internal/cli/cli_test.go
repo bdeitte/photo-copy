@@ -259,7 +259,7 @@ func TestRootCmd_DateRangeWarningOnConfigSubcommand(t *testing.T) {
 	// Provide empty stdin so the command doesn't block
 	cmd.SetIn(strings.NewReader("\n\n"))
 	_ = cmd.Execute()
-	if !strings.Contains(buf.String(), "--date-range has no effect on config") {
-		t.Errorf("expected date-range config warning on stderr, got: %q", buf.String())
+	if !strings.Contains(buf.String(), "--date-range has no effect on flickr") {
+		t.Errorf("expected date-range warning on stderr, got: %q", buf.String())
 	}
 }
