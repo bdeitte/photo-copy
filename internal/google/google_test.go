@@ -73,7 +73,8 @@ func newTestGoogleClient() *Client {
 }
 
 func TestUploadURL_Default(t *testing.T) {
-	got := uploadURL()
+	c := newTestGoogleClient()
+	got := c.uploadURL()
 	if got != "https://photoslibrary.googleapis.com/v1/uploads" {
 		t.Errorf("uploadURL() = %q, want default", got)
 	}
@@ -81,14 +82,25 @@ func TestUploadURL_Default(t *testing.T) {
 
 func TestUploadURL_EnvOverride(t *testing.T) {
 	t.Setenv("PHOTO_COPY_GOOGLE_API_URL", "http://localhost:9999")
-	got := uploadURL()
+	c := newTestGoogleClient()
+	got := c.uploadURL()
 	if got != "http://localhost:9999/v1/uploads" {
 		t.Errorf("uploadURL() = %q, want override", got)
 	}
 }
 
+func TestUploadURL_FieldOverride(t *testing.T) {
+	c := newTestGoogleClient()
+	c.apiBaseURL = "http://localhost:9999"
+	got := c.uploadURL()
+	if got != "http://localhost:9999/v1/uploads" {
+		t.Errorf("uploadURL() = %q, want field override", got)
+	}
+}
+
 func TestBatchCreateURL_Default(t *testing.T) {
-	got := batchCreateURL()
+	c := newTestGoogleClient()
+	got := c.batchCreateURL()
 	if got != "https://photoslibrary.googleapis.com/v1/mediaItems:batchCreate" {
 		t.Errorf("batchCreateURL() = %q, want default", got)
 	}
@@ -96,9 +108,19 @@ func TestBatchCreateURL_Default(t *testing.T) {
 
 func TestBatchCreateURL_EnvOverride(t *testing.T) {
 	t.Setenv("PHOTO_COPY_GOOGLE_API_URL", "http://localhost:9999")
-	got := batchCreateURL()
+	c := newTestGoogleClient()
+	got := c.batchCreateURL()
 	if got != "http://localhost:9999/v1/mediaItems:batchCreate" {
 		t.Errorf("batchCreateURL() = %q, want override", got)
+	}
+}
+
+func TestBatchCreateURL_FieldOverride(t *testing.T) {
+	c := newTestGoogleClient()
+	c.apiBaseURL = "http://localhost:9999"
+	got := c.batchCreateURL()
+	if got != "http://localhost:9999/v1/mediaItems:batchCreate" {
+		t.Errorf("batchCreateURL() = %q, want field override", got)
 	}
 }
 

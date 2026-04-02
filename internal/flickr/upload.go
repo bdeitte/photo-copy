@@ -143,7 +143,7 @@ func (c *Client) uploadFile(ctx context.Context, filePath string) error {
 		return err
 	}
 
-	upURL := flickrUploadURL()
+	upURL := c.flickrUploadURL()
 	params := map[string]string{}
 	oauthSign("POST", upURL, params, c.cfg)
 

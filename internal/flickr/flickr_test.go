@@ -124,7 +124,8 @@ func TestDefaultExtForLabel(t *testing.T) {
 }
 
 func TestBuildAPIURL(t *testing.T) {
-	url := buildAPIURL("flickr.people.getPhotos", "testkey", map[string]string{
+	c := newTestClient()
+	url := c.buildAPIURL("flickr.people.getPhotos", "testkey", map[string]string{
 		"user_id": "me",
 		"page":    "1",
 	})
@@ -155,7 +156,8 @@ func newTestClient() *Client {
 }
 
 func TestAPIURL_Default(t *testing.T) {
-	got := apiURL()
+	c := newTestClient()
+	got := c.apiURL()
 	if got != "https://api.flickr.com/services/rest/" {
 		t.Errorf("apiURL() = %q, want default", got)
 	}
@@ -163,14 +165,25 @@ func TestAPIURL_Default(t *testing.T) {
 
 func TestAPIURL_EnvOverride(t *testing.T) {
 	t.Setenv("PHOTO_COPY_FLICKR_API_URL", "http://localhost:9999/api/")
-	got := apiURL()
+	c := newTestClient()
+	got := c.apiURL()
 	if got != "http://localhost:9999/api/" {
 		t.Errorf("apiURL() = %q, want override", got)
 	}
 }
 
+func TestAPIURL_FieldOverride(t *testing.T) {
+	c := newTestClient()
+	c.apiBaseURL = "http://localhost:9999/api/"
+	got := c.apiURL()
+	if got != "http://localhost:9999/api/" {
+		t.Errorf("apiURL() = %q, want field override", got)
+	}
+}
+
 func TestFlickrUploadURL_Default(t *testing.T) {
-	got := flickrUploadURL()
+	c := newTestClient()
+	got := c.flickrUploadURL()
 	if got != "https://up.flickr.com/services/upload/" {
 		t.Errorf("flickrUploadURL() = %q, want default", got)
 	}
@@ -178,9 +191,19 @@ func TestFlickrUploadURL_Default(t *testing.T) {
 
 func TestFlickrUploadURL_EnvOverride(t *testing.T) {
 	t.Setenv("PHOTO_COPY_FLICKR_UPLOAD_URL", "http://localhost:9999/upload/")
-	got := flickrUploadURL()
+	c := newTestClient()
+	got := c.flickrUploadURL()
 	if got != "http://localhost:9999/upload/" {
 		t.Errorf("flickrUploadURL() = %q, want override", got)
+	}
+}
+
+func TestFlickrUploadURL_FieldOverride(t *testing.T) {
+	c := newTestClient()
+	c.uploadURL = "http://localhost:9999/upload/"
+	got := c.flickrUploadURL()
+	if got != "http://localhost:9999/upload/" {
+		t.Errorf("flickrUploadURL() = %q, want field override", got)
 	}
 }
 

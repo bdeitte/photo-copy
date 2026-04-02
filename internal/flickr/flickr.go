@@ -35,20 +35,9 @@ func (e *HTTPStatusError) Error() string {
 	return fmt.Sprintf("HTTP %d downloading %s", e.StatusCode, e.URL)
 }
 
-func apiURL() string {
-	if u := os.Getenv("PHOTO_COPY_FLICKR_API_URL"); u != "" {
-		return u
-	}
-	return defaultAPIBaseURL
-}
-
-func flickrUploadURL() string {
-	if u := os.Getenv("PHOTO_COPY_FLICKR_UPLOAD_URL"); u != "" {
-		return u
-	}
-	return defaultUploadURL
-}
-
+// oauthBaseURL returns the Flickr OAuth base URL for package-level functions
+// (GetRequestToken, ExchangeToken) that do not have access to a Client.
+// Uses env var override for testing, falls back to default.
 func oauthBaseURL() string {
 	base := defaultOAuthURL
 	if u := os.Getenv("PHOTO_COPY_FLICKR_OAUTH_URL"); u != "" {
@@ -63,11 +52,39 @@ func isTestMode() bool {
 
 // Client provides Flickr API operations.
 type Client struct {
-	cfg             *config.FlickrConfig
-	http            *http.Client
-	log             *logging.Logger
-	lastRequest     time.Time
+	cfg              *config.FlickrConfig
+	http             *http.Client
+	log              *logging.Logger
+	lastRequest      time.Time
 	throttleInterval time.Duration // current throttle interval, adapts on 429s
+
+	// Testing overrides — empty strings use production defaults (env var then hardcoded).
+	apiBaseURL string
+	uploadURL  string
+}
+
+// apiURL returns the Flickr REST API base URL.
+// Checks the struct field first, then env var, then default.
+func (c *Client) apiURL() string {
+	if c.apiBaseURL != "" {
+		return c.apiBaseURL
+	}
+	if u := os.Getenv("PHOTO_COPY_FLICKR_API_URL"); u != "" {
+		return u
+	}
+	return defaultAPIBaseURL
+}
+
+// flickrUploadURL returns the Flickr upload endpoint URL.
+// Checks the struct field first, then env var, then default.
+func (c *Client) flickrUploadURL() string {
+	if c.uploadURL != "" {
+		return c.uploadURL
+	}
+	if u := os.Getenv("PHOTO_COPY_FLICKR_UPLOAD_URL"); u != "" {
+		return u
+	}
+	return defaultUploadURL
 }
 
 // NewClient creates a new Flickr client.

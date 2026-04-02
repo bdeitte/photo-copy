@@ -138,8 +138,8 @@ func (c *Client) retryDelay(attempt int, resp *http.Response) time.Duration {
 }
 
 // buildAPIURL constructs a Flickr REST API URL (unsigned, for non-authenticated calls).
-func buildAPIURL(method, apiKey string, params map[string]string) string {
-	u, _ := url.Parse(apiURL())
+func (c *Client) buildAPIURL(method, apiKey string, params map[string]string) string {
+	u, _ := url.Parse(c.apiURL())
 	q := u.Query()
 	q.Set("method", method)
 	q.Set("api_key", apiKey)
@@ -157,7 +157,7 @@ func buildAPIURL(method, apiKey string, params map[string]string) string {
 // Note: each iteration calls retryableGet which has its own retry loop for 429/5xx, so in the
 // worst case a single signedAPIGet call may make up to (maxRetries+1)^2 HTTP requests.
 func (c *Client) signedAPIGet(ctx context.Context, method string, extra map[string]string) (*http.Response, error) {
-	baseURL := apiURL()
+	baseURL := c.apiURL()
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		params := map[string]string{

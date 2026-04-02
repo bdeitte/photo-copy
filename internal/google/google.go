@@ -46,6 +46,9 @@ type Client struct {
 	log         *logging.Logger
 	configDir   string
 	lastRequest time.Time
+
+	// Testing override — empty string uses production default (env var then hardcoded).
+	apiBaseURL string
 }
 
 // NewClient creates a new Google Photos client with OAuth2 authentication.

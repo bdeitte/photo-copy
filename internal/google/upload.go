@@ -25,14 +25,24 @@ const (
 	dailyLimit            = 10000
 )
 
-func uploadURL() string {
+// uploadURL returns the Google Photos upload endpoint URL.
+// Checks the struct field first, then env var, then default.
+func (c *Client) uploadURL() string {
+	if c.apiBaseURL != "" {
+		return c.apiBaseURL + "/v1/uploads"
+	}
 	if base := os.Getenv("PHOTO_COPY_GOOGLE_API_URL"); base != "" {
 		return base + "/v1/uploads"
 	}
 	return defaultUploadURL
 }
 
-func batchCreateURL() string {
+// batchCreateURL returns the Google Photos batch create endpoint URL.
+// Checks the struct field first, then env var, then default.
+func (c *Client) batchCreateURL() string {
+	if c.apiBaseURL != "" {
+		return c.apiBaseURL + "/v1/mediaItems:batchCreate"
+	}
 	if base := os.Getenv("PHOTO_COPY_GOOGLE_API_URL"); base != "" {
 		return base + "/v1/mediaItems:batchCreate"
 	}
@@ -171,7 +181,7 @@ func (c *Client) uploadBytes(ctx context.Context, filePath, filename string) (st
 	}
 
 	resp, err := c.retryableDo(ctx, func() (*http.Request, error) {
-		req, err := http.NewRequest("POST", uploadURL(), bytes.NewReader(data))
+		req, err := http.NewRequest("POST", c.uploadURL(), bytes.NewReader(data))
 		if err != nil {
 			return nil, fmt.Errorf("creating request: %w", err)
 		}
@@ -219,7 +229,7 @@ func (c *Client) createMediaItem(ctx context.Context, uploadToken, filename stri
 	c.log.Debug("createMediaItem request body: %s", string(data))
 
 	resp, err := c.retryableDo(ctx, func() (*http.Request, error) {
-		req, err := http.NewRequest("POST", batchCreateURL(), bytes.NewReader(data))
+		req, err := http.NewRequest("POST", c.batchCreateURL(), bytes.NewReader(data))
 		if err != nil {
 			return nil, fmt.Errorf("creating request: %w", err)
 		}
