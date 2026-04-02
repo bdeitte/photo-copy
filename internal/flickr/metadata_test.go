@@ -139,8 +139,8 @@ func TestBuildPhotoMeta(t *testing.T) {
 					}
 				}
 			}
-			if got.isEmpty() != tt.wantIsEmpty {
-				t.Errorf("isEmpty() = %v, want %v", got.isEmpty(), tt.wantIsEmpty)
+			if got.IsEmpty() != tt.wantIsEmpty {
+				t.Errorf("isEmpty() = %v, want %v", got.IsEmpty(), tt.wantIsEmpty)
 			}
 		})
 	}

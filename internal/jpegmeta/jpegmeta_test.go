@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/briandeitte/photo-copy/internal/xmp"
 )
 
 // writeMinimalJPEG creates a minimal valid JPEG file with SOI + APP0(JFIF) + SOS + EOI.
@@ -64,76 +66,6 @@ func readXMPFromJPEG(t *testing.T, path string) string {
 	return ""
 }
 
-// --- Tests for buildXMPPacket ---
-
-func TestBuildXMPPacket_AllFields(t *testing.T) {
-	meta := Metadata{
-		Title:       "My Photo",
-		Description: "A nice sunset",
-		Tags:        []string{"sunset", "nature"},
-	}
-	pkt := buildXMPPacket(meta)
-
-	checks := []string{
-		`<?xpacket begin=`,
-		`id="W5M0MpCehiHzreSzNTczkc9d"`,
-		`<?xpacket end="w"?>`,
-		`xmlns:dc="http://purl.org/dc/elements/1.1/"`,
-		`<dc:title>`,
-		`<rdf:Alt>`,
-		`xml:lang="x-default"`,
-		`My Photo`,
-		`</dc:title>`,
-		`<dc:description>`,
-		`A nice sunset`,
-		`</dc:description>`,
-		`<dc:subject>`,
-		`<rdf:Bag>`,
-		`<rdf:li>sunset</rdf:li>`,
-		`<rdf:li>nature</rdf:li>`,
-		`</rdf:Bag>`,
-		`</dc:subject>`,
-	}
-	for _, want := range checks {
-		if !strings.Contains(pkt, want) {
-			t.Errorf("buildXMPPacket missing %q", want)
-		}
-	}
-}
-
-func TestBuildXMPPacket_EmptyFields(t *testing.T) {
-	meta := Metadata{
-		Title: "Only Title",
-	}
-	pkt := buildXMPPacket(meta)
-
-	if !strings.Contains(pkt, `<dc:title>`) {
-		t.Error("expected dc:title to be present")
-	}
-	if strings.Contains(pkt, `dc:description`) {
-		t.Error("dc:description should be omitted when empty")
-	}
-	if strings.Contains(pkt, `dc:subject`) {
-		t.Error("dc:subject should be omitted when empty")
-	}
-}
-
-func TestBuildXMPPacket_XMLEscaping(t *testing.T) {
-	meta := Metadata{
-		Title:       `Photo & "Friends"`,
-		Description: "",
-		Tags:        []string{`<not a tag>`},
-	}
-	pkt := buildXMPPacket(meta)
-
-	if !strings.Contains(pkt, `Photo &amp; &#34;Friends&#34;`) {
-		t.Errorf("title not properly XML-escaped, got packet:\n%s", pkt)
-	}
-	if !strings.Contains(pkt, `&lt;not a tag&gt;`) {
-		t.Errorf("tag not properly XML-escaped, got packet:\n%s", pkt)
-	}
-}
-
 // --- Tests for SetMetadata ---
 
 func TestSetMetadata_WritesXMP(t *testing.T) {
@@ -141,7 +73,7 @@ func TestSetMetadata_WritesXMP(t *testing.T) {
 	path := filepath.Join(dir, "test.jpg")
 	writeMinimalJPEG(t, path)
 
-	meta := Metadata{
+	meta := xmp.Metadata{
 		Title:       "Sunset Over Mountains",
 		Description: "Beautiful golden hour",
 		Tags:        []string{"sunset", "mountains", "golden hour"},
@@ -170,12 +102,12 @@ func TestSetMetadata_ReplacesExistingXMP(t *testing.T) {
 	path := filepath.Join(dir, "test.jpg")
 	writeMinimalJPEG(t, path)
 
-	first := Metadata{Title: "First Title"}
+	first := xmp.Metadata{Title: "First Title"}
 	if err := SetMetadata(path, first); err != nil {
 		t.Fatalf("first SetMetadata failed: %v", err)
 	}
 
-	second := Metadata{Title: "Second Title", Description: "Replaced"}
+	second := xmp.Metadata{Title: "Second Title", Description: "Replaced"}
 	if err := SetMetadata(path, second); err != nil {
 		t.Fatalf("second SetMetadata failed: %v", err)
 	}
@@ -197,7 +129,7 @@ func TestSetMetadata_NonJPEGError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := SetMetadata(path, Metadata{Title: "Test"})
+	err := SetMetadata(path, xmp.Metadata{Title: "Test"})
 	if err == nil {
 		t.Fatal("expected error for non-JPEG file")
 	}
@@ -217,7 +149,7 @@ func TestSetMetadata_PreservesFilePermissions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := SetMetadata(path, Metadata{Title: "Test"}); err != nil {
+	if err := SetMetadata(path, xmp.Metadata{Title: "Test"}); err != nil {
 		t.Fatalf("SetMetadata failed: %v", err)
 	}
 
@@ -236,7 +168,7 @@ func TestSetMetadata_UnicodeContent(t *testing.T) {
 	path := filepath.Join(dir, "test.jpg")
 	writeMinimalJPEG(t, path)
 
-	meta := Metadata{
+	meta := xmp.Metadata{
 		Title:       "日本語タイトル",
 		Description: "中文描述 & émojis: café",
 		Tags:        []string{"日本", "中国", "한국"},
@@ -267,7 +199,7 @@ func TestSetMetadata_VeryLargeMetadata(t *testing.T) {
 	// So usable XMP payload must be under 65533 - 30 = 65503 bytes.
 	// Build a large title that keeps the total payload just under the limit.
 	largeTitle := strings.Repeat("A", 60000)
-	meta := Metadata{
+	meta := xmp.Metadata{
 		Title: largeTitle,
 	}
 	if err := SetMetadata(path, meta); err != nil {
@@ -289,7 +221,7 @@ func TestSetMetadata_MetadataExceedsLimit(t *testing.T) {
 	// XMP namespace is 30 bytes, XMP boilerplate is ~300 bytes, so a 66000-char title
 	// will push the total well over 65535 bytes.
 	hugeTitle := strings.Repeat("X", 66000)
-	meta := Metadata{
+	meta := xmp.Metadata{
 		Title: hugeTitle,
 	}
 	err := SetMetadata(path, meta)
@@ -302,7 +234,7 @@ func TestSetMetadata_MetadataExceedsLimit(t *testing.T) {
 }
 
 func TestSetMetadata_NonexistentFile(t *testing.T) {
-	err := SetMetadata("/nonexistent/path/test.jpg", Metadata{Title: "Test"})
+	err := SetMetadata("/nonexistent/path/test.jpg", xmp.Metadata{Title: "Test"})
 	if err == nil {
 		t.Fatal("expected error for nonexistent file")
 	}

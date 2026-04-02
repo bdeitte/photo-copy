@@ -10,6 +10,7 @@ import (
 	"time"
 
 	gomp4 "github.com/abema/go-mp4"
+	"github.com/briandeitte/photo-copy/internal/xmp"
 )
 
 // writeMinimalMP4 creates a minimal valid MP4 file with ftyp + moov(mvhd + trak(tkhd + mdia(mdhd))).
@@ -271,7 +272,7 @@ func TestSetXMPMetadata_WritesUUIDBox(t *testing.T) {
 	mp4Path := filepath.Join(dir, "test.mp4")
 	writeMinimalMP4(t, mp4Path, 0)
 
-	meta := XMPMetadata{
+	meta := xmp.Metadata{
 		Title:       "My Title",
 		Description: "My Description",
 		Tags:        []string{"tag1", "tag2"},
@@ -280,21 +281,21 @@ func TestSetXMPMetadata_WritesUUIDBox(t *testing.T) {
 		t.Fatalf("SetXMPMetadata failed: %v", err)
 	}
 
-	xmp := readXMPFromMP4(t, mp4Path)
-	if xmp == "" {
+	xmpData := readXMPFromMP4(t, mp4Path)
+	if xmpData == "" {
 		t.Fatal("XMP UUID box not found in MP4")
 	}
-	if !strings.Contains(xmp, "My Title") {
-		t.Errorf("XMP missing title, got: %s", xmp)
+	if !strings.Contains(xmpData, "My Title") {
+		t.Errorf("XMP missing title, got: %s", xmpData)
 	}
-	if !strings.Contains(xmp, "My Description") {
-		t.Errorf("XMP missing description, got: %s", xmp)
+	if !strings.Contains(xmpData, "My Description") {
+		t.Errorf("XMP missing description, got: %s", xmpData)
 	}
-	if !strings.Contains(xmp, "tag1") {
-		t.Errorf("XMP missing tag1, got: %s", xmp)
+	if !strings.Contains(xmpData, "tag1") {
+		t.Errorf("XMP missing tag1, got: %s", xmpData)
 	}
-	if !strings.Contains(xmp, "tag2") {
-		t.Errorf("XMP missing tag2, got: %s", xmp)
+	if !strings.Contains(xmpData, "tag2") {
+		t.Errorf("XMP missing tag2, got: %s", xmpData)
 	}
 }
 
@@ -349,7 +350,7 @@ func TestSetXMPThenCreationTime_PreservesPlayback(t *testing.T) {
 	}
 
 	// Step 1: SetXMPMetadata (as in download loop)
-	meta := XMPMetadata{
+	meta := xmp.Metadata{
 		Title:       "Beach Sunset",
 		Description: "A lovely sunset at the beach",
 		Tags:        []string{"sunset", "beach", "ocean"},
@@ -379,12 +380,12 @@ func TestSetXMPThenCreationTime_PreservesPlayback(t *testing.T) {
 	verifyTimestampsV0(t, mp4Path, expectedMP4Time)
 
 	// Verify XMP metadata is present
-	xmp := readXMPFromMP4(t, mp4Path)
-	if xmp == "" {
+	xmpData := readXMPFromMP4(t, mp4Path)
+	if xmpData == "" {
 		t.Fatal("XMP UUID box not found after both operations")
 	}
-	if !strings.Contains(xmp, "Beach Sunset") {
-		t.Errorf("XMP missing title, got: %s", xmp)
+	if !strings.Contains(xmpData, "Beach Sunset") {
+		t.Errorf("XMP missing title, got: %s", xmpData)
 	}
 }
 
@@ -612,7 +613,7 @@ func TestSetXMPMetadata_PreservesStcoOffsets(t *testing.T) {
 	}
 
 	// Apply XMP metadata
-	meta := XMPMetadata{Title: "Test Title", Tags: []string{"tag1"}}
+	meta := xmp.Metadata{Title: "Test Title", Tags: []string{"tag1"}}
 	if err := SetXMPMetadata(mp4Path, meta); err != nil {
 		t.Fatalf("SetXMPMetadata failed: %v", err)
 	}
@@ -671,7 +672,7 @@ func TestSetXMPMetadata_AfterSetCreationTime(t *testing.T) {
 		t.Fatalf("SetCreationTime failed: %v", err)
 	}
 
-	meta := XMPMetadata{Title: "After Timestamps"}
+	meta := xmp.Metadata{Title: "After Timestamps"}
 	if err := SetXMPMetadata(mp4Path, meta); err != nil {
 		t.Fatalf("SetXMPMetadata failed: %v", err)
 	}
@@ -681,12 +682,12 @@ func TestSetXMPMetadata_AfterSetCreationTime(t *testing.T) {
 	verifyTimestampsV0(t, mp4Path, expectedMP4Time)
 
 	// Verify XMP is present.
-	xmp := readXMPFromMP4(t, mp4Path)
-	if xmp == "" {
+	xmpData := readXMPFromMP4(t, mp4Path)
+	if xmpData == "" {
 		t.Fatal("XMP UUID box not found after SetCreationTime+SetXMPMetadata")
 	}
-	if !strings.Contains(xmp, "After Timestamps") {
-		t.Errorf("XMP missing title, got: %s", xmp)
+	if !strings.Contains(xmpData, "After Timestamps") {
+		t.Errorf("XMP missing title, got: %s", xmpData)
 	}
 }
 
@@ -695,22 +696,22 @@ func TestSetXMPMetadata_ReplacesExisting(t *testing.T) {
 	mp4Path := filepath.Join(dir, "test.mp4")
 	writeMinimalMP4(t, mp4Path, 0)
 
-	first := XMPMetadata{Title: "First Title"}
+	first := xmp.Metadata{Title: "First Title"}
 	if err := SetXMPMetadata(mp4Path, first); err != nil {
 		t.Fatalf("first SetXMPMetadata failed: %v", err)
 	}
 
-	second := XMPMetadata{Title: "Second Title"}
+	second := xmp.Metadata{Title: "Second Title"}
 	if err := SetXMPMetadata(mp4Path, second); err != nil {
 		t.Fatalf("second SetXMPMetadata failed: %v", err)
 	}
 
-	xmp := readXMPFromMP4(t, mp4Path)
-	if !strings.Contains(xmp, "Second Title") {
-		t.Errorf("XMP should contain second title, got: %s", xmp)
+	xmpData := readXMPFromMP4(t, mp4Path)
+	if !strings.Contains(xmpData, "Second Title") {
+		t.Errorf("XMP should contain second title, got: %s", xmpData)
 	}
-	if strings.Contains(xmp, "First Title") {
-		t.Errorf("XMP should not contain first title after replacement, got: %s", xmp)
+	if strings.Contains(xmpData, "First Title") {
+		t.Errorf("XMP should not contain first title after replacement, got: %s", xmpData)
 	}
 }
 
@@ -723,7 +724,7 @@ func TestSetXMPMetadata_NonMP4Error(t *testing.T) {
 
 	originalData, _ := os.ReadFile(txtPath)
 
-	err := SetXMPMetadata(txtPath, XMPMetadata{Title: "Test"})
+	err := SetXMPMetadata(txtPath, xmp.Metadata{Title: "Test"})
 	if err == nil {
 		t.Fatal("expected error for non-MP4 file")
 	}
@@ -743,7 +744,7 @@ func TestSetXMPMetadata_PreservesFilePermissions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := SetXMPMetadata(mp4Path, XMPMetadata{Title: "Perms Test"}); err != nil {
+	if err := SetXMPMetadata(mp4Path, xmp.Metadata{Title: "Perms Test"}); err != nil {
 		t.Fatalf("SetXMPMetadata failed: %v", err)
 	}
 

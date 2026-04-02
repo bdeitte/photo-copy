@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	xhtml "golang.org/x/net/html"
+
+	"github.com/briandeitte/photo-copy/internal/xmp"
 )
 
 // flickrDescription handles Flickr's {"_content": "text"} description format.
@@ -12,24 +14,12 @@ type flickrDescription struct {
 	Content string `json:"_content"`
 }
 
-// photoMeta holds parsed metadata for a Flickr photo.
-type photoMeta struct {
-	Title       string
-	Description string
-	Tags        []string
-}
-
-// isEmpty returns true if all fields are empty.
-func (m photoMeta) isEmpty() bool {
-	return m.Title == "" && m.Description == "" && len(m.Tags) == 0
-}
-
-// buildPhotoMeta constructs a photoMeta from raw Flickr API fields.
+// buildPhotoMeta constructs an xmp.Metadata from raw Flickr API fields.
 // descriptionHTML is stripped of HTML tags, tagsStr is split on whitespace.
-func buildPhotoMeta(title, descriptionHTML, tagsStr string) photoMeta {
+func buildPhotoMeta(title, descriptionHTML, tagsStr string) xmp.Metadata {
 	desc := stripHTML(descriptionHTML)
 	tags := strings.Fields(tagsStr)
-	return photoMeta{
+	return xmp.Metadata{
 		Title:       title,
 		Description: desc,
 		Tags:        tags,

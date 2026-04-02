@@ -577,22 +577,14 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 				// For MP4/MOV this appends a UUID box at EOF which gomp4 cannot
 				// parse, so it must happen after SetCreationTime.
 				meta := buildPhotoMeta(photo.Title, photo.Description.Content, photo.Tags)
-				if !meta.isEmpty() {
+				if !meta.IsEmpty() {
 					switch ext {
 					case ".jpg", ".jpeg":
-						if err := jpegmeta.SetMetadata(filePath, jpegmeta.Metadata{
-							Title:       meta.Title,
-							Description: meta.Description,
-							Tags:        meta.Tags,
-						}); err != nil {
+						if err := jpegmeta.SetMetadata(filePath, meta); err != nil {
 							c.log.Error("setting JPEG XMP metadata for %s: %v", filename, err)
 						}
 					case ".mp4", ".mov":
-						if err := mp4meta.SetXMPMetadata(filePath, mp4meta.XMPMetadata{
-							Title:       meta.Title,
-							Description: meta.Description,
-							Tags:        meta.Tags,
-						}); err != nil {
+						if err := mp4meta.SetXMPMetadata(filePath, meta); err != nil {
 							c.log.Error("setting MP4 XMP metadata for %s: %v", filename, err)
 						}
 					}

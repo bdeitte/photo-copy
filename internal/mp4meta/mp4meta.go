@@ -4,70 +4,18 @@ package mp4meta
 import (
 	"encoding/binary"
 	"fmt"
-	"html"
 	"math"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	gomp4 "github.com/abema/go-mp4"
+	"github.com/briandeitte/photo-copy/internal/xmp"
 )
 
 // xmpUUID is the UUID identifying an XMP metadata box in an MP4/MOV container.
 var xmpUUID = []byte{0xBE, 0x7A, 0xCF, 0xCB, 0x97, 0xA9, 0x42, 0xE8, 0x9C, 0x71, 0x99, 0x94, 0x91, 0xE3, 0xAF, 0xAC}
 
-// XMPMetadata holds XMP metadata fields to embed in an MP4/MOV file.
-type XMPMetadata struct {
-	Title       string
-	Description string
-	Tags        []string
-}
-
-// escapeXML escapes s for safe inclusion in XML content.
-func escapeXML(s string) string {
-	return html.EscapeString(s)
-}
-
-// buildMP4XMPPacket constructs a complete XMP packet as bytes using Dublin Core (dc) namespace.
-// Empty fields are omitted from the output.
-func buildMP4XMPPacket(meta XMPMetadata) []byte {
-	var sb strings.Builder
-
-	sb.WriteString(`<?xpacket begin="` + "\xef\xbb\xbf" + `" id="W5M0MpCehiHzreSzNTczkc9d"?>`)
-	sb.WriteString(`<x:xmpmeta xmlns:x="adobe:ns:meta/">`)
-	sb.WriteString(`<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">`)
-	sb.WriteString(`<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">`)
-
-	if meta.Title != "" {
-		sb.WriteString(`<dc:title><rdf:Alt><rdf:li xml:lang="x-default">`)
-		sb.WriteString(escapeXML(meta.Title))
-		sb.WriteString(`</rdf:li></rdf:Alt></dc:title>`)
-	}
-
-	if meta.Description != "" {
-		sb.WriteString(`<dc:description><rdf:Alt><rdf:li xml:lang="x-default">`)
-		sb.WriteString(escapeXML(meta.Description))
-		sb.WriteString(`</rdf:li></rdf:Alt></dc:description>`)
-	}
-
-	if len(meta.Tags) > 0 {
-		sb.WriteString(`<dc:subject><rdf:Bag>`)
-		for _, tag := range meta.Tags {
-			sb.WriteString(`<rdf:li>`)
-			sb.WriteString(escapeXML(tag))
-			sb.WriteString(`</rdf:li>`)
-		}
-		sb.WriteString(`</rdf:Bag></dc:subject>`)
-	}
-
-	sb.WriteString(`</rdf:Description>`)
-	sb.WriteString(`</rdf:RDF>`)
-	sb.WriteString(`</x:xmpmeta>`)
-	sb.WriteString(`<?xpacket end="w"?>`)
-
-	return []byte(sb.String())
-}
 
 // buildUUIDBox builds a UUID box containing the given payload with the XMP UUID.
 func buildUUIDBox(payload []byte) []byte {
@@ -145,7 +93,7 @@ func insertOrReplaceUUIDBox(data []byte, xmpPayload []byte) ([]byte, error) {
 // SetXMPMetadata writes XMP metadata into an MP4/MOV file as a UUID box.
 // It inserts or replaces any existing XMP UUID box. The original file is only
 // replaced on success; permissions are preserved.
-func SetXMPMetadata(filePath string, meta XMPMetadata) error {
+func SetXMPMetadata(filePath string, meta xmp.Metadata) error {
 	info, err := os.Stat(filePath)
 	if err != nil {
 		return fmt.Errorf("stat %s: %w", filePath, err)
@@ -168,7 +116,7 @@ func SetXMPMetadata(filePath string, meta XMPMetadata) error {
 		return fmt.Errorf("%s does not appear to be a valid MP4 file (first box type: %q)", filePath, firstType)
 	}
 
-	xmpPayload := buildMP4XMPPacket(meta)
+	xmpPayload := []byte(xmp.BuildDublinCorePacket(meta))
 
 	result, err := insertOrReplaceUUIDBox(data, xmpPayload)
 	if err != nil {
