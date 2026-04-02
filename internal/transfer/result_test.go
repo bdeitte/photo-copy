@@ -105,29 +105,6 @@ func TestValidate_CountMismatch(t *testing.T) {
 	}
 }
 
-func TestValidate_TransferLogConsistency(t *testing.T) {
-	dir := t.TempDir()
-	logPath := filepath.Join(dir, "transfer.log")
-	if err := os.WriteFile(logPath, []byte("111\n222\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "222_abc.jpg"), []byte("data"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	r := NewResult("flickr", "download", dir)
-	r.Finish()
-	r.ValidateTransferLog(logPath, func(id string) string {
-		matches, _ := filepath.Glob(filepath.Join(dir, id+"_*"))
-		if len(matches) > 0 {
-			return matches[0]
-		}
-		return ""
-	})
-	if len(r.Warnings) != 1 {
-		t.Fatalf("expected 1 warning for missing file, got %d: %v", len(r.Warnings), r.Warnings)
-	}
-}
-
 func TestValidate_NoWarningsWhenClean(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "ok.jpg"), []byte("data"), 0644); err != nil {

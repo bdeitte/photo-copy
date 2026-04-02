@@ -1,7 +1,6 @@
 package transfer
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -115,31 +114,6 @@ func (r *Result) Validate() {
 					Message: "zero-size file",
 				})
 			}
-		}
-	}
-}
-
-// ValidateTransferLog checks that each entry in the transfer log has a corresponding
-// file on disk. The resolve function maps a log entry (e.g., photo ID) to a file path,
-// returning "" if no matching file exists.
-func (r *Result) ValidateTransferLog(logPath string, resolve func(entry string) string) {
-	f, err := os.Open(logPath)
-	if err != nil {
-		return
-	}
-	defer func() { _ = f.Close() }()
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		entry := strings.TrimSpace(scanner.Text())
-		if entry == "" {
-			continue
-		}
-		if resolve(entry) == "" {
-			r.Warnings = append(r.Warnings, ValidationWarning{
-				File:    entry,
-				Message: fmt.Sprintf("transfer log entry %q has no matching file on disk", entry),
-			})
 		}
 	}
 }

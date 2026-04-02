@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"os"
@@ -96,9 +97,17 @@ func validateFlickrTransferLog(result *transfer.Result, outputDir string, log *l
 		return
 	}
 	logPath := filepath.Join(outputDir, "transfer.log")
+
+	f, err := os.Open(logPath)
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+
 	dirEntries, readDirErr := os.ReadDir(outputDir)
 	if readDirErr != nil {
 		log.Error("reading output dir for validation: %v", readDirErr)
+		return
 	}
 	filesByPrefix := make(map[string]string, len(dirEntries))
 	for _, e := range dirEntries {
@@ -106,10 +115,18 @@ func validateFlickrTransferLog(result *transfer.Result, outputDir string, log *l
 			filesByPrefix[e.Name()[:idx]] = e.Name()
 		}
 	}
-	result.ValidateTransferLog(logPath, func(entry string) string {
-		if name, ok := filesByPrefix[entry]; ok {
-			return filepath.Join(outputDir, name)
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		entry := strings.TrimSpace(scanner.Text())
+		if entry == "" {
+			continue
 		}
-		return ""
-	})
+		if _, ok := filesByPrefix[entry]; !ok {
+			result.Warnings = append(result.Warnings, transfer.ValidationWarning{
+				File:    entry,
+				Message: fmt.Sprintf("transfer log entry %q has no matching file on disk", entry),
+			})
+		}
+	}
 }
