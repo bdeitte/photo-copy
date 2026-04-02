@@ -2,6 +2,7 @@ package google
 
 import (
 	"archive/zip"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -45,7 +46,7 @@ func TestImportTakeout_ExtractsMediaOnly(t *testing.T) {
 		"Google Photos/Trip/print-subscriptions.json":  `{}`,
 	})
 
-	result, err := ImportTakeout(takeoutDir, outputDir, nil)
+	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil)
 	if err != nil {
 		t.Fatalf("import failed: %v", err)
 	}
@@ -71,7 +72,7 @@ func TestImportTakeout_SkipsNonMedia(t *testing.T) {
 		"Google Photos/data.json":   "{}",
 	})
 
-	result, err := ImportTakeout(takeoutDir, outputDir, nil)
+	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil)
 	if err != nil {
 		t.Fatalf("import failed: %v", err)
 	}
@@ -95,7 +96,7 @@ func TestImportTakeout_MultipleZips(t *testing.T) {
 	})
 	_ = os.Rename(filepath.Join(takeoutDir, "takeout.zip"), filepath.Join(takeoutDir, "takeout-002.zip"))
 
-	result, err := ImportTakeout(takeoutDir, outputDir, nil)
+	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil)
 	if err != nil {
 		t.Fatalf("import failed: %v", err)
 	}
@@ -118,7 +119,7 @@ func TestImportTakeout_DuplicateFilenameRenames(t *testing.T) {
 		"Google Photos/Album/photo.jpg": "new data",
 	})
 
-	result, err := ImportTakeout(takeoutDir, outputDir, nil)
+	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil)
 	if err != nil {
 		t.Fatalf("import failed: %v", err)
 	}

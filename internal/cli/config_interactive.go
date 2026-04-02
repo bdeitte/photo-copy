@@ -3,13 +3,14 @@ package cli
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"strings"
 )
 
 func promptUser(reader *bufio.Reader, prompt string) (string, error) {
 	fmt.Print(prompt)
 	answer, err := reader.ReadString('\n')
-	if err != nil {
+	if err != nil && (err != io.EOF || strings.TrimSpace(answer) == "") {
 		return "", fmt.Errorf("reading input: %w", err)
 	}
 	return strings.TrimSpace(answer), nil

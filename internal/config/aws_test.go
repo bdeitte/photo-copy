@@ -33,6 +33,13 @@ aws_secret_access_key = OTHERKEY
 	}
 }
 
+func TestReadAWSCredentials_MissingFile(t *testing.T) {
+	_, err := ReadAWSCredentials("/nonexistent/path/credentials")
+	if err == nil {
+		t.Fatal("expected error for missing file")
+	}
+}
+
 func TestReadAWSCredentials_MissingDefault(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "credentials")

@@ -228,7 +228,7 @@ func newConfigICloudCmd() *cobra.Command {
 			fmt.Println("Follow the prompts to complete authentication.")
 			fmt.Println()
 
-			authCmd := exec.Command(icloudpdPath,
+			authCmd := exec.CommandContext(cmd.Context(), icloudpdPath,
 				"--username", appleID,
 				"--cookie-directory", cookieDir,
 				"--auth-only",

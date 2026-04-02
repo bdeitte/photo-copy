@@ -50,11 +50,11 @@ func NewRootCmd() *cobra.Command {
 		// No-op warnings — use command annotations instead of name matching
 		errW := cmd.ErrOrStderr()
 		if opts.noMetadata && cmd.Annotations["supportsMetadata"] != "true" {
-			_, _ = fmt.Fprintln(errW, "Warning: --no-metadata has no effect on "+cmd.Name()+"; metadata embedding only occurs during Flickr downloads")
+			_, _ = fmt.Fprintln(errW, "Warning: --no-metadata has no effect on "+cmd.CommandPath()+"; metadata embedding only occurs during Flickr downloads")
 		}
 
 		if opts.parsedDateRange != nil && cmd.Annotations["supportsDateRange"] != "true" {
-			_, _ = fmt.Fprintf(errW, "Warning: --date-range has no effect on %s\n", cmd.Name())
+			_, _ = fmt.Fprintf(errW, "Warning: --date-range has no effect on %s\n", cmd.CommandPath())
 			opts.parsedDateRange = nil
 		}
 
