@@ -2,6 +2,7 @@ package flickr
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -91,7 +92,13 @@ func (c *Client) flickrUploadURL() string {
 func NewClient(cfg *config.FlickrConfig, log *logging.Logger) *Client {
 	return &Client{
 		cfg:              cfg,
-		http:             &http.Client{Timeout: 60 * time.Second},
+		http: &http.Client{
+			Transport: &http.Transport{
+				DialContext:           (&net.Dialer{Timeout: 30 * time.Second}).DialContext,
+				TLSHandshakeTimeout:  15 * time.Second,
+				ResponseHeaderTimeout: 60 * time.Second,
+			},
+		},
 		log:              log,
 		throttleInterval: minRequestInterval,
 	}

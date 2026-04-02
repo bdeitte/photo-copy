@@ -55,9 +55,11 @@ type Client struct {
 func NewClient(ctx context.Context, cfg *config.GoogleConfig, configDir string, log *logging.Logger) (*Client, error) {
 	if os.Getenv("PHOTO_COPY_GOOGLE_TOKEN") == "skip" {
 		return &Client{
-			httpClient: &http.Client{Timeout: 60 * time.Second},
-			log:        log,
-			configDir:  configDir,
+			httpClient: &http.Client{
+				Transport: defaultTimeoutTransport(),
+			},
+			log:       log,
+			configDir: configDir,
 		}, nil
 	}
 
@@ -82,7 +84,13 @@ func NewClient(ctx context.Context, cfg *config.GoogleConfig, configDir string, 
 	}
 
 	client := oauthCfg.Client(ctx, token)
-	client.Timeout = 60 * time.Second
+	// The oauth2 client wraps the default transport to inject tokens.
+	// Replace the underlying transport with one that has connection timeouts
+	// while allowing long-running body transfers to proceed without a
+	// client-wide deadline.
+	if tr, ok := client.Transport.(*oauth2.Transport); ok {
+		tr.Base = defaultTimeoutTransport()
+	}
 
 	return &Client{
 		httpClient: client,
@@ -312,4 +320,15 @@ func openBrowser(url string) {
 		return
 	}
 	_ = cmd.Start()
+}
+
+// defaultTimeoutTransport returns an http.Transport with connection-level
+// timeouts that prevent indefinite hangs on connect/TLS/response-header,
+// while allowing long-running body transfers (uploads/downloads) to proceed.
+func defaultTimeoutTransport() *http.Transport {
+	return &http.Transport{
+		DialContext:            (&net.Dialer{Timeout: 30 * time.Second}).DialContext,
+		TLSHandshakeTimeout:   15 * time.Second,
+		ResponseHeaderTimeout: 60 * time.Second,
+	}
 }

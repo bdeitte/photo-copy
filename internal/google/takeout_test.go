@@ -3,6 +3,7 @@ package google
 import (
 	"archive/zip"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -144,5 +145,25 @@ func TestImportTakeout_DuplicateFilenameRenames(t *testing.T) {
 	}
 	if string(data) != "new data" {
 		t.Errorf("renamed file has wrong content: %q", string(data))
+	}
+}
+
+func TestImportTakeout_CancelledContextReturnsError(t *testing.T) {
+	takeoutDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	createTestZip(t, takeoutDir, map[string]string{
+		"Google Photos/Trip/photo1.jpg": "jpegdata",
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	_, err := ImportTakeout(ctx, takeoutDir, outputDir, nil)
+	if err == nil {
+		t.Fatal("expected error from cancelled context")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled, got: %v", err)
 	}
 }
