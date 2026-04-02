@@ -16,15 +16,26 @@ import (
 	"github.com/schollz/progressbar/v3"
 )
 
-// ImportTakeout extracts media files from Google Takeout zip archives in takeoutDir
-// into outputDir, skipping non-media files and JSON metadata.
-func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *logging.Logger) (*transfer.Result, error) {
-	return importTakeout(ctx, takeoutDir, outputDir, log, nil)
+// importOption configures optional ImportTakeout behavior.
+type importOption func(*importConfig)
+
+type importConfig struct {
+	afterExtract func() // called after each successful file extraction; nil in production
 }
 
-// importTakeout is the internal implementation of ImportTakeout.
-// afterExtract, if non-nil, is called after each successful file extraction.
-func importTakeout(ctx context.Context, takeoutDir, outputDir string, log *logging.Logger, afterExtract func()) (*transfer.Result, error) {
+// withAfterExtract returns an option that calls fn after each file extraction.
+// Used by tests for deterministic cancellation.
+func withAfterExtract(fn func()) importOption {
+	return func(cfg *importConfig) { cfg.afterExtract = fn }
+}
+
+// ImportTakeout extracts media files from Google Takeout zip archives in takeoutDir
+// into outputDir, skipping non-media files and JSON metadata.
+func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *logging.Logger, opts ...importOption) (*transfer.Result, error) {
+	var cfg importConfig
+	for _, o := range opts {
+		o(&cfg)
+	}
 	if log == nil {
 		log = logging.New(false, nil)
 	}
@@ -59,7 +70,7 @@ func importTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 		}
 		log.Debug("processing %s", zipPath)
 
-		if err := extractMediaFromZip(ctx, zipPath, outputDir, log, result, afterExtract); err != nil {
+		if err := extractMediaFromZip(ctx, zipPath, outputDir, log, result, cfg.afterExtract); err != nil {
 			if ctx.Err() != nil {
 				return result, ctx.Err()
 			}

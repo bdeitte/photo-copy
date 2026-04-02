@@ -192,7 +192,7 @@ func TestImportTakeout_CancelledDuringExtraction(t *testing.T) {
 		}
 	}
 
-	result, err := importTakeout(ctx, takeoutDir, outputDir, nil, afterExtract)
+	result, err := ImportTakeout(ctx, takeoutDir, outputDir, nil, withAfterExtract(afterExtract))
 	if err == nil {
 		t.Fatal("expected error from cancelled context during extraction")
 	}
