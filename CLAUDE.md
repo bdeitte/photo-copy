@@ -59,7 +59,7 @@ Go CLI app using [cobra](https://github.com/spf13/cobra) for command structure. 
 - **daterange/** - Parses `--date-range YYYY-MM-DD:YYYY-MM-DD` flag values into a `DateRange` struct with optional `After`/`Before` bounds. `Contains()` checks if a time falls within the range.
 - **mediadate/** - Resolves the best available date from a media file: EXIF `DateTimeOriginal` for JPEGs (via `rwcarlsen/goexif`), `mvhd` creation time for MP4/MOV (via `abema/go-mp4`), falling back to file modification time.
 - **media/** - Shared `IsSupportedFile()` filter for supported photo/video extensions.
-- **transfer/** - Shared `Result` struct for tracking transfer statistics (succeeded/failed/skipped counts, bytes, errors). `Validate()` checks for count mismatches and zero-size files (suppressed when `Limited` is true). `PrintSummary()` and `WriteReport()` use `ScanLabel` to customize output labels. `HandleResult()` is the standard CLI handler that runs validation, summary, and report. `PhotoService` interface defines common `Upload`/`Download` signatures with `UploadOpts`/`DownloadOpts`. `Estimator` provides time-remaining estimates.
+- **transfer/** - Shared `Result` struct for tracking transfer statistics (succeeded/failed/skipped counts, bytes, errors). `Validate()` checks for count mismatches and zero-size files (suppressed when `Limited` is true). `PrintSummary()` and `WriteReport()` use `ScanLabel` to customize output labels. `HandleResult()` is the standard CLI handler that runs validation, summary, and report. `service.go` defines a `PhotoService` interface with `UploadOpts`/`DownloadOpts` as a target abstraction (not yet implemented by service clients). `Estimator` provides time-remaining estimates.
 - **logging/** - Simple leveled logger (Debug/Info/Error) writing to stderr with timestamps.
 - **testutil/mockserver/** - Configurable mock HTTP servers for Flickr and Google Photos, used by integration tests. Builder API with `OnGetPhotos()`, `OnGetSizes()`, etc. Shared handler factories (`RespondJSON`, `RespondSequence`).
 
@@ -82,7 +82,7 @@ Go CLI app using [cobra](https://github.com/spf13/cobra) for command structure. 
 - OAuth token refresh is timeout-protected by injecting a timeout-configured `http.Client` via the `oauth2.HTTPClient` context key.
 - Flickr OAuth nonce generation and signing return errors instead of panicking.
 - Cobra command `Annotations` map declares feature support (e.g., `"supportsMetadata": "true"`) for declarative flag warnings.
-- Google Takeout extraction is context-aware: `extractFile` uses `copyWithContext` for cancellable large file copies, and extraction errors are checked against `ctx.Err()` to stop immediately on cancellation.
+- Google Takeout extraction is context-aware: `extractFile` uses `copyWithContext` for cancellable large file copies, and `extractMediaFromZip` checks `ctx.Err()` after extraction failures to return immediately on cancellation rather than continuing to the next file.
 - No album management — raw media files with embedded metadata only.
 
 ### Design constraints

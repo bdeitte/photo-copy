@@ -126,6 +126,9 @@ func extractMediaFromZip(ctx context.Context, zipPath, outputDir string, log *lo
 		log.Debug("extracting %s -> %s", f.Name, destPath)
 
 		if err := extractFile(ctx, f, destPath); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			log.Error("extracting %s: %v", f.Name, err)
 			result.RecordError(name, err.Error())
 			_ = bar.Add(1)
