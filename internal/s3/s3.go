@@ -22,6 +22,41 @@ type Client struct {
 	log *logging.Logger
 }
 
+// rcloneSetup holds the paths resolved during shared rclone preparation.
+type rcloneSetup struct {
+	binaryPath string
+	configPath string
+}
+
+// prepareRclone discovers the rclone binary and writes a temporary config file.
+// The caller must remove configPath when done.
+func (c *Client) prepareRclone() (*rcloneSetup, error) {
+	binDir, err := rcloneBinDir()
+	if err != nil {
+		return nil, err
+	}
+	rclonePath, err := findRcloneBinary(binDir)
+	if err != nil {
+		return nil, err
+	}
+	configPath, err := writeRcloneConfig(c.cfg.AccessKeyID, c.cfg.SecretAccessKey, c.cfg.Region)
+	if err != nil {
+		return nil, err
+	}
+	return &rcloneSetup{binaryPath: rclonePath, configPath: configPath}, nil
+}
+
+// buildFilterArgs combines media include flags and date range flags.
+func buildFilterArgs(mediaOnly bool, dr *daterange.DateRange) []string {
+	var flags []string
+	if mediaOnly {
+		flags = append(flags, buildMediaIncludeFlags()...)
+	}
+	dateFlags := buildDateRangeFlags(dr)
+	flags = append(flags, dateFlags...)
+	return flags
+}
+
 func NewClient(cfg *config.S3Config, log *logging.Logger) *Client {
 	return &Client{cfg: cfg, log: log}
 }
@@ -29,37 +64,20 @@ func NewClient(cfg *config.S3Config, log *logging.Logger) *Client {
 func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, mediaOnly bool, limit int, dateRange *daterange.DateRange) (*transfer.Result, error) {
 	result := transfer.NewResult("s3", "upload", inputDir)
 
-	binDir, err := rcloneBinDir()
+	setup, err := c.prepareRclone()
 	if err != nil {
 		return result, err
 	}
+	defer func() { _ = os.Remove(setup.configPath) }()
 
-	rclonePath, err := findRcloneBinary(binDir)
-	if err != nil {
-		return result, err
-	}
-
-	configPath, err := writeRcloneConfig(c.cfg.AccessKeyID, c.cfg.SecretAccessKey, c.cfg.Region)
-	if err != nil {
-		return result, err
-	}
-	defer func() { _ = os.Remove(configPath) }()
-
-	args := buildUploadArgs(configPath, inputDir, bucket, prefix)
-	var filterFlags []string
-	if mediaOnly {
-		filterFlags = buildMediaIncludeFlags()
-		args = append(args, filterFlags...)
-	}
-
+	filterFlags := buildFilterArgs(mediaOnly, dateRange)
 	dateFlags := buildDateRangeFlags(dateRange)
-	if len(dateFlags) > 0 {
-		filterFlags = append(filterFlags, dateFlags...)
-		args = append(args, dateFlags...)
-	}
+
+	args := buildUploadArgs(setup.configPath, inputDir, bucket, prefix)
+	args = append(args, filterFlags...)
 
 	if limit > 0 {
-		filesFromPath, err := c.buildFilesFrom(ctx, rclonePath, configPath, inputDir, args, limit)
+		filesFromPath, err := c.buildFilesFrom(ctx, setup.binaryPath, setup.configPath, inputDir, args, limit)
 		if err != nil {
 			return result, fmt.Errorf("building file list for limit: %w", err)
 		}
@@ -69,7 +87,7 @@ func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, me
 		}
 		defer func() { _ = os.Remove(filesFromPath) }()
 		// Replace include flags with --files-from (they're mutually exclusive in rclone)
-		args = buildUploadArgs(configPath, inputDir, bucket, prefix)
+		args = buildUploadArgs(setup.configPath, inputDir, bucket, prefix)
 		args = append(args, "--files-from", filesFromPath)
 		if len(dateFlags) > 0 {
 			args = append(args, dateFlags...)
@@ -77,9 +95,9 @@ func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, me
 		filterFlags = []string{"--files-from", filesFromPath}
 	}
 
-	total := c.countFiles(ctx, rclonePath, configPath, inputDir, filterFlags)
-	c.log.Debug("running: %s %s", rclonePath, strings.Join(args, " "))
-	err = c.runRcloneWithProgress(ctx, rclonePath, args, total, "uploaded")
+	total := c.countFiles(ctx, setup.binaryPath, setup.configPath, inputDir, filterFlags)
+	c.log.Debug("running: %s %s", setup.binaryPath, strings.Join(args, " "))
+	err = c.runRcloneWithProgress(ctx, setup.binaryPath, args, total, "uploaded")
 	result.Finish()
 	return result, err
 }
@@ -87,42 +105,25 @@ func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, me
 func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string, mediaOnly bool, limit int, dateRange *daterange.DateRange) (*transfer.Result, error) {
 	result := transfer.NewResult("s3", "download", outputDir)
 
-	binDir, err := rcloneBinDir()
+	setup, err := c.prepareRclone()
 	if err != nil {
 		return result, err
 	}
-
-	rclonePath, err := findRcloneBinary(binDir)
-	if err != nil {
-		return result, err
-	}
-
-	configPath, err := writeRcloneConfig(c.cfg.AccessKeyID, c.cfg.SecretAccessKey, c.cfg.Region)
-	if err != nil {
-		return result, err
-	}
-	defer func() { _ = os.Remove(configPath) }()
+	defer func() { _ = os.Remove(setup.configPath) }()
 
 	src := "s3:" + bucket
 	if prefix != "" {
 		src += "/" + prefix
 	}
 
-	args := buildDownloadArgs(configPath, bucket, prefix, outputDir)
-	var filterFlags []string
-	if mediaOnly {
-		filterFlags = buildMediaIncludeFlags()
-		args = append(args, filterFlags...)
-	}
-
+	filterFlags := buildFilterArgs(mediaOnly, dateRange)
 	dateFlags := buildDateRangeFlags(dateRange)
-	if len(dateFlags) > 0 {
-		filterFlags = append(filterFlags, dateFlags...)
-		args = append(args, dateFlags...)
-	}
+
+	args := buildDownloadArgs(setup.configPath, bucket, prefix, outputDir)
+	args = append(args, filterFlags...)
 
 	if limit > 0 {
-		filesFromPath, err := c.buildFilesFrom(ctx, rclonePath, configPath, src, args, limit)
+		filesFromPath, err := c.buildFilesFrom(ctx, setup.binaryPath, setup.configPath, src, args, limit)
 		if err != nil {
 			return result, fmt.Errorf("building file list for limit: %w", err)
 		}
@@ -132,7 +133,7 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 		}
 		defer func() { _ = os.Remove(filesFromPath) }()
 		// Replace include flags with --files-from (they're mutually exclusive in rclone)
-		args = buildDownloadArgs(configPath, bucket, prefix, outputDir)
+		args = buildDownloadArgs(setup.configPath, bucket, prefix, outputDir)
 		args = append(args, "--files-from", filesFromPath)
 		if len(dateFlags) > 0 {
 			args = append(args, dateFlags...)
@@ -140,9 +141,9 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 		filterFlags = []string{"--files-from", filesFromPath}
 	}
 
-	total := c.countFiles(ctx, rclonePath, configPath, src, filterFlags)
-	c.log.Debug("running: %s %s", rclonePath, strings.Join(args, " "))
-	err = c.runRcloneWithProgress(ctx, rclonePath, args, total, "downloaded")
+	total := c.countFiles(ctx, setup.binaryPath, setup.configPath, src, filterFlags)
+	c.log.Debug("running: %s %s", setup.binaryPath, strings.Join(args, " "))
+	err = c.runRcloneWithProgress(ctx, setup.binaryPath, args, total, "downloaded")
 	result.Finish()
 	if scanErr := result.ScanDir(); scanErr != nil {
 		c.log.Debug("scanning directory: %v", scanErr)

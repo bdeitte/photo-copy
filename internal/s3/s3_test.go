@@ -181,3 +181,51 @@ func TestBuildDateRangeFlags_NoBounds(t *testing.T) {
 		t.Fatalf("expected no flags for empty range, got %v", flags)
 	}
 }
+
+func TestBuildFilterArgs_MediaOnlyAndDateRange(t *testing.T) {
+	after := time.Date(2020, 1, 1, 0, 0, 0, 0, time.Local)
+	before := time.Date(2024, 1, 1, 0, 0, 0, 0, time.Local)
+	dr := &daterange.DateRange{After: &after, Before: &before}
+
+	flags := buildFilterArgs(true, dr)
+
+	hasIgnoreCase := false
+	hasInclude := false
+	hasMaxAge := false
+	hasMinAge := false
+	for i, f := range flags {
+		switch f {
+		case "--ignore-case":
+			hasIgnoreCase = true
+		case "--include":
+			hasInclude = true
+		case "--max-age":
+			if i+1 < len(flags) && flags[i+1] == "2020-01-01" {
+				hasMaxAge = true
+			}
+		case "--min-age":
+			if i+1 < len(flags) && flags[i+1] == "2024-01-01" {
+				hasMinAge = true
+			}
+		}
+	}
+	if !hasIgnoreCase {
+		t.Error("expected --ignore-case flag")
+	}
+	if !hasInclude {
+		t.Error("expected --include flag")
+	}
+	if !hasMaxAge {
+		t.Error("expected --max-age 2020-01-01 flag")
+	}
+	if !hasMinAge {
+		t.Error("expected --min-age 2024-01-01 flag")
+	}
+}
+
+func TestBuildFilterArgs_NoMediaNoDateRange(t *testing.T) {
+	flags := buildFilterArgs(false, nil)
+	if len(flags) != 0 {
+		t.Fatalf("expected empty slice, got %v", flags)
+	}
+}
