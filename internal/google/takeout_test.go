@@ -208,3 +208,51 @@ func TestImportTakeout_CancelledDuringExtraction(t *testing.T) {
 		t.Error("expected partial extraction, but all files were extracted")
 	}
 }
+
+func TestImportTakeout_CancelledDuringExtractFile(t *testing.T) {
+	// Exercises the ctx.Err() check after extractFile fails due to cancellation.
+	// Files are >32KB so copyWithContext loops and detects the cancelled context
+	// mid-copy, causing extractFile to return an error that triggers the
+	// immediate-return path in extractMediaFromZip.
+	takeoutDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	payload := strings.Repeat("x", 64*1024) // larger than copyWithContext buffer
+	files := make(map[string]string, 5)
+	for i := range 5 {
+		files[fmt.Sprintf("Google Photos/Album/photo%d.jpg", i)] = payload
+	}
+	createTestZip(t, takeoutDir, files)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Cancel after the first successful extraction. The next extractFile call
+	// will fail inside copyWithContext, and the post-failure ctx.Err() check
+	// should return context.Canceled immediately.
+	extracted := 0
+	afterExtract := func() {
+		extracted++
+		if extracted == 1 {
+			cancel()
+		}
+	}
+
+	result, err := ImportTakeout(ctx, takeoutDir, outputDir, nil, withAfterExtract(afterExtract))
+	if err == nil {
+		t.Fatal("expected error from cancelled context")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled, got: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	// Should have exactly 1 successful extraction before cancellation stopped the rest
+	if result.Succeeded != 1 {
+		t.Errorf("expected 1 succeeded, got %d", result.Succeeded)
+	}
+	// The cancelled extractFile should NOT be recorded as a per-file error
+	if result.Failed > 0 {
+		t.Errorf("expected 0 failed (cancellation should not record file errors), got %d", result.Failed)
+	}
+}
