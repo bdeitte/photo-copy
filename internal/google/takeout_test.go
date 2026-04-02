@@ -9,9 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/briandeitte/photo-copy/internal/logging"
-	"github.com/briandeitte/photo-copy/internal/transfer"
 )
 
 func createTestZip(t *testing.T, dir string, files map[string]string) string {
@@ -182,7 +179,7 @@ func TestImportTakeout_CancelledDuringExtraction(t *testing.T) {
 	for i := range fileCount {
 		files[fmt.Sprintf("Google Photos/Album/photo%d.jpg", i)] = strings.Repeat("x", 1024)
 	}
-	zipPath := createTestZip(t, takeoutDir, files)
+	createTestZip(t, takeoutDir, files)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -195,9 +192,7 @@ func TestImportTakeout_CancelledDuringExtraction(t *testing.T) {
 		}
 	}
 
-	log := logging.New(false, nil)
-	result := transfer.NewResult("google-takeout", "import", outputDir)
-	err := extractMediaFromZip(ctx, zipPath, outputDir, log, result, afterExtract)
+	result, err := importTakeout(ctx, takeoutDir, outputDir, nil, afterExtract)
 	if err == nil {
 		t.Fatal("expected error from cancelled context during extraction")
 	}
@@ -209,7 +204,7 @@ func TestImportTakeout_CancelledDuringExtraction(t *testing.T) {
 	if len(entries) == 0 {
 		t.Error("expected at least one extracted file before cancellation")
 	}
-	if result.Succeeded >= fileCount {
+	if result != nil && result.Succeeded >= fileCount {
 		t.Error("expected partial extraction, but all files were extracted")
 	}
 }

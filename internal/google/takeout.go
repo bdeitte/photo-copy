@@ -19,6 +19,12 @@ import (
 // ImportTakeout extracts media files from Google Takeout zip archives in takeoutDir
 // into outputDir, skipping non-media files and JSON metadata.
 func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *logging.Logger) (*transfer.Result, error) {
+	return importTakeout(ctx, takeoutDir, outputDir, log, nil)
+}
+
+// importTakeout is the internal implementation of ImportTakeout.
+// afterExtract, if non-nil, is called after each successful file extraction.
+func importTakeout(ctx context.Context, takeoutDir, outputDir string, log *logging.Logger, afterExtract func()) (*transfer.Result, error) {
 	if log == nil {
 		log = logging.New(false, nil)
 	}
@@ -53,7 +59,7 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 		}
 		log.Debug("processing %s", zipPath)
 
-		if err := extractMediaFromZip(ctx, zipPath, outputDir, log, result, nil); err != nil {
+		if err := extractMediaFromZip(ctx, zipPath, outputDir, log, result, afterExtract); err != nil {
 			if ctx.Err() != nil {
 				return result, ctx.Err()
 			}
