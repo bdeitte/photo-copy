@@ -61,7 +61,7 @@ func NewClient(cfg *config.S3Config, log *logging.Logger) *Client {
 	return &Client{cfg: cfg, log: log}
 }
 
-func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, mediaOnly bool, limit int, dateRange *daterange.DateRange) (*transfer.Result, error) {
+func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, mediaOnly bool, limit int, dateRange *daterange.DateRange, storageClass string) (*transfer.Result, error) {
 	result := transfer.NewResult("s3", "upload", inputDir)
 
 	setup, err := c.prepareRclone()
@@ -73,7 +73,7 @@ func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, me
 	filterFlags := buildFilterArgs(mediaOnly, dateRange)
 	dateFlags := buildDateRangeFlags(dateRange)
 
-	args := buildUploadArgs(setup.configPath, inputDir, bucket, prefix)
+	args := buildUploadArgs(setup.configPath, inputDir, bucket, prefix, storageClass)
 	args = append(args, filterFlags...)
 
 	if limit > 0 {
@@ -87,7 +87,7 @@ func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, me
 		}
 		defer func() { _ = os.Remove(filesFromPath) }()
 		// Replace include flags with --files-from (they're mutually exclusive in rclone)
-		args = buildUploadArgs(setup.configPath, inputDir, bucket, prefix)
+		args = buildUploadArgs(setup.configPath, inputDir, bucket, prefix, storageClass)
 		args = append(args, "--files-from", filesFromPath)
 		if len(dateFlags) > 0 {
 			args = append(args, dateFlags...)
@@ -262,17 +262,21 @@ func countLinesInFile(path string) int {
 	return count
 }
 
-func buildUploadArgs(configPath, inputDir, bucket, prefix string) []string {
+func buildUploadArgs(configPath, inputDir, bucket, prefix, storageClass string) []string {
 	dest := "s3:" + bucket
 	if prefix != "" {
 		dest += "/" + prefix
 	}
 
-	return []string{
+	args := []string{
 		"copy", inputDir, dest,
 		"--config", configPath,
 		"-v", "--use-json-log", "--stats", "0",
 	}
+	if storageClass != "" {
+		args = append(args, "--s3-storage-class", storageClass)
+	}
+	return args
 }
 
 func buildDownloadArgs(configPath, bucket, prefix, outputDir string) []string {

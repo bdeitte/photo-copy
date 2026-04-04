@@ -8,11 +8,12 @@ import (
 )
 
 func TestBuildUploadArgs(t *testing.T) {
-	args := buildUploadArgs("/tmp/config.conf", "/path/to/photos", "my-bucket", "backup/")
+	args := buildUploadArgs("/tmp/config.conf", "/path/to/photos", "my-bucket", "backup/", "DEEP_ARCHIVE")
 	expected := []string{
 		"copy", "/path/to/photos", "s3:my-bucket/backup/",
 		"--config", "/tmp/config.conf",
 		"-v", "--use-json-log", "--stats", "0",
+		"--s3-storage-class", "DEEP_ARCHIVE",
 	}
 
 	if len(args) != len(expected) {
@@ -27,7 +28,7 @@ func TestBuildUploadArgs(t *testing.T) {
 }
 
 func TestBuildUploadArgs_NoPrefix(t *testing.T) {
-	args := buildUploadArgs("/tmp/config.conf", "/path/to/photos", "my-bucket", "")
+	args := buildUploadArgs("/tmp/config.conf", "/path/to/photos", "my-bucket", "", "STANDARD")
 	found := false
 	for _, a := range args {
 		if a == "s3:my-bucket" {
@@ -36,6 +37,15 @@ func TestBuildUploadArgs_NoPrefix(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected 's3:my-bucket' in args, got: %v", args)
+	}
+}
+
+func TestBuildUploadArgs_EmptyStorageClass(t *testing.T) {
+	args := buildUploadArgs("/tmp/config.conf", "/path/to/photos", "my-bucket", "", "")
+	for _, a := range args {
+		if a == "--s3-storage-class" {
+			t.Fatal("expected no --s3-storage-class flag when storage class is empty")
+		}
 	}
 }
 

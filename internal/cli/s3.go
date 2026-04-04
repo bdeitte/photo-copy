@@ -48,7 +48,7 @@ func newS3UploadCmd(opts *rootOpts) *cobra.Command {
 				return err
 			}
 
-			result, err := client.Upload(cmd.Context(), args[0], bucket, prefix, true, opts.limit, opts.parsedDateRange)
+			result, err := client.Upload(cmd.Context(), args[0], bucket, prefix, true, opts.limit, opts.parsedDateRange, "")
 			if err != nil {
 				return err
 			}
