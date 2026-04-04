@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -262,6 +263,9 @@ func TestHelperProcess(t *testing.T) {
 	case "exit_no_output":
 		// Exit 1 with no stderr output
 		os.Exit(1)
+	case "success_no_output":
+		// Exit 0 with no output — simulates no-op rclone (everything synced)
+		os.Exit(0)
 	}
 	os.Exit(0)
 }
@@ -319,5 +323,54 @@ func TestRunRcloneWithProgress_FailWithoutWarningShowsExitError(t *testing.T) {
 	// Should be a plain "rclone failed:" without a message appended
 	if !strings.HasPrefix(errMsg, "rclone failed:") {
 		t.Errorf("error should start with 'rclone failed:', got: %s", errMsg)
+	}
+}
+
+// TestDownloadNoOpProducesSummaryWithBytes mirrors the S3 download code path:
+// runRcloneWithProgress with nil result (no per-file tracking), then ScanDir
+// on the output dir. Verifies that no-op downloads (nothing copied) still
+// produce a non-empty result with real byte totals from existing files.
+func TestDownloadNoOpProducesSummaryWithBytes(t *testing.T) {
+	t.Setenv("GO_TEST_HELPER_PROCESS", "1")
+	t.Setenv("GO_TEST_HELPER_MODE", "success_no_output")
+
+	// Create output dir with pre-existing files (simulates already-synced state)
+	outputDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outputDir, "photo1.jpg"), []byte("jpeg-data-here"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outputDir, "photo2.jpg"), []byte("more-jpeg-data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	log := logging.New(false, nil)
+	client := NewClient(&config.S3Config{}, log)
+
+	binary := os.Args[0]
+	args := []string{"-test.run=TestHelperProcess", "--"}
+
+	// This mirrors Download's code path: nil result for runRcloneWithProgress,
+	// then ScanDir on the result to populate counts and byte totals.
+	err := client.runRcloneWithProgress(context.Background(), binary, args, 0, "downloaded", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	result := transfer.NewResult("s3", "download", outputDir)
+	result.Finish()
+	if scanErr := result.ScanDir(); scanErr != nil {
+		t.Fatalf("ScanDir failed: %v", scanErr)
+	}
+
+	// Non-empty result ensures HandleResult will print a summary
+	if result.Succeeded != 2 {
+		t.Errorf("Succeeded = %d, want 2", result.Succeeded)
+	}
+	if result.TotalBytes == 0 {
+		t.Error("TotalBytes = 0, want non-zero (real file sizes)")
+	}
+	expectedBytes := int64(len("jpeg-data-here") + len("more-jpeg-data"))
+	if result.TotalBytes != expectedBytes {
+		t.Errorf("TotalBytes = %d, want %d", result.TotalBytes, expectedBytes)
 	}
 }
