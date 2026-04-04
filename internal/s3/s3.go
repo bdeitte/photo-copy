@@ -95,7 +95,13 @@ func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, me
 		filterFlags = []string{"--files-from", filesFromPath}
 	}
 
+	c.log.Info("Counting local files...")
 	total := c.countFiles(ctx, setup.binaryPath, setup.configPath, inputDir, filterFlags)
+	if total > 0 {
+		c.log.Info("Found %d files. Comparing with S3 destination (this may take a while)...", total)
+	} else {
+		c.log.Info("Comparing with S3 destination (this may take a while)...")
+	}
 	c.log.Debug("running: %s %s", setup.binaryPath, strings.Join(args, " "))
 	err = c.runRcloneWithProgress(ctx, setup.binaryPath, args, total, "uploaded")
 	result.Finish()
@@ -141,7 +147,13 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 		filterFlags = []string{"--files-from", filesFromPath}
 	}
 
+	c.log.Info("Counting remote files...")
 	total := c.countFiles(ctx, setup.binaryPath, setup.configPath, src, filterFlags)
+	if total > 0 {
+		c.log.Info("Found %d files. Comparing with local directory (this may take a while)...", total)
+	} else {
+		c.log.Info("Comparing with local directory (this may take a while)...")
+	}
 	c.log.Debug("running: %s %s", setup.binaryPath, strings.Join(args, " "))
 	err = c.runRcloneWithProgress(ctx, setup.binaryPath, args, total, "downloaded")
 	result.Finish()
