@@ -233,6 +233,26 @@ func TestScanDir(t *testing.T) {
 	}
 }
 
+func TestScanDir_IgnoresReportFiles(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "photo.jpg"), []byte("jpeg"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "photo-copy-report-s3-download-20240101-100000.txt"), []byte("report data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	r := NewResult("s3", "download", dir)
+	if err := r.ScanDir(); err != nil {
+		t.Fatalf("ScanDir failed: %v", err)
+	}
+	if r.Succeeded != 1 {
+		t.Fatalf("expected 1 file (report excluded), got %d", r.Succeeded)
+	}
+	if r.TotalBytes != int64(len("jpeg")) {
+		t.Fatalf("expected %d bytes, got %d", len("jpeg"), r.TotalBytes)
+	}
+}
+
 func TestValidate_ZeroSizeFiles_SkippedForUpload(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "empty.jpg"), nil, 0644); err != nil {

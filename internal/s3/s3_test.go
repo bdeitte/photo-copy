@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -327,25 +328,36 @@ func TestRunRcloneWithProgress_FailWithoutWarningShowsExitError(t *testing.T) {
 	}
 }
 
+// buildFakeRclone compiles a minimal Go binary that exits 0, suitable as a
+// cross-platform fake rclone. Returns the path to the binary.
+func buildFakeRclone(t *testing.T, dir string) string {
+	t.Helper()
+	name := rcloneBinaryName(runtime.GOOS, runtime.GOARCH)
+	binary := filepath.Join(dir, name)
+
+	src := filepath.Join(t.TempDir(), "main.go")
+	if err := os.WriteFile(src, []byte("package main\nfunc main() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "build", "-o", binary, src)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("building fake rclone: %v\n%s", err, out)
+	}
+	return binary
+}
+
 // TestClientDownload_NoOpProducesSummaryWithBytes drives Client.Download
 // end-to-end with a fake rclone binary that exits 0 (simulating a no-op
 // where everything is already synced). Verifies the returned Result has
 // non-empty counts and real byte totals from ScanDir.
 func TestClientDownload_NoOpProducesSummaryWithBytes(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("fake rclone shell script not supported on Windows")
-	}
-
-	// Create a workspace with a fake rclone binary (shell script that exits 0)
+	// Create a workspace with a fake rclone binary that exits 0
 	workspace := t.TempDir()
 	rcloneDir := filepath.Join(workspace, "tools-bin", "rclone")
 	if err := os.MkdirAll(rcloneDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	fakeBinary := filepath.Join(rcloneDir, rcloneBinaryName(runtime.GOOS, runtime.GOARCH))
-	if err := os.WriteFile(fakeBinary, []byte("#!/bin/sh\nexit 0\n"), 0755); err != nil {
-		t.Fatal(err)
-	}
+	buildFakeRclone(t, rcloneDir)
 
 	// Create output dir with pre-existing files (simulates already-synced state)
 	outputDir := filepath.Join(workspace, "output")
