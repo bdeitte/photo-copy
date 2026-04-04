@@ -173,6 +173,7 @@ func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, a
 
 	estimator := transfer.NewEstimator()
 	copied := 0
+	var lastError string
 	scanner := bufio.NewScanner(stderr)
 	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), 1024*1024) // 1MB max line
 	for scanner.Scan() {
@@ -185,8 +186,9 @@ func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, a
 			continue
 		}
 
-		if entry.Level == "error" {
+		if entry.Level == "error" || entry.Level == "warning" {
 			c.log.Error("rclone: %s", entry.Msg)
+			lastError = entry.Msg
 			continue
 		}
 
@@ -212,6 +214,9 @@ func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, a
 	}
 
 	if err := cmd.Wait(); err != nil {
+		if lastError != "" {
+			return fmt.Errorf("rclone failed: %s", lastError)
+		}
 		return fmt.Errorf("rclone failed: %w", err)
 	}
 	return nil

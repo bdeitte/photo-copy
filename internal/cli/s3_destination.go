@@ -19,6 +19,9 @@ func parseS3Destination(dest string) (bucket, prefix, region string, err error) 
 		return parseS3URL(dest)
 	}
 
+	// s3://bucket/prefix format — strip scheme and parse as plain bucket
+	dest = strings.TrimPrefix(dest, "s3://")
+
 	// Plain bucket format: "bucket" or "bucket/prefix/path/"
 	bucket, prefix, _ = strings.Cut(dest, "/")
 	if bucket == "" {

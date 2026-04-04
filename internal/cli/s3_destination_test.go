@@ -34,6 +34,38 @@ func TestParseS3Destination_PlainBucketWithPath(t *testing.T) {
 	}
 }
 
+func TestParseS3Destination_S3Scheme(t *testing.T) {
+	bucket, prefix, region, err := parseS3Destination("s3://my-bucket/photos/2024/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bucket != "my-bucket" {
+		t.Errorf("bucket = %q, want %q", bucket, "my-bucket")
+	}
+	if prefix != "photos/2024/" {
+		t.Errorf("prefix = %q, want %q", prefix, "photos/2024/")
+	}
+	if region != "" {
+		t.Errorf("region = %q, want empty", region)
+	}
+}
+
+func TestParseS3Destination_S3SchemeNoPrefx(t *testing.T) {
+	bucket, prefix, region, err := parseS3Destination("s3://my-bucket")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bucket != "my-bucket" {
+		t.Errorf("bucket = %q, want %q", bucket, "my-bucket")
+	}
+	if prefix != "" {
+		t.Errorf("prefix = %q, want empty", prefix)
+	}
+	if region != "" {
+		t.Errorf("region = %q, want empty", region)
+	}
+}
+
 func TestParseS3Destination_URL(t *testing.T) {
 	bucket, prefix, region, err := parseS3Destination("https://deitte-backup-things.s3.us-west-2.amazonaws.com/deitte-com/")
 	if err != nil {
