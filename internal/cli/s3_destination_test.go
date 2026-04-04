@@ -93,8 +93,8 @@ func TestParseS3Destination_URLRegionless(t *testing.T) {
 	if prefix != "photos/" {
 		t.Errorf("prefix = %q, want %q", prefix, "photos/")
 	}
-	if region != "" {
-		t.Errorf("region = %q, want empty", region)
+	if region != "us-east-1" {
+		t.Errorf("region = %q, want %q", region, "us-east-1")
 	}
 }
 

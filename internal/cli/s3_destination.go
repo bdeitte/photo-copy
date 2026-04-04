@@ -49,10 +49,10 @@ func parseS3URL(rawURL string) (bucket, prefix, region string, err error) {
 		return "", "", "", fmt.Errorf("S3 URL has empty bucket name: %s", rawURL)
 	}
 	// Extract region from between ".s3." and ".amazonaws.com".
-	// For regionless URLs like <bucket>.s3.amazonaws.com, region is empty.
+	// Regionless URLs like <bucket>.s3.amazonaws.com imply us-east-1.
 	afterS3 := host[s3Idx+4:] // e.g. "us-west-2.amazonaws.com" or "amazonaws.com"
 	if afterS3 == "amazonaws.com" {
-		region = ""
+		region = "us-east-1"
 	} else {
 		region = strings.TrimSuffix(afterS3, ".amazonaws.com")
 	}
