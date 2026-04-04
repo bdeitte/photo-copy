@@ -155,8 +155,11 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 		c.log.Info("Comparing with local directory (this may take a while)...")
 	}
 	c.log.Debug("running: %s %s", setup.binaryPath, strings.Join(args, " "))
-	err = c.runRcloneWithProgress(ctx, setup.binaryPath, args, total, "downloaded", result)
+	err = c.runRcloneWithProgress(ctx, setup.binaryPath, args, total, "downloaded", nil)
 	result.Finish()
+	if scanErr := result.ScanDir(); scanErr != nil {
+		c.log.Debug("scanning directory: %v", scanErr)
+	}
 	return result, err
 }
 
@@ -208,7 +211,9 @@ func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, a
 
 		copied++
 		estimator.Tick()
-		result.RecordSuccess(0)
+		if result != nil {
+			result.RecordSuccess(0)
+		}
 		filename := filepath.Base(entry.Object)
 		if total > 0 {
 			remaining := total - copied
