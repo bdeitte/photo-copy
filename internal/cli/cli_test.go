@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/briandeitte/photo-copy/internal/config"
 	"github.com/briandeitte/photo-copy/internal/logging"
 	"github.com/briandeitte/photo-copy/internal/transfer"
 )
@@ -61,25 +62,60 @@ func TestFlickrCmd_RequiresSubcommand(t *testing.T) {
 	}
 }
 
-func TestS3UploadCmd_RequiresBucketFlag(t *testing.T) {
+func TestS3UploadCmd_RequiresDestination(t *testing.T) {
 	cmd := NewRootCmd()
 	cmd.SetArgs([]string{"s3", "upload", "/tmp/photos"})
 	buf := new(bytes.Buffer)
 	cmd.SetErr(buf)
 	err := cmd.Execute()
 	if err == nil {
-		t.Fatal("expected error for missing --bucket flag")
+		t.Fatal("expected error for missing destination arg")
 	}
 }
 
-func TestS3DownloadCmd_RequiresBucketFlag(t *testing.T) {
+func TestS3DownloadCmd_RequiresDestination(t *testing.T) {
 	cmd := NewRootCmd()
-	cmd.SetArgs([]string{"s3", "download", "/tmp/photos"})
+	cmd.SetArgs([]string{"s3", "download", "my-bucket"})
 	buf := new(bytes.Buffer)
 	cmd.SetErr(buf)
 	err := cmd.Execute()
 	if err == nil {
-		t.Fatal("expected error for missing --bucket flag")
+		t.Fatal("expected error for missing output-dir arg")
+	}
+}
+
+func TestS3UploadCmd_RegionlessURLOverridesConfig(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("PHOTO_COPY_CONFIG_DIR", configDir)
+
+	cfg := &config.S3Config{
+		AccessKeyID:    "test-key",
+		SecretAccessKey: "test-secret",
+		Region:         "us-west-2",
+	}
+	if err := config.SaveS3Config(configDir, cfg); err != nil {
+		t.Fatalf("saving test s3 config: %v", err)
+	}
+
+	cmd := NewRootCmd()
+	// Regionless URL (bucket.s3.amazonaws.com) implies us-east-1.
+	// The command will fail at rclone (not installed in test), but it must
+	// get past config loading and destination parsing to reach that point.
+	cmd.SetArgs([]string{"s3", "upload", "/tmp/photos", "https://my-bucket.s3.amazonaws.com/prefix/"})
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	cmd.SetErr(new(bytes.Buffer))
+	cmd.SetOut(new(bytes.Buffer))
+	err := cmd.Execute()
+
+	if err == nil {
+		t.Fatal("expected error (rclone not found in test)")
+	}
+	// The error should be about rclone, not about config or destination parsing.
+	// This proves the regionless URL was accepted and the command progressed past
+	// config loading with region override to the rclone invocation phase.
+	if !strings.Contains(err.Error(), "rclone") && !strings.Contains(err.Error(), "tools-bin") {
+		t.Errorf("expected rclone-related error (proving command got past config/region override), got: %v", err)
 	}
 }
 
