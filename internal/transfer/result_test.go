@@ -256,6 +256,25 @@ func TestResult_HandleNilResult(t *testing.T) {
 	HandleResult(nil, log, t.TempDir())
 }
 
+func TestHandleResult_NoOpPrintsSummary(t *testing.T) {
+	var buf bytes.Buffer
+	log := logging.New(false, &buf)
+
+	dir := t.TempDir()
+	r := NewResult("s3", "upload", dir)
+	r.Finish()
+
+	HandleResult(r, log, dir)
+
+	output := buf.String()
+	if !strings.Contains(output, "s3 upload summary") {
+		t.Fatalf("expected summary header for no-op result, got:\n%s", output)
+	}
+	if !strings.Contains(output, "0 succeeded") {
+		t.Fatalf("expected '0 succeeded' in no-op summary, got:\n%s", output)
+	}
+}
+
 func TestResult_Duration(t *testing.T) {
 	r := NewResult("flickr", "download", "/tmp")
 	r.StartTime = time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)

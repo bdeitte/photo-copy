@@ -332,6 +332,10 @@ func TestRunRcloneWithProgress_FailWithoutWarningShowsExitError(t *testing.T) {
 // where everything is already synced). Verifies the returned Result has
 // non-empty counts and real byte totals from ScanDir.
 func TestClientDownload_NoOpProducesSummaryWithBytes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake rclone shell script not supported on Windows")
+	}
+
 	// Create a workspace with a fake rclone binary (shell script that exits 0)
 	workspace := t.TempDir()
 	rcloneDir := filepath.Join(workspace, "tools-bin", "rclone")
@@ -360,9 +364,9 @@ func TestClientDownload_NoOpProducesSummaryWithBytes(t *testing.T) {
 
 	log := logging.New(false, nil)
 	client := NewClient(&config.S3Config{
-		AccessKeyID:    "test",
+		AccessKeyID:     "test",
 		SecretAccessKey: "test",
-		Region:         "us-east-1",
+		Region:          "us-east-1",
 	}, log)
 
 	result, err := client.Download(context.Background(), "test-bucket", "", outputDir, false, 0, nil)
