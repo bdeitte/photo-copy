@@ -22,33 +22,38 @@ func newS3Cmd(opts *rootOpts) *cobra.Command {
 	return cmd
 }
 
-func newS3Client(opts *rootOpts) (*s3.Client, *logging.Logger, error) {
-	cfg, err := config.LoadS3Config(config.DefaultDir())
-	if err != nil {
-		if errors.Is(err, config.ErrNotConfigured) {
-			return nil, nil, fmt.Errorf("S3 credentials not configured. Run 'photo-copy config s3' to set up")
-		}
-		return nil, nil, fmt.Errorf("loading S3 config: %w", err)
-	}
-	log := logging.New(opts.debug, nil)
-	return s3.NewClient(cfg, log), log, nil
-}
-
 func newS3UploadCmd(opts *rootOpts) *cobra.Command {
-	var bucket, prefix string
+	var storageClass string
 
 	cmd := &cobra.Command{
-		Use:         "upload <input-dir>",
+		Use:         "upload <input-dir> <s3-destination>",
 		Short:       "Upload photos/videos to S3",
-		Args:        exactArgs(1),
+		Args:        exactArgs(2),
 		Annotations: map[string]string{"supportsDateRange": "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, log, err := newS3Client(opts)
+			bucket, prefix, urlRegion, err := parseS3Destination(args[1])
 			if err != nil {
 				return err
 			}
 
-			result, err := client.Upload(cmd.Context(), args[0], bucket, prefix, true, opts.limit, opts.parsedDateRange, "")
+			cfg, err := config.LoadS3Config(config.DefaultDir())
+			if err != nil {
+				if errors.Is(err, config.ErrNotConfigured) {
+					return fmt.Errorf("S3 credentials not configured. Run 'photo-copy config s3' to set up")
+				}
+				return fmt.Errorf("loading S3 config: %w", err)
+			}
+
+			log := logging.New(opts.debug, nil)
+
+			if urlRegion != "" && urlRegion != cfg.Region {
+				log.Info("Using region %s from S3 URL (overrides configured region %s)", urlRegion, cfg.Region)
+				cfg.Region = urlRegion
+			}
+
+			client := s3.NewClient(cfg, log)
+
+			result, err := client.Upload(cmd.Context(), args[0], bucket, prefix, true, opts.limit, opts.parsedDateRange, storageClass)
 			if err != nil {
 				return err
 			}
@@ -57,37 +62,47 @@ func newS3UploadCmd(opts *rootOpts) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&bucket, "bucket", "", "S3 bucket name")
-	cmd.Flags().StringVar(&prefix, "prefix", "", "S3 key prefix (optional)")
-	_ = cmd.MarkFlagRequired("bucket")
+	cmd.Flags().StringVar(&storageClass, "storage-class", "DEEP_ARCHIVE", "S3 storage class (e.g. STANDARD, GLACIER, DEEP_ARCHIVE)")
 	return cmd
 }
 
 func newS3DownloadCmd(opts *rootOpts) *cobra.Command {
-	var bucket, prefix string
-
 	cmd := &cobra.Command{
-		Use:         "download <output-dir>",
+		Use:         "download <s3-destination> <output-dir>",
 		Short:       "Download photos/videos from S3",
-		Args:        exactArgs(1),
+		Args:        exactArgs(2),
 		Annotations: map[string]string{"supportsDateRange": "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, log, err := newS3Client(opts)
+			bucket, prefix, urlRegion, err := parseS3Destination(args[0])
 			if err != nil {
 				return err
 			}
 
-			result, err := client.Download(cmd.Context(), bucket, prefix, args[0], true, opts.limit, opts.parsedDateRange)
+			cfg, err := config.LoadS3Config(config.DefaultDir())
+			if err != nil {
+				if errors.Is(err, config.ErrNotConfigured) {
+					return fmt.Errorf("S3 credentials not configured. Run 'photo-copy config s3' to set up")
+				}
+				return fmt.Errorf("loading S3 config: %w", err)
+			}
+
+			log := logging.New(opts.debug, nil)
+
+			if urlRegion != "" && urlRegion != cfg.Region {
+				log.Info("Using region %s from S3 URL (overrides configured region %s)", urlRegion, cfg.Region)
+				cfg.Region = urlRegion
+			}
+
+			client := s3.NewClient(cfg, log)
+
+			result, err := client.Download(cmd.Context(), bucket, prefix, args[1], true, opts.limit, opts.parsedDateRange)
 			if err != nil {
 				return err
 			}
-			transfer.HandleResult(result, log, args[0])
+			transfer.HandleResult(result, log, args[1])
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVar(&bucket, "bucket", "", "S3 bucket name")
-	cmd.Flags().StringVar(&prefix, "prefix", "", "S3 key prefix (optional)")
-	_ = cmd.MarkFlagRequired("bucket")
 	return cmd
 }

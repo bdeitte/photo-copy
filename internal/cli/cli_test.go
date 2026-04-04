@@ -173,8 +173,8 @@ func TestRootCmd_InvalidDateRangeReturnsError(t *testing.T) {
 
 func TestRootCmd_NoMetadataWarningOnS3Upload(t *testing.T) {
 	cmd := NewRootCmd()
-	// s3 upload requires --bucket, so it'll error, but PersistentPreRunE fires first
-	cmd.SetArgs([]string{"--no-metadata", "s3", "upload", "--bucket", "b", "/tmp"})
+	// s3 upload now uses positional args; it'll error on config, but PersistentPreRunE fires first
+	cmd.SetArgs([]string{"--no-metadata", "s3", "upload", "/tmp", "s3://b"})
 	buf := new(bytes.Buffer)
 	cmd.SetErr(buf)
 	cmd.SetOut(new(bytes.Buffer))
