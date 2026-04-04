@@ -104,9 +104,13 @@ func Execute() {
 // with a user-friendly error message that shows usage.
 func exactArgs(n int) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {
-		if len(args) != n {
+		if len(args) < n {
 			return fmt.Errorf("requires %d argument(s)\n\nUsage:\n  %s\n\nRun '%s --help' for more information",
 				n, cmd.UseLine(), cmd.CommandPath())
+		}
+		if len(args) > n {
+			return fmt.Errorf("accepts %d argument(s), received %d\n\nUsage:\n  %s\n\nRun '%s --help' for more information",
+				n, len(args), cmd.UseLine(), cmd.CommandPath())
 		}
 		return nil
 	}
