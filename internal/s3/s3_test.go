@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -326,16 +327,27 @@ func TestRunRcloneWithProgress_FailWithoutWarningShowsExitError(t *testing.T) {
 	}
 }
 
-// TestDownloadNoOpProducesSummaryWithBytes mirrors the S3 download code path:
-// runRcloneWithProgress with nil result (no per-file tracking), then ScanDir
-// on the output dir. Verifies that no-op downloads (nothing copied) still
-// produce a non-empty result with real byte totals from existing files.
-func TestDownloadNoOpProducesSummaryWithBytes(t *testing.T) {
-	t.Setenv("GO_TEST_HELPER_PROCESS", "1")
-	t.Setenv("GO_TEST_HELPER_MODE", "success_no_output")
+// TestClientDownload_NoOpProducesSummaryWithBytes drives Client.Download
+// end-to-end with a fake rclone binary that exits 0 (simulating a no-op
+// where everything is already synced). Verifies the returned Result has
+// non-empty counts and real byte totals from ScanDir.
+func TestClientDownload_NoOpProducesSummaryWithBytes(t *testing.T) {
+	// Create a workspace with a fake rclone binary (shell script that exits 0)
+	workspace := t.TempDir()
+	rcloneDir := filepath.Join(workspace, "tools-bin", "rclone")
+	if err := os.MkdirAll(rcloneDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	fakeBinary := filepath.Join(rcloneDir, rcloneBinaryName(runtime.GOOS, runtime.GOARCH))
+	if err := os.WriteFile(fakeBinary, []byte("#!/bin/sh\nexit 0\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create output dir with pre-existing files (simulates already-synced state)
-	outputDir := t.TempDir()
+	outputDir := filepath.Join(workspace, "output")
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(outputDir, "photo1.jpg"), []byte("jpeg-data-here"), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -343,34 +355,31 @@ func TestDownloadNoOpProducesSummaryWithBytes(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Chdir so rcloneBinDir finds the fake binary via cwd fallback
+	t.Chdir(workspace)
+
 	log := logging.New(false, nil)
-	client := NewClient(&config.S3Config{}, log)
+	client := NewClient(&config.S3Config{
+		AccessKeyID:    "test",
+		SecretAccessKey: "test",
+		Region:         "us-east-1",
+	}, log)
 
-	binary := os.Args[0]
-	args := []string{"-test.run=TestHelperProcess", "--"}
-
-	// This mirrors Download's code path: nil result for runRcloneWithProgress,
-	// then ScanDir on the result to populate counts and byte totals.
-	err := client.runRcloneWithProgress(context.Background(), binary, args, 0, "downloaded", nil)
+	result, err := client.Download(context.Background(), "test-bucket", "", outputDir, false, 0, nil)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("Download failed: %v", err)
 	}
 
-	result := transfer.NewResult("s3", "download", outputDir)
-	result.Finish()
-	if scanErr := result.ScanDir(); scanErr != nil {
-		t.Fatalf("ScanDir failed: %v", scanErr)
-	}
-
-	// Non-empty result ensures HandleResult will print a summary
+	// ScanDir should have populated the result with real file data
 	if result.Succeeded != 2 {
 		t.Errorf("Succeeded = %d, want 2", result.Succeeded)
-	}
-	if result.TotalBytes == 0 {
-		t.Error("TotalBytes = 0, want non-zero (real file sizes)")
 	}
 	expectedBytes := int64(len("jpeg-data-here") + len("more-jpeg-data"))
 	if result.TotalBytes != expectedBytes {
 		t.Errorf("TotalBytes = %d, want %d", result.TotalBytes, expectedBytes)
+	}
+	// ScanLabel should be set by ScanDir
+	if result.ScanLabel != "files in directory" {
+		t.Errorf("ScanLabel = %q, want %q", result.ScanLabel, "files in directory")
 	}
 }
