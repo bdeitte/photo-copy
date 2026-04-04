@@ -75,7 +75,7 @@ The Google Photos API only allows access to photos the app itself uploaded, so d
 
 ### S3
 
-Uploads default to Glacier Deep Archive storage class. Use `--storage-class` to change (e.g. `STANDARD`, `GLACIER`, `DEEP_ARCHIVE`).
+Uploads default to Glacier Deep Archive storage class. This will cause delays in retrieving the archives but is an inexpensive option to use for long-term storage. Use `--storage-class` to change (e.g. `STANDARD`, `GLACIER`).
 
 ```bash
 # Upload local photos to S3

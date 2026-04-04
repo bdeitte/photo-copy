@@ -1,10 +1,16 @@
 package s3
 
 import (
+	"context"
+	"fmt"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/briandeitte/photo-copy/internal/config"
 	"github.com/briandeitte/photo-copy/internal/daterange"
+	"github.com/briandeitte/photo-copy/internal/logging"
 )
 
 func TestBuildUploadArgs(t *testing.T) {
@@ -237,5 +243,78 @@ func TestBuildFilterArgs_NoMediaNoDateRange(t *testing.T) {
 	flags := buildFilterArgs(false, nil)
 	if len(flags) != 0 {
 		t.Fatalf("expected empty slice, got %v", flags)
+	}
+}
+
+// TestHelperProcess is not a real test. It is used as a fake subprocess by
+// tests that need to simulate rclone behavior. See exec.Command docs.
+func TestHelperProcess(t *testing.T) {
+	if os.Getenv("GO_TEST_HELPER_PROCESS") != "1" {
+		return
+	}
+	mode := os.Getenv("GO_TEST_HELPER_MODE")
+	switch mode {
+	case "warning_then_fail":
+		// Emit a JSON warning to stderr, then exit 1
+		fmt.Fprintln(os.Stderr, `{"level":"warning","msg":"Failed to create file system: BadRequest"}`)
+		os.Exit(1)
+	case "exit_no_output":
+		// Exit 1 with no stderr output
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
+
+func TestRunRcloneWithProgress_WarningAndFailPreservesBoth(t *testing.T) {
+	// Set env so the helper process activates
+	t.Setenv("GO_TEST_HELPER_PROCESS", "1")
+	t.Setenv("GO_TEST_HELPER_MODE", "warning_then_fail")
+
+	log := logging.New(false, nil)
+	client := NewClient(&config.S3Config{}, log)
+
+	binary := os.Args[0]
+	args := []string{"-test.run=TestHelperProcess", "--"}
+
+	err := client.runRcloneWithProgress(context.Background(), binary, args, 0, "uploaded")
+
+	if err == nil {
+		t.Fatal("expected error from failed subprocess")
+	}
+
+	errMsg := err.Error()
+	// Must contain the original exit error
+	if !strings.Contains(errMsg, "exit status 1") {
+		t.Errorf("error should contain exit status, got: %s", errMsg)
+	}
+	// Must contain the rclone warning message
+	if !strings.Contains(errMsg, "Failed to create file system: BadRequest") {
+		t.Errorf("error should contain rclone message, got: %s", errMsg)
+	}
+}
+
+func TestRunRcloneWithProgress_FailWithoutWarningShowsExitError(t *testing.T) {
+	t.Setenv("GO_TEST_HELPER_PROCESS", "1")
+	t.Setenv("GO_TEST_HELPER_MODE", "exit_no_output")
+
+	log := logging.New(false, nil)
+	client := NewClient(&config.S3Config{}, log)
+
+	binary := os.Args[0]
+	args := []string{"-test.run=TestHelperProcess", "--"}
+
+	err := client.runRcloneWithProgress(context.Background(), binary, args, 0, "uploaded")
+
+	if err == nil {
+		t.Fatal("expected error from failed subprocess")
+	}
+
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "exit status 1") {
+		t.Errorf("error should contain exit status, got: %s", errMsg)
+	}
+	// Should be a plain "rclone failed:" without a message appended
+	if !strings.HasPrefix(errMsg, "rclone failed:") {
+		t.Errorf("error should start with 'rclone failed:', got: %s", errMsg)
 	}
 }
