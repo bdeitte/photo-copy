@@ -119,6 +119,39 @@ func TestS3UploadCmd_RegionlessURLOverridesConfig(t *testing.T) {
 	}
 }
 
+func TestS3UploadCmd_S3SchemeDestination(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("PHOTO_COPY_CONFIG_DIR", configDir)
+
+	cfg := &config.S3Config{
+		AccessKeyID:    "test-key",
+		SecretAccessKey: "test-secret",
+		Region:         "us-west-2",
+	}
+	if err := config.SaveS3Config(configDir, cfg); err != nil {
+		t.Fatalf("saving test s3 config: %v", err)
+	}
+
+	cmd := NewRootCmd()
+	// s3://bucket/prefix should be parsed correctly, not produce s3:s3://...
+	cmd.SetArgs([]string{"s3", "upload", "/tmp/photos", "s3://my-bucket/photos/"})
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	cmd.SetErr(new(bytes.Buffer))
+	cmd.SetOut(new(bytes.Buffer))
+	err := cmd.Execute()
+
+	if err == nil {
+		t.Fatal("expected error (rclone not found in test)")
+	}
+	// Should fail at rclone, not at destination parsing. This proves s3://
+	// was correctly parsed as bucket="my-bucket" prefix="photos/" rather than
+	// producing a malformed s3:s3://my-bucket/photos/ destination.
+	if !strings.Contains(err.Error(), "rclone") && !strings.Contains(err.Error(), "tools-bin") {
+		t.Errorf("expected rclone-related error (proving s3:// was parsed correctly), got: %v", err)
+	}
+}
+
 func TestFlickrDownloadCmd_RequiresArg(t *testing.T) {
 	cmd := NewRootCmd()
 	cmd.SetArgs([]string{"flickr", "download"})

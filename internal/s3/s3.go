@@ -215,7 +215,7 @@ func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, a
 
 	if err := cmd.Wait(); err != nil {
 		if lastError != "" {
-			return fmt.Errorf("rclone failed: %s", lastError)
+			return fmt.Errorf("rclone failed (%w): %s", err, lastError)
 		}
 		return fmt.Errorf("rclone failed: %w", err)
 	}
