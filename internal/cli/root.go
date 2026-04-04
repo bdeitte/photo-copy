@@ -100,6 +100,18 @@ func Execute() {
 	stop()
 }
 
+// exactArgs returns a cobra.PositionalArgs that requires exactly n arguments,
+// with a user-friendly error message that shows usage.
+func exactArgs(n int) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if len(args) != n {
+			return fmt.Errorf("requires %d argument(s)\n\nUsage:\n  %s\n\nRun '%s --help' for more information",
+				n, cmd.UseLine(), cmd.CommandPath())
+		}
+		return nil
+	}
+}
+
 // printAvailableCommands writes the list of available commands to w.
 func printAvailableCommands(w io.Writer, cmd *cobra.Command) {
 	_, _ = fmt.Fprintln(w, "Available commands:")

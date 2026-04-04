@@ -30,7 +30,7 @@ func newFlickrDownloadCmd(opts *rootOpts) *cobra.Command {
 	return &cobra.Command{
 		Use:         "download <output-dir>",
 		Short:       "Download all photos/videos from Flickr",
-		Args:        cobra.ExactArgs(1),
+		Args:        exactArgs(1),
 		Annotations: map[string]string{"supportsMetadata": "true", "supportsDateRange": "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runFlickrDownload(cmd, opts, args[0])
@@ -42,7 +42,7 @@ func newFlickrUploadCmd(opts *rootOpts) *cobra.Command {
 	return &cobra.Command{
 		Use:         "upload <input-dir>",
 		Short:       "Upload photos/videos to Flickr",
-		Args:        cobra.ExactArgs(1),
+		Args:        exactArgs(1),
 		Annotations: map[string]string{"supportsDateRange": "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runFlickrUpload(cmd, opts, args[0])

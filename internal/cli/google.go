@@ -42,7 +42,7 @@ func newGoogleUploadCmd(opts *rootOpts) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "upload <input-dir>",
 		Short:       "Upload photos/videos to Google Photos",
-		Args:        cobra.ExactArgs(1),
+		Args:        exactArgs(1),
 		Annotations: map[string]string{"supportsDateRange": "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			inputDir := args[0]
