@@ -82,6 +82,36 @@ func TestParseS3Destination_URLDeepPath(t *testing.T) {
 	}
 }
 
+func TestParseS3Destination_URLRegionless(t *testing.T) {
+	bucket, prefix, region, err := parseS3Destination("https://my-bucket.s3.amazonaws.com/photos/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bucket != "my-bucket" {
+		t.Errorf("bucket = %q, want %q", bucket, "my-bucket")
+	}
+	if prefix != "photos/" {
+		t.Errorf("prefix = %q, want %q", prefix, "photos/")
+	}
+	if region != "" {
+		t.Errorf("region = %q, want empty", region)
+	}
+}
+
+func TestParseS3Destination_EmptyBucketPlain(t *testing.T) {
+	_, _, _, err := parseS3Destination("/photos")
+	if err == nil {
+		t.Fatal("expected error for empty bucket name")
+	}
+}
+
+func TestParseS3Destination_EmptyBucketURL(t *testing.T) {
+	_, _, _, err := parseS3Destination("https://.s3.us-west-2.amazonaws.com/prefix")
+	if err == nil {
+		t.Fatal("expected error for empty bucket in URL")
+	}
+}
+
 func TestParseS3Destination_InvalidURL(t *testing.T) {
 	_, _, _, err := parseS3Destination("https://not-an-s3-url.example.com/path")
 	if err == nil {

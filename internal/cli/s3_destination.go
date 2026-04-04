@@ -21,6 +21,9 @@ func parseS3Destination(dest string) (bucket, prefix, region string, err error) 
 
 	// Plain bucket format: "bucket" or "bucket/prefix/path/"
 	bucket, prefix, _ = strings.Cut(dest, "/")
+	if bucket == "" {
+		return "", "", "", fmt.Errorf("S3 bucket name cannot be empty")
+	}
 	return bucket, prefix, "", nil
 }
 
@@ -33,16 +36,26 @@ func parseS3URL(rawURL string) (bucket, prefix, region string, err error) {
 
 	host := u.Hostname()
 
-	// Expected format: <bucket>.s3.<region>.amazonaws.com
+	// Expected formats:
+	//   <bucket>.s3.<region>.amazonaws.com  (regional)
+	//   <bucket>.s3.amazonaws.com           (us-east-1 default)
 	s3Idx := strings.Index(host, ".s3.")
 	if s3Idx < 0 || !strings.HasSuffix(host, ".amazonaws.com") {
 		return "", "", "", fmt.Errorf("not a valid S3 URL (expected <bucket>.s3.<region>.amazonaws.com): %s", rawURL)
 	}
 
 	bucket = host[:s3Idx]
-	// Between ".s3." and ".amazonaws.com"
-	regionPart := host[s3Idx+4 : len(host)-len(".amazonaws.com")]
-	region = regionPart
+	if bucket == "" {
+		return "", "", "", fmt.Errorf("S3 URL has empty bucket name: %s", rawURL)
+	}
+	// Extract region from between ".s3." and ".amazonaws.com".
+	// For regionless URLs like <bucket>.s3.amazonaws.com, region is empty.
+	afterS3 := host[s3Idx+4:] // e.g. "us-west-2.amazonaws.com" or "amazonaws.com"
+	if afterS3 == "amazonaws.com" {
+		region = ""
+	} else {
+		region = strings.TrimSuffix(afterS3, ".amazonaws.com")
+	}
 
 	prefix = strings.TrimPrefix(u.Path, "/")
 
