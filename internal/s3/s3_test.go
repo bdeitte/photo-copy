@@ -11,6 +11,7 @@ import (
 	"github.com/briandeitte/photo-copy/internal/config"
 	"github.com/briandeitte/photo-copy/internal/daterange"
 	"github.com/briandeitte/photo-copy/internal/logging"
+	"github.com/briandeitte/photo-copy/internal/transfer"
 )
 
 func TestBuildUploadArgs(t *testing.T) {
@@ -276,7 +277,8 @@ func TestRunRcloneWithProgress_WarningAndFailPreservesBoth(t *testing.T) {
 	binary := os.Args[0]
 	args := []string{"-test.run=TestHelperProcess", "--"}
 
-	err := client.runRcloneWithProgress(context.Background(), binary, args, 0, "uploaded")
+	result := transfer.NewResult("s3", "upload", "/tmp")
+	err := client.runRcloneWithProgress(context.Background(), binary, args, 0, "uploaded", result)
 
 	if err == nil {
 		t.Fatal("expected error from failed subprocess")
@@ -303,7 +305,8 @@ func TestRunRcloneWithProgress_FailWithoutWarningShowsExitError(t *testing.T) {
 	binary := os.Args[0]
 	args := []string{"-test.run=TestHelperProcess", "--"}
 
-	err := client.runRcloneWithProgress(context.Background(), binary, args, 0, "uploaded")
+	result := transfer.NewResult("s3", "upload", "/tmp")
+	err := client.runRcloneWithProgress(context.Background(), binary, args, 0, "uploaded", result)
 
 	if err == nil {
 		t.Fatal("expected error from failed subprocess")

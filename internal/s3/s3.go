@@ -103,7 +103,7 @@ func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, me
 		c.log.Info("Comparing with S3 destination (this may take a while)...")
 	}
 	c.log.Debug("running: %s %s", setup.binaryPath, strings.Join(args, " "))
-	err = c.runRcloneWithProgress(ctx, setup.binaryPath, args, total, "uploaded")
+	err = c.runRcloneWithProgress(ctx, setup.binaryPath, args, total, "uploaded", result)
 	result.Finish()
 	return result, err
 }
@@ -155,11 +155,8 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 		c.log.Info("Comparing with local directory (this may take a while)...")
 	}
 	c.log.Debug("running: %s %s", setup.binaryPath, strings.Join(args, " "))
-	err = c.runRcloneWithProgress(ctx, setup.binaryPath, args, total, "downloaded")
+	err = c.runRcloneWithProgress(ctx, setup.binaryPath, args, total, "downloaded", result)
 	result.Finish()
-	if scanErr := result.ScanDir(); scanErr != nil {
-		c.log.Debug("scanning directory: %v", scanErr)
-	}
 	return result, err
 }
 
@@ -170,7 +167,7 @@ type rcloneLogEntry struct {
 	Object string `json:"object"`
 }
 
-func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, args []string, total int, verb string) error {
+func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, args []string, total int, verb string, result *transfer.Result) error {
 	cmd := exec.CommandContext(ctx, rclonePath, args...)
 	cmd.Stdout = os.Stdout
 
@@ -211,6 +208,7 @@ func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, a
 
 		copied++
 		estimator.Tick()
+		result.RecordSuccess(0)
 		filename := filepath.Base(entry.Object)
 		if total > 0 {
 			remaining := total - copied
