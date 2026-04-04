@@ -75,18 +75,29 @@ The Google Photos API only allows access to photos the app itself uploaded, so d
 
 ### S3
 
+Uploads default to Glacier Deep Archive storage class. Use `--storage-class` to change (e.g. `STANDARD`, `GLACIER`, `DEEP_ARCHIVE`).
+
 ```bash
 # Upload local photos to S3
-./photo-copy s3 upload ../photos --bucket my-bucket --prefix photos/
+./photo-copy s3 upload ../photos my-bucket/photos/
+
+# Upload to S3 using full URL
+./photo-copy s3 upload ../photos https://deitte-backup-things.s3.us-west-2.amazonaws.com/deitte-com/
+
+# Upload with standard storage class
+./photo-copy s3 upload ../photos my-bucket/photos/ --storage-class STANDARD
 
 # Upload only files modified in 2023, limit to 200
-./photo-copy s3 upload --date-range 2023-01-01:2023-12-31 --limit 200 ../photos --bucket my-bucket --prefix photos/
+./photo-copy s3 upload --date-range 2023-01-01:2023-12-31 --limit 200 ../photos my-bucket/photos/
 
 # Download photos from S3
-./photo-copy s3 download ../photos --bucket my-bucket --prefix photos/
+./photo-copy s3 download my-bucket/photos/ ../photos
+
+# Download using full S3 URL
+./photo-copy s3 download https://deitte-backup-things.s3.us-west-2.amazonaws.com/deitte-com/ ../photos
 
 # Download only files modified since 2024
-./photo-copy s3 download --date-range 2024-01-01: ../photos --bucket my-bucket --prefix photos/
+./photo-copy s3 download --date-range 2024-01-01: my-bucket/photos/ ../photos
 ```
 
 ### iCloud Photos
