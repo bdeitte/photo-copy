@@ -757,11 +757,14 @@ func TestClientDownload_GlacierRestoreCancelled(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Signal file: restore writes this when it starts, test waits for it before cancelling
+	restoreStarted := filepath.Join(workspace, "restore-started")
+
 	name := rcloneBinaryName(runtime.GOOS, runtime.GOARCH)
 	binary := filepath.Join(rcloneDir, name)
 	src := filepath.Join(t.TempDir(), "main.go")
-	// Fake rclone: lsf --format pT returns glacier file, backend restore sleeps forever,
-	// copy writes a marker (should never be reached)
+	// Fake rclone: lsf returns glacier file, backend restore signals start then blocks,
+	// lsf (count) and copy write markers (should never be reached after cancel)
 	prog := `package main
 
 import (
@@ -772,27 +775,32 @@ import (
 )
 
 func main() {
-	for _, arg := range os.Args[1:] {
+	exe, _ := os.Executable()
+	base := filepath.Join(filepath.Dir(exe), "..", "..")
+
+	for i, arg := range os.Args[1:] {
 		if arg == "lsf" {
-			for i, a := range os.Args {
-				if a == "--format" && i+1 < len(os.Args) && os.Args[i+1] == "pT" {
+			for j, a := range os.Args {
+				if a == "--format" && j+1 < len(os.Args) && os.Args[j+1] == "pT" {
 					fmt.Fprintln(os.Stdout, "photo.jpg;GLACIER")
 					os.Exit(0)
 				}
 			}
+			// This is the count lsf — should not be reached after cancel
+			_ = i
+			os.WriteFile(filepath.Join(base, "count-invoked"), []byte("yes"), 0644)
 			fmt.Fprintln(os.Stdout, "photo.jpg")
 			os.Exit(0)
 		}
 		if arg == "backend" {
+			// Signal that restore has started
+			os.WriteFile(filepath.Join(base, "restore-started"), []byte("yes"), 0644)
 			// Block until killed
 			time.Sleep(10 * time.Minute)
 			os.Exit(0)
 		}
 		if arg == "copy" {
-			// Should never reach here — write marker to detect if it does
-			exe, _ := os.Executable()
-			marker := filepath.Join(filepath.Dir(exe), "..", "..", "copy-invoked")
-			os.WriteFile(marker, []byte("yes"), 0644)
+			os.WriteFile(filepath.Join(base, "copy-invoked"), []byte("yes"), 0644)
 			os.Exit(0)
 		}
 	}
@@ -821,10 +829,16 @@ func main() {
 	}, log)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	// Cancel after a short delay so restore gets killed
+
+	// Wait for restore to actually start, then cancel
 	go func() {
-		time.Sleep(200 * time.Millisecond)
-		cancel()
+		for {
+			if _, err := os.Stat(restoreStarted); err == nil {
+				cancel()
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
 	}()
 
 	_, dlErr := client.Download(ctx, "test-bucket", "prefix", outputDir, false, 0, nil)
@@ -835,9 +849,11 @@ func main() {
 		t.Errorf("expected context.Canceled, got: %v", dlErr)
 	}
 
-	// Verify copy was never invoked
-	copyMarker := filepath.Join(workspace, "copy-invoked")
-	if _, err := os.Stat(copyMarker); err == nil {
+	// Verify neither count nor copy were invoked after cancellation
+	if _, err := os.Stat(filepath.Join(workspace, "count-invoked")); err == nil {
+		t.Error("count lsf should not have been invoked after context cancellation")
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "copy-invoked")); err == nil {
 		t.Error("rclone copy should not have been invoked after context cancellation")
 	}
 }
