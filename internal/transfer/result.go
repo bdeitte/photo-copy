@@ -87,12 +87,17 @@ func (r *Result) Duration() time.Duration {
 
 // Validate runs post-transfer checks: count verification and zero-size file detection.
 func (r *Result) Validate() {
-	// Check expected vs actual count — includes failed since those were accounted for
-	accounted := r.Succeeded + r.Skipped + r.Failed
+	// Check expected vs actual count — includes failed and restoring since those are accounted for
+	accounted := r.Succeeded + r.Skipped + r.Failed + r.Restoring
 	if r.Expected > 0 && !r.Limited && accounted != r.Expected {
+		msg := fmt.Sprintf("expected %d files but processed %d (succeeded=%d, skipped=%d, failed=%d",
+			r.Expected, accounted, r.Succeeded, r.Skipped, r.Failed)
+		if r.Restoring > 0 {
+			msg += fmt.Sprintf(", restoring=%d", r.Restoring)
+		}
+		msg += ")"
 		r.Warnings = append(r.Warnings, ValidationWarning{
-			Message: fmt.Sprintf("expected %d files but processed %d (succeeded=%d, skipped=%d, failed=%d)",
-				r.Expected, accounted, r.Succeeded, r.Skipped, r.Failed),
+			Message: msg,
 		})
 	}
 

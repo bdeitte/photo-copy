@@ -67,7 +67,10 @@ func TestFilterOutExisting(t *testing.T) {
 	}
 
 	files := []string{"exists.jpg", "missing.jpg", "also-missing.mp4"}
-	result := filterOutExisting(files, dir)
+	result, err := filterOutExisting(files, dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	expected := []string{"missing.jpg", "also-missing.mp4"}
 	if len(result) != len(expected) {
@@ -86,7 +89,10 @@ func TestFilterOutExisting_AllExist(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := filterOutExisting([]string{"a.jpg"}, dir)
+	result, err := filterOutExisting([]string{"a.jpg"}, dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(result) != 0 {
 		t.Fatalf("expected empty, got %v", result)
 	}
@@ -118,7 +124,10 @@ func main() {
 }
 `
 	binary := buildFakeBinary(t, src)
-	glacier := detectGlacierFiles(context.Background(), binary, "/tmp/config.conf", "s3:bucket/prefix", nil)
+	glacier, err := detectGlacierFiles(context.Background(), binary, "/tmp/config.conf", "s3:bucket/prefix", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	expected := []string{"photo2.jpg", "video.mp4"}
 	if len(glacier) != len(expected) {
@@ -128,6 +137,29 @@ func main() {
 		if glacier[i] != want {
 			t.Errorf("glacier[%d] = %q, want %q", i, glacier[i], want)
 		}
+	}
+}
+
+func TestParseStorageClasses_SemicolonInKey(t *testing.T) {
+	input := "albums/2024;trip.mov;GLACIER\nnormal.jpg;STANDARD\n"
+	glacier := parseStorageClasses(input)
+
+	expected := []string{"albums/2024;trip.mov"}
+	if len(glacier) != len(expected) {
+		t.Fatalf("got %d glacier files, want %d: %v", len(glacier), len(expected), glacier)
+	}
+	if glacier[0] != expected[0] {
+		t.Errorf("glacier[0] = %q, want %q", glacier[0], expected[0])
+	}
+}
+
+func TestDetectGlacierFiles_CancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := detectGlacierFiles(ctx, "/nonexistent", "/tmp/config.conf", "s3:bucket/prefix", nil)
+	if err == nil {
+		t.Fatal("expected error for cancelled context")
 	}
 }
 

@@ -148,9 +148,15 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 	}
 
 	// Detect and restore Glacier objects
-	glacierFiles := detectGlacierFiles(ctx, setup.binaryPath, setup.configPath, src, filterFlags)
+	glacierFiles, detectErr := detectGlacierFiles(ctx, setup.binaryPath, setup.configPath, src, filterFlags)
+	if detectErr != nil {
+		return result, detectErr
+	}
 	if len(glacierFiles) > 0 {
-		needRestore := filterOutExisting(glacierFiles, outputDir)
+		needRestore, filterErr := filterOutExisting(glacierFiles, outputDir)
+		if filterErr != nil {
+			return result, filterErr
+		}
 		if len(needRestore) > 0 {
 			c.log.Info("Initiating Glacier restore for %d files (Bulk tier, ~5-12 hours)...", len(needRestore))
 			if restoreErr := initiateRestore(ctx, setup.binaryPath, setup.configPath, src, filterFlags, c.log); restoreErr != nil {
@@ -251,8 +257,8 @@ func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, a
 	}
 
 	if waitErr := cmd.Wait(); waitErr != nil {
-		if glacierPending > 0 && lastError == "" {
-			// All errors were glacier-related — not a real failure
+		if glacierPending > 0 && lastError == "" && ctx.Err() == nil {
+			// All errors were glacier-related and context wasn't cancelled — not a real failure
 			return glacierPending, nil
 		}
 		if lastError != "" {

@@ -2,6 +2,7 @@ package s3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -27,13 +28,15 @@ func parseStorageClasses(output string) []string {
 	}
 	var glacier []string
 	for _, line := range strings.Split(trimmed, "\n") {
-		parts := strings.SplitN(line, ";", 2)
-		if len(parts) != 2 {
+		// Split on the last semicolon — S3 keys can contain semicolons
+		idx := strings.LastIndex(line, ";")
+		if idx < 0 {
 			continue
 		}
-		class := strings.TrimSpace(parts[1])
+		path := line[:idx]
+		class := strings.TrimSpace(line[idx+1:])
 		if class == "GLACIER" || class == "DEEP_ARCHIVE" {
-			glacier = append(glacier, parts[0])
+			glacier = append(glacier, path)
 		}
 	}
 	return glacier
@@ -41,29 +44,42 @@ func parseStorageClasses(output string) []string {
 
 // filterOutExisting removes files that already exist in the output directory.
 // This avoids initiating restore for files already downloaded.
-func filterOutExisting(files []string, outputDir string) []string {
+// Returns an error if a non-NotExist filesystem error is encountered.
+func filterOutExisting(files []string, outputDir string) ([]string, error) {
 	var missing []string
 	for _, f := range files {
-		if _, err := os.Stat(filepath.Join(outputDir, f)); err != nil {
-			missing = append(missing, f)
+		_, err := os.Stat(filepath.Join(outputDir, f))
+		if err == nil {
+			continue
 		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("checking %s: %w", f, err)
+		}
+		missing = append(missing, f)
 	}
-	return missing
+	return missing, nil
 }
 
 // detectGlacierFiles runs "rclone lsf --format pT" to identify objects
 // in GLACIER or DEEP_ARCHIVE storage classes. Returns their relative paths.
-// Returns nil on error (Glacier detection is best-effort).
-func detectGlacierFiles(ctx context.Context, rclonePath, configPath, source string, filterFlags []string) []string {
+// Returns an error for context cancellation or deadline exceeded;
+// other rclone listing errors return nil (best-effort detection).
+func detectGlacierFiles(ctx context.Context, rclonePath, configPath, source string, filterFlags []string) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	args := []string{"lsf", source, "--config", configPath, "--files-only", "-R", "--format", "pT"}
 	args = append(args, filterFlags...)
 
 	cmd := exec.CommandContext(ctx, rclonePath, args...)
 	out, err := cmd.Output()
 	if err != nil {
-		return nil
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, nil
 	}
-	return parseStorageClasses(string(out))
+	return parseStorageClasses(string(out)), nil
 }
 
 // initiateRestore calls "rclone backend restore" to begin Glacier restore

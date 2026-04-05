@@ -138,6 +138,20 @@ func TestValidate_NoMismatchWhenFailuresAccountedFor(t *testing.T) {
 	}
 }
 
+func TestValidate_RestoringIncludedInAccounted(t *testing.T) {
+	r := NewResult("s3", "download", t.TempDir())
+	r.Expected = 10
+	r.Succeeded = 7
+	r.Restoring = 3
+	r.Finish()
+	r.Validate()
+	for _, w := range r.Warnings {
+		if w.File == "" {
+			t.Fatalf("unexpected count mismatch warning when Restoring accounts for difference: %s", w.Message)
+		}
+	}
+}
+
 func TestPrintSummary(t *testing.T) {
 	var buf bytes.Buffer
 	log := logging.New(false, &buf)
