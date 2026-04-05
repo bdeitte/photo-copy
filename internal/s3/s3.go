@@ -148,6 +148,7 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 	}
 
 	// Detect and restore Glacier objects
+	var restoreFailed bool
 	glacierFiles, detectErr := detectGlacierFiles(ctx, setup.binaryPath, setup.configPath, src, filterFlags)
 	if detectErr != nil {
 		return result, detectErr
@@ -159,9 +160,10 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 		}
 		if len(needRestore) > 0 {
 			c.log.Info("Initiating Glacier restore for %d files (Bulk tier, ~5-12 hours)...", len(needRestore))
-			if restoreErr := initiateRestore(ctx, setup.binaryPath, setup.configPath, src, filterFlags, c.log); restoreErr != nil {
+			if restoreErr := initiateRestore(ctx, setup.binaryPath, setup.configPath, src, needRestore, c.log); restoreErr != nil {
 				c.log.Error("restore request failed: %v", restoreErr)
 				c.log.Info("Continuing with download — already-restored files will still be downloaded")
+				restoreFailed = true
 			}
 		}
 	}
@@ -175,8 +177,13 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 	}
 	c.log.Debug("running: %s %s", setup.binaryPath, strings.Join(args, " "))
 	glacierPending, err := c.runRcloneWithProgress(ctx, setup.binaryPath, args, total, "downloaded", nil)
+	if restoreFailed && glacierPending > 0 && err == nil {
+		// Restore initiation failed but glacier errors were suppressed during copy.
+		// Surface this as an error since the files won't actually be restoring.
+		err = fmt.Errorf("restore request failed and %d files could not be downloaded from Glacier", glacierPending)
+	}
 	result.Restoring = glacierPending
-	if glacierPending > 0 {
+	if glacierPending > 0 && !restoreFailed {
 		c.log.Info("%d files still restoring from Glacier — re-run this command in a few hours", glacierPending)
 	}
 	result.Finish()

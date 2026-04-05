@@ -169,7 +169,7 @@ func main() {}
 `
 	binary := buildFakeBinary(t, src)
 	log := logging.New(false, nil)
-	err := initiateRestore(context.Background(), binary, "/tmp/config.conf", "s3:bucket/prefix", nil, log)
+	err := initiateRestore(context.Background(), binary, "/tmp/config.conf", "s3:bucket/prefix", []string{"photo.jpg"}, log)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -182,7 +182,7 @@ func main() { os.Exit(1) }
 `
 	binary := buildFakeBinary(t, src)
 	log := logging.New(false, nil)
-	err := initiateRestore(context.Background(), binary, "/tmp/config.conf", "s3:bucket/prefix", nil, log)
+	err := initiateRestore(context.Background(), binary, "/tmp/config.conf", "s3:bucket/prefix", []string{"photo.jpg"}, log)
 	if err == nil {
 		t.Fatal("expected error from failed restore")
 	}

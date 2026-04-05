@@ -83,10 +83,25 @@ func detectGlacierFiles(ctx context.Context, rclonePath, configPath, source stri
 }
 
 // initiateRestore calls "rclone backend restore" to begin Glacier restore
-// for objects at the given source path. Uses Bulk tier and 7-day lifetime.
-func initiateRestore(ctx context.Context, rclonePath, configPath, source string, filterFlags []string, log *logging.Logger) error {
-	args := []string{"backend", "restore", source, "--config", configPath, "-o", "priority=Bulk", "-o", "lifetime=7"}
-	args = append(args, filterFlags...)
+// for the specified files. Uses Bulk tier and 7-day lifetime.
+// The files list contains relative paths that need restore.
+func initiateRestore(ctx context.Context, rclonePath, configPath, source string, files []string, log *logging.Logger) error {
+	// Write file list to a temp file for --files-from
+	f, err := os.CreateTemp("", "photo-copy-restore-*.txt")
+	if err != nil {
+		return fmt.Errorf("creating restore file list: %w", err)
+	}
+	defer func() { _ = os.Remove(f.Name()) }()
+
+	_, writeErr := f.WriteString(strings.Join(files, "\n") + "\n")
+	if closeErr := f.Close(); closeErr != nil && writeErr == nil {
+		writeErr = closeErr
+	}
+	if writeErr != nil {
+		return fmt.Errorf("writing restore file list: %w", writeErr)
+	}
+
+	args := []string{"backend", "restore", source, "--config", configPath, "-o", "priority=Bulk", "-o", "lifetime=7", "--files-from", f.Name()}
 
 	log.Debug("initiating restore: %s %s", rclonePath, strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, rclonePath, args...)
