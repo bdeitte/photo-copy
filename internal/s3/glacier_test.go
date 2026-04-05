@@ -1,9 +1,14 @@
 package s3
 
 import (
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
+
+	"github.com/briandeitte/photo-copy/internal/logging"
 )
 
 func TestIsGlacierError_Matches(t *testing.T) {
@@ -84,5 +89,69 @@ func TestFilterOutExisting_AllExist(t *testing.T) {
 	result := filterOutExisting([]string{"a.jpg"}, dir)
 	if len(result) != 0 {
 		t.Fatalf("expected empty, got %v", result)
+	}
+}
+
+// buildFakeBinary compiles a tiny Go program from src and returns its path.
+func buildFakeBinary(t *testing.T, src string) string {
+	t.Helper()
+	dir := t.TempDir()
+	name := rcloneBinaryName(runtime.GOOS, runtime.GOARCH)
+	binary := filepath.Join(dir, name)
+	srcFile := filepath.Join(t.TempDir(), "main.go")
+	if err := os.WriteFile(srcFile, []byte(src), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("go", "build", "-o", binary, srcFile).CombinedOutput(); err != nil {
+		t.Fatalf("building fake binary: %v\n%s", err, out)
+	}
+	return binary
+}
+
+func TestDetectGlacierFiles(t *testing.T) {
+	src := `package main
+import "fmt"
+func main() {
+	fmt.Println("photo1.jpg;STANDARD")
+	fmt.Println("photo2.jpg;DEEP_ARCHIVE")
+	fmt.Println("video.mp4;GLACIER")
+}
+`
+	binary := buildFakeBinary(t, src)
+	glacier := detectGlacierFiles(context.Background(), binary, "/tmp/config.conf", "s3:bucket/prefix", nil)
+
+	expected := []string{"photo2.jpg", "video.mp4"}
+	if len(glacier) != len(expected) {
+		t.Fatalf("got %d glacier files, want %d: %v", len(glacier), len(expected), glacier)
+	}
+	for i, want := range expected {
+		if glacier[i] != want {
+			t.Errorf("glacier[%d] = %q, want %q", i, glacier[i], want)
+		}
+	}
+}
+
+func TestInitiateRestore(t *testing.T) {
+	src := `package main
+func main() {}
+`
+	binary := buildFakeBinary(t, src)
+	log := logging.New(false, nil)
+	err := initiateRestore(context.Background(), binary, "/tmp/config.conf", "s3:bucket/prefix", nil, log)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestInitiateRestore_Failure(t *testing.T) {
+	src := `package main
+import "os"
+func main() { os.Exit(1) }
+`
+	binary := buildFakeBinary(t, src)
+	log := logging.New(false, nil)
+	err := initiateRestore(context.Background(), binary, "/tmp/config.conf", "s3:bucket/prefix", nil, log)
+	if err == nil {
+		t.Fatal("expected error from failed restore")
 	}
 }

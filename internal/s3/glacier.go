@@ -1,9 +1,14 @@
 package s3
 
 import (
+	"context"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/briandeitte/photo-copy/internal/logging"
 )
 
 // isGlacierError returns true if the rclone error message indicates
@@ -44,4 +49,34 @@ func filterOutExisting(files []string, outputDir string) []string {
 		}
 	}
 	return missing
+}
+
+// detectGlacierFiles runs "rclone lsf --format pT" to identify objects
+// in GLACIER or DEEP_ARCHIVE storage classes. Returns their relative paths.
+// Returns nil on error (Glacier detection is best-effort).
+func detectGlacierFiles(ctx context.Context, rclonePath, configPath, source string, filterFlags []string) []string {
+	args := []string{"lsf", source, "--config", configPath, "--files-only", "-R", "--format", "pT"}
+	args = append(args, filterFlags...)
+
+	cmd := exec.CommandContext(ctx, rclonePath, args...)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+	return parseStorageClasses(string(out))
+}
+
+// initiateRestore calls "rclone backend restore" to begin Glacier restore
+// for objects at the given source path. Uses Bulk tier and 7-day lifetime.
+func initiateRestore(ctx context.Context, rclonePath, configPath, source string, filterFlags []string, log *logging.Logger) error {
+	args := []string{"backend", "restore", source, "--config", configPath, "-o", "priority=Bulk", "-o", "lifetime=7"}
+	args = append(args, filterFlags...)
+
+	log.Debug("initiating restore: %s %s", rclonePath, strings.Join(args, " "))
+	cmd := exec.CommandContext(ctx, rclonePath, args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("rclone backend restore failed: %w\n%s", err, string(out))
+	}
+	return nil
 }

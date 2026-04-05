@@ -268,6 +268,13 @@ func TestHelperProcess(t *testing.T) {
 	case "success_no_output":
 		// Exit 0 with no output — simulates no-op rclone (everything synced)
 		os.Exit(0)
+	case "lsf_glacier":
+		_, _ = fmt.Fprintln(os.Stdout, "photo1.jpg;STANDARD")
+		_, _ = fmt.Fprintln(os.Stdout, "photo2.jpg;DEEP_ARCHIVE")
+		_, _ = fmt.Fprintln(os.Stdout, "video.mp4;GLACIER")
+		os.Exit(0)
+	case "restore_success":
+		os.Exit(0)
 	}
 	os.Exit(0)
 }
