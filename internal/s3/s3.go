@@ -147,6 +147,19 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 		filterFlags = []string{"--files-from", filesFromPath}
 	}
 
+	// Detect and restore Glacier objects
+	glacierFiles := detectGlacierFiles(ctx, setup.binaryPath, setup.configPath, src, filterFlags)
+	if len(glacierFiles) > 0 {
+		needRestore := filterOutExisting(glacierFiles, outputDir)
+		if len(needRestore) > 0 {
+			c.log.Info("Initiating Glacier restore for %d files (Bulk tier, ~5-12 hours)...", len(needRestore))
+			if restoreErr := initiateRestore(ctx, setup.binaryPath, setup.configPath, src, filterFlags, c.log); restoreErr != nil {
+				c.log.Error("restore request failed: %v", restoreErr)
+				c.log.Info("Continuing with download — already-restored files will still be downloaded")
+			}
+		}
+	}
+
 	c.log.Info("Counting remote files...")
 	total := c.countFiles(ctx, setup.binaryPath, setup.configPath, src, filterFlags)
 	if total > 0 {
@@ -155,7 +168,11 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 		c.log.Info("Comparing with local directory (this may take a while)...")
 	}
 	c.log.Debug("running: %s %s", setup.binaryPath, strings.Join(args, " "))
-	_, err = c.runRcloneWithProgress(ctx, setup.binaryPath, args, total, "downloaded", nil)
+	glacierPending, err := c.runRcloneWithProgress(ctx, setup.binaryPath, args, total, "downloaded", nil)
+	result.Restoring = glacierPending
+	if glacierPending > 0 {
+		c.log.Info("%d files still restoring from Glacier — re-run this command in a few hours", glacierPending)
+	}
 	result.Finish()
 	if scanErr := result.ScanDir(); scanErr != nil {
 		c.log.Debug("scanning directory: %v", scanErr)

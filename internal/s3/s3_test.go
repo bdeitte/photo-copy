@@ -456,3 +456,82 @@ func TestRunRcloneWithProgress_GlacierOnlyErrorsSuppressed(t *testing.T) {
 		t.Errorf("glacierPending = %d, want 1", glacierPending)
 	}
 }
+
+func TestClientDownload_GlacierRestore(t *testing.T) {
+	workspace := t.TempDir()
+	rcloneDir := filepath.Join(workspace, "tools-bin", "rclone")
+	if err := os.MkdirAll(rcloneDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Build a fake rclone that behaves differently based on the subcommand
+	name := rcloneBinaryName(runtime.GOOS, runtime.GOARCH)
+	binary := filepath.Join(rcloneDir, name)
+	src := filepath.Join(t.TempDir(), "main.go")
+	prog := `package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func main() {
+	for _, arg := range os.Args[1:] {
+		if arg == "lsf" {
+			// Check if --format pT is in args
+			for i, a := range os.Args {
+				if a == "--format" && i+1 < len(os.Args) && os.Args[i+1] == "pT" {
+					fmt.Fprintln(os.Stdout, "photo1.jpg;STANDARD")
+					fmt.Fprintln(os.Stdout, "photo2.jpg;DEEP_ARCHIVE")
+					os.Exit(0)
+				}
+			}
+			// Regular lsf (for countFiles)
+			fmt.Fprintln(os.Stdout, "photo1.jpg")
+			fmt.Fprintln(os.Stdout, "photo2.jpg")
+			os.Exit(0)
+		}
+		if arg == "backend" {
+			// restore command — succeed silently
+			os.Exit(0)
+		}
+		if arg == "copy" {
+			// Download: photo1.jpg succeeds, photo2.jpg fails with glacier error
+			fmt.Fprintln(os.Stderr, ` + "`" + `{"level":"info","msg":"Copied (new)","object":"photo1.jpg"}` + "`" + `)
+			fmt.Fprintln(os.Stderr, ` + "`" + `{"level":"error","msg":"Failed to copy: failed to open source object: Object in GLACIER, restore first: bucket=\"b\", key=\"photo2.jpg\""}` + "`" + `)
+			os.Exit(1)
+		}
+	}
+}
+`
+	if err := os.WriteFile(src, []byte(prog), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "build", "-o", binary, src)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("building fake rclone: %v\n%s", err, out)
+	}
+
+	outputDir := filepath.Join(workspace, "output")
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Chdir(workspace)
+
+	log := logging.New(false, nil)
+	client := NewClient(&config.S3Config{
+		AccessKeyID:     "test",
+		SecretAccessKey: "test",
+		Region:          "us-east-1",
+	}, log)
+
+	result, err := client.Download(context.Background(), "test-bucket", "prefix", outputDir, false, 0, nil)
+	if err != nil {
+		t.Fatalf("Download failed: %v", err)
+	}
+
+	if result.Restoring != 1 {
+		t.Errorf("Restoring = %d, want 1", result.Restoring)
+	}
+}
