@@ -140,6 +140,18 @@ func main() {
 	}
 }
 
+func TestDetectGlacierFiles_ListingError(t *testing.T) {
+	src := `package main
+import "os"
+func main() { os.Exit(1) }
+`
+	binary := buildFakeBinary(t, src)
+	_, err := detectGlacierFiles(context.Background(), binary, "/tmp/config.conf", "s3:bucket/prefix", nil)
+	if err == nil {
+		t.Fatal("expected error from failed listing")
+	}
+}
+
 func TestParseStorageClasses_SemicolonInKey(t *testing.T) {
 	input := "albums/2024;trip.mov;GLACIER\nnormal.jpg;STANDARD\n"
 	glacier := parseStorageClasses(input)

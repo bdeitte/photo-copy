@@ -216,6 +216,7 @@ func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, a
 	estimator := transfer.NewEstimator()
 	copied := 0
 	var lastError string
+	var nonGlacierErrors int
 	scanner := bufio.NewScanner(stderr)
 	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), 1024*1024) // 1MB max line
 	for scanner.Scan() {
@@ -225,6 +226,7 @@ func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, a
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			// Not JSON — pass through as-is
 			c.log.Debug("rclone: %s", line)
+			nonGlacierErrors++ // non-JSON stderr counts as potential error
 			continue
 		}
 
@@ -236,6 +238,7 @@ func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, a
 			}
 			c.log.Error("rclone: %s", entry.Msg)
 			lastError = entry.Msg
+			nonGlacierErrors++
 			continue
 		}
 
@@ -264,7 +267,7 @@ func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, a
 	}
 
 	if waitErr := cmd.Wait(); waitErr != nil {
-		if glacierPending > 0 && lastError == "" && ctx.Err() == nil {
+		if glacierPending > 0 && nonGlacierErrors == 0 && ctx.Err() == nil {
 			// All errors were glacier-related and context wasn't cancelled — not a real failure
 			return glacierPending, nil
 		}

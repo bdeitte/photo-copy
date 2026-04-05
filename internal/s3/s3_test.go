@@ -281,6 +281,10 @@ func TestHelperProcess(t *testing.T) {
 	case "glacier_errors_only":
 		fmt.Fprintln(os.Stderr, `{"level":"error","msg":"Failed to copy: failed to open source object: Object in GLACIER, restore first: bucket=\"b\", key=\"photo1.jpg\""}`)
 		os.Exit(1)
+	case "glacier_plus_fatal":
+		fmt.Fprintln(os.Stderr, `{"level":"error","msg":"Failed to copy: failed to open source object: Object in GLACIER, restore first: bucket=\"b\", key=\"photo1.jpg\""}`)
+		fmt.Fprintln(os.Stderr, "FATAL: segmentation fault in rclone")
+		os.Exit(1)
 	case "restore_success":
 		os.Exit(0)
 	}
@@ -451,6 +455,28 @@ func TestRunRcloneWithProgress_GlacierOnlyErrorsSuppressed(t *testing.T) {
 
 	if err != nil {
 		t.Fatalf("expected nil error for glacier-only failures, got: %v", err)
+	}
+	if glacierPending != 1 {
+		t.Errorf("glacierPending = %d, want 1", glacierPending)
+	}
+}
+
+func TestRunRcloneWithProgress_GlacierPlusNonJSONFatal(t *testing.T) {
+	t.Setenv("GO_TEST_HELPER_PROCESS", "1")
+	t.Setenv("GO_TEST_HELPER_MODE", "glacier_plus_fatal")
+
+	log := logging.New(false, nil)
+	client := NewClient(&config.S3Config{}, log)
+
+	binary := os.Args[0]
+	args := []string{"-test.run=TestHelperProcess", "--"}
+
+	result := transfer.NewResult("s3", "download", "/tmp")
+	glacierPending, err := client.runRcloneWithProgress(context.Background(), binary, args, 1, "downloaded", result)
+
+	// Must NOT suppress the error despite glacier warnings being present
+	if err == nil {
+		t.Fatal("expected error when non-JSON fatal output is present alongside glacier warnings")
 	}
 	if glacierPending != 1 {
 		t.Errorf("glacierPending = %d, want 1", glacierPending)

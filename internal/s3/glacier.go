@@ -62,8 +62,7 @@ func filterOutExisting(files []string, outputDir string) ([]string, error) {
 
 // detectGlacierFiles runs "rclone lsf --format pT" to identify objects
 // in GLACIER or DEEP_ARCHIVE storage classes. Returns their relative paths.
-// Returns an error for context cancellation or deadline exceeded;
-// other rclone listing errors return nil (best-effort detection).
+// Returns an error on listing failure (auth, config, context cancellation).
 func detectGlacierFiles(ctx context.Context, rclonePath, configPath, source string, filterFlags []string) ([]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -77,7 +76,7 @@ func detectGlacierFiles(ctx context.Context, rclonePath, configPath, source stri
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		return nil, nil
+		return nil, fmt.Errorf("listing storage classes: %w", err)
 	}
 	return parseStorageClasses(string(out)), nil
 }
