@@ -32,6 +32,7 @@ type Result struct {
 	Succeeded  int
 	Failed     int
 	Skipped    int
+	Restoring  int // files pending Glacier restore (S3 only)
 	TotalBytes int64
 
 	ScanLabel string // when set, PrintSummary uses this label instead of "succeeded" (e.g., "files in directory")
@@ -135,6 +136,9 @@ func (r *Result) PrintSummary(log *logging.Logger) {
 	if r.Failed > 0 {
 		parts = append(parts, fmt.Sprintf("%d failed", r.Failed))
 	}
+	if r.Restoring > 0 {
+		parts = append(parts, fmt.Sprintf("%d still restoring", r.Restoring))
+	}
 	log.Info("files: %s", strings.Join(parts, ", "))
 
 	if r.Expected > 0 {
@@ -206,6 +210,9 @@ func (r *Result) WriteReport(dir string) (string, error) {
 	fmt.Fprintf(&b, "%s: %d\n", countLabel, r.Succeeded)
 	fmt.Fprintf(&b, "skipped:   %d\n", r.Skipped)
 	fmt.Fprintf(&b, "failed:    %d\n", r.Failed)
+	if r.Restoring > 0 {
+		fmt.Fprintf(&b, "restoring: %d\n", r.Restoring)
+	}
 	if r.Expected > 0 {
 		fmt.Fprintf(&b, "expected:  %d\n", r.Expected)
 	}

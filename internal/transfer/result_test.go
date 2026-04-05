@@ -306,6 +306,46 @@ func TestResult_Duration(t *testing.T) {
 	}
 }
 
+func TestPrintSummary_WithRestoring(t *testing.T) {
+	var buf bytes.Buffer
+	log := logging.New(false, &buf)
+
+	r := &Result{
+		Service:   "s3",
+		Operation: "download",
+		Succeeded: 5,
+		Restoring: 3,
+		StartTime: time.Now(),
+		EndTime:   time.Now(),
+	}
+	r.PrintSummary(log)
+
+	output := buf.String()
+	if !strings.Contains(output, "3 still restoring") {
+		t.Errorf("expected '3 still restoring' in output, got:\n%s", output)
+	}
+}
+
+func TestPrintSummary_NoRestoringWhenZero(t *testing.T) {
+	var buf bytes.Buffer
+	log := logging.New(false, &buf)
+
+	r := &Result{
+		Service:   "s3",
+		Operation: "download",
+		Succeeded: 5,
+		Restoring: 0,
+		StartTime: time.Now(),
+		EndTime:   time.Now(),
+	}
+	r.PrintSummary(log)
+
+	output := buf.String()
+	if strings.Contains(output, "restoring") {
+		t.Errorf("expected no 'restoring' in output when Restoring=0, got:\n%s", output)
+	}
+}
+
 func TestFormatBytes(t *testing.T) {
 	tests := []struct {
 		input int64
