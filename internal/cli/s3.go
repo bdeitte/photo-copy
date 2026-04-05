@@ -68,7 +68,7 @@ func newS3UploadCmd(opts *rootOpts) *cobra.Command {
 
 func newS3DownloadCmd(opts *rootOpts) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:         "download <s3-destination> <output-dir>",
+		Use:         "download <s3-source> <output-dir>",
 		Short:       "Download photos/videos from S3",
 		Args:        exactArgs(2),
 		Annotations: map[string]string{"supportsDateRange": "true"},
