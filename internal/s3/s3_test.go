@@ -273,6 +273,14 @@ func TestHelperProcess(t *testing.T) {
 		_, _ = fmt.Fprintln(os.Stdout, "photo2.jpg;DEEP_ARCHIVE")
 		_, _ = fmt.Fprintln(os.Stdout, "video.mp4;GLACIER")
 		os.Exit(0)
+	case "glacier_errors":
+		fmt.Fprintln(os.Stderr, `{"level":"info","msg":"Copied (new)","object":"photo1.jpg"}`)
+		fmt.Fprintln(os.Stderr, `{"level":"error","msg":"Failed to copy: failed to open source object: Object in GLACIER, restore first: bucket=\"b\", key=\"photo2.jpg\""}`)
+		fmt.Fprintln(os.Stderr, `{"level":"error","msg":"Failed to copy: failed to open source object: Object in GLACIER, restore first: bucket=\"b\", key=\"photo3.jpg\""}`)
+		os.Exit(1)
+	case "glacier_errors_only":
+		fmt.Fprintln(os.Stderr, `{"level":"error","msg":"Failed to copy: failed to open source object: Object in GLACIER, restore first: bucket=\"b\", key=\"photo1.jpg\""}`)
+		os.Exit(1)
 	case "restore_success":
 		os.Exit(0)
 	}
@@ -291,7 +299,7 @@ func TestRunRcloneWithProgress_WarningAndFailPreservesBoth(t *testing.T) {
 	args := []string{"-test.run=TestHelperProcess", "--"}
 
 	result := transfer.NewResult("s3", "upload", "/tmp")
-	err := client.runRcloneWithProgress(context.Background(), binary, args, 0, "uploaded", result)
+	_, err := client.runRcloneWithProgress(context.Background(), binary, args, 0, "uploaded", result)
 
 	if err == nil {
 		t.Fatal("expected error from failed subprocess")
@@ -319,7 +327,7 @@ func TestRunRcloneWithProgress_FailWithoutWarningShowsExitError(t *testing.T) {
 	args := []string{"-test.run=TestHelperProcess", "--"}
 
 	result := transfer.NewResult("s3", "upload", "/tmp")
-	err := client.runRcloneWithProgress(context.Background(), binary, args, 0, "uploaded", result)
+	_, err := client.runRcloneWithProgress(context.Background(), binary, args, 0, "uploaded", result)
 
 	if err == nil {
 		t.Fatal("expected error from failed subprocess")
@@ -404,5 +412,47 @@ func TestClientDownload_NoOpProducesSummaryWithBytes(t *testing.T) {
 	// ScanLabel should be set by ScanDir
 	if result.ScanLabel != "files in directory" {
 		t.Errorf("ScanLabel = %q, want %q", result.ScanLabel, "files in directory")
+	}
+}
+
+func TestRunRcloneWithProgress_GlacierErrorsCounted(t *testing.T) {
+	t.Setenv("GO_TEST_HELPER_PROCESS", "1")
+	t.Setenv("GO_TEST_HELPER_MODE", "glacier_errors")
+
+	log := logging.New(false, nil)
+	client := NewClient(&config.S3Config{}, log)
+
+	binary := os.Args[0]
+	args := []string{"-test.run=TestHelperProcess", "--"}
+
+	result := transfer.NewResult("s3", "download", "/tmp")
+	glacierPending, err := client.runRcloneWithProgress(context.Background(), binary, args, 3, "downloaded", result)
+
+	if err != nil {
+		t.Fatalf("expected nil error when only glacier errors remain, got: %v", err)
+	}
+	if glacierPending != 2 {
+		t.Errorf("glacierPending = %d, want 2", glacierPending)
+	}
+}
+
+func TestRunRcloneWithProgress_GlacierOnlyErrorsSuppressed(t *testing.T) {
+	t.Setenv("GO_TEST_HELPER_PROCESS", "1")
+	t.Setenv("GO_TEST_HELPER_MODE", "glacier_errors_only")
+
+	log := logging.New(false, nil)
+	client := NewClient(&config.S3Config{}, log)
+
+	binary := os.Args[0]
+	args := []string{"-test.run=TestHelperProcess", "--"}
+
+	result := transfer.NewResult("s3", "download", "/tmp")
+	glacierPending, err := client.runRcloneWithProgress(context.Background(), binary, args, 1, "downloaded", result)
+
+	if err != nil {
+		t.Fatalf("expected nil error for glacier-only failures, got: %v", err)
+	}
+	if glacierPending != 1 {
+		t.Errorf("glacierPending = %d, want 1", glacierPending)
 	}
 }

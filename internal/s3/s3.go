@@ -103,7 +103,7 @@ func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, me
 		c.log.Info("Comparing with S3 destination (this may take a while)...")
 	}
 	c.log.Debug("running: %s %s", setup.binaryPath, strings.Join(args, " "))
-	err = c.runRcloneWithProgress(ctx, setup.binaryPath, args, total, "uploaded", result)
+	_, err = c.runRcloneWithProgress(ctx, setup.binaryPath, args, total, "uploaded", result)
 	result.Finish()
 	return result, err
 }
@@ -155,7 +155,7 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 		c.log.Info("Comparing with local directory (this may take a while)...")
 	}
 	c.log.Debug("running: %s %s", setup.binaryPath, strings.Join(args, " "))
-	err = c.runRcloneWithProgress(ctx, setup.binaryPath, args, total, "downloaded", nil)
+	_, err = c.runRcloneWithProgress(ctx, setup.binaryPath, args, total, "downloaded", nil)
 	result.Finish()
 	if scanErr := result.ScanDir(); scanErr != nil {
 		c.log.Debug("scanning directory: %v", scanErr)
@@ -170,17 +170,17 @@ type rcloneLogEntry struct {
 	Object string `json:"object"`
 }
 
-func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, args []string, total int, verb string, result *transfer.Result) error {
+func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, args []string, total int, verb string, result *transfer.Result) (glacierPending int, err error) {
 	cmd := exec.CommandContext(ctx, rclonePath, args...)
 	cmd.Stdout = os.Stdout
 
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return fmt.Errorf("creating stderr pipe: %w", err)
+	stderr, pipeErr := cmd.StderrPipe()
+	if pipeErr != nil {
+		return 0, fmt.Errorf("creating stderr pipe: %w", pipeErr)
 	}
 
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("starting rclone: %w", err)
+	if startErr := cmd.Start(); startErr != nil {
+		return 0, fmt.Errorf("starting rclone: %w", startErr)
 	}
 
 	estimator := transfer.NewEstimator()
@@ -199,6 +199,11 @@ func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, a
 		}
 
 		if entry.Level == "error" || entry.Level == "warning" {
+			if isGlacierError(entry.Msg) {
+				glacierPending++
+				c.log.Debug("glacier restore pending: %s", entry.Object)
+				continue
+			}
 			c.log.Error("rclone: %s", entry.Msg)
 			lastError = entry.Msg
 			continue
@@ -223,18 +228,22 @@ func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, a
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
+	if scanErr := scanner.Err(); scanErr != nil {
 		_ = cmd.Wait()
-		return fmt.Errorf("reading rclone output: %w", err)
+		return 0, fmt.Errorf("reading rclone output: %w", scanErr)
 	}
 
-	if err := cmd.Wait(); err != nil {
-		if lastError != "" {
-			return fmt.Errorf("rclone failed (%w): %s", err, lastError)
+	if waitErr := cmd.Wait(); waitErr != nil {
+		if glacierPending > 0 && lastError == "" {
+			// All errors were glacier-related — not a real failure
+			return glacierPending, nil
 		}
-		return fmt.Errorf("rclone failed: %w", err)
+		if lastError != "" {
+			return glacierPending, fmt.Errorf("rclone failed (%w): %s", waitErr, lastError)
+		}
+		return glacierPending, fmt.Errorf("rclone failed: %w", waitErr)
 	}
-	return nil
+	return glacierPending, nil
 }
 
 // countFiles counts source files for progress tracking.
