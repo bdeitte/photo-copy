@@ -2,6 +2,7 @@ package s3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -743,5 +744,100 @@ func main() {
 	}
 	if !strings.Contains(dlErr.Error(), "restore request failed") {
 		t.Errorf("error should mention restore failure, got: %v", dlErr)
+	}
+}
+
+// TestClientDownload_GlacierRestoreCancelled verifies that cancelling the context
+// during backend restore returns context.Canceled immediately without continuing
+// into count/copy.
+func TestClientDownload_GlacierRestoreCancelled(t *testing.T) {
+	workspace := t.TempDir()
+	rcloneDir := filepath.Join(workspace, "tools-bin", "rclone")
+	if err := os.MkdirAll(rcloneDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	name := rcloneBinaryName(runtime.GOOS, runtime.GOARCH)
+	binary := filepath.Join(rcloneDir, name)
+	src := filepath.Join(t.TempDir(), "main.go")
+	// Fake rclone: lsf --format pT returns glacier file, backend restore sleeps forever,
+	// copy writes a marker (should never be reached)
+	prog := `package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+)
+
+func main() {
+	for _, arg := range os.Args[1:] {
+		if arg == "lsf" {
+			for i, a := range os.Args {
+				if a == "--format" && i+1 < len(os.Args) && os.Args[i+1] == "pT" {
+					fmt.Fprintln(os.Stdout, "photo.jpg;GLACIER")
+					os.Exit(0)
+				}
+			}
+			fmt.Fprintln(os.Stdout, "photo.jpg")
+			os.Exit(0)
+		}
+		if arg == "backend" {
+			// Block until killed
+			time.Sleep(10 * time.Minute)
+			os.Exit(0)
+		}
+		if arg == "copy" {
+			// Should never reach here — write marker to detect if it does
+			exe, _ := os.Executable()
+			marker := filepath.Join(filepath.Dir(exe), "..", "..", "copy-invoked")
+			os.WriteFile(marker, []byte("yes"), 0644)
+			os.Exit(0)
+		}
+	}
+}
+`
+	if err := os.WriteFile(src, []byte(prog), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "build", "-o", binary, src)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("building fake rclone: %v\n%s", err, out)
+	}
+
+	outputDir := filepath.Join(workspace, "output")
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Chdir(workspace)
+
+	log := logging.New(false, nil)
+	client := NewClient(&config.S3Config{
+		AccessKeyID:     "test",
+		SecretAccessKey: "test",
+		Region:          "us-east-1",
+	}, log)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	// Cancel after a short delay so restore gets killed
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		cancel()
+	}()
+
+	_, dlErr := client.Download(ctx, "test-bucket", "prefix", outputDir, false, 0, nil)
+	if dlErr == nil {
+		t.Fatal("expected context.Canceled error")
+	}
+	if !errors.Is(dlErr, context.Canceled) {
+		t.Errorf("expected context.Canceled, got: %v", dlErr)
+	}
+
+	// Verify copy was never invoked
+	copyMarker := filepath.Join(workspace, "copy-invoked")
+	if _, err := os.Stat(copyMarker); err == nil {
+		t.Error("rclone copy should not have been invoked after context cancellation")
 	}
 }

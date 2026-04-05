@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/briandeitte/photo-copy/internal/logging"
@@ -142,13 +143,22 @@ func main() {
 
 func TestDetectGlacierFiles_ListingError(t *testing.T) {
 	src := `package main
-import "os"
-func main() { os.Exit(1) }
+import (
+	"fmt"
+	"os"
+)
+func main() {
+	fmt.Fprintln(os.Stderr, "AccessDenied: bucket not accessible")
+	os.Exit(1)
+}
 `
 	binary := buildFakeBinary(t, src)
 	_, err := detectGlacierFiles(context.Background(), binary, "/tmp/config.conf", "s3:bucket/prefix", nil)
 	if err == nil {
 		t.Fatal("expected error from failed listing")
+	}
+	if !strings.Contains(err.Error(), "AccessDenied") {
+		t.Errorf("error should include stderr text, got: %v", err)
 	}
 }
 
