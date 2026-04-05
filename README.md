@@ -98,7 +98,17 @@ Uploads default to Glacier Deep Archive storage class. This will cause delays in
 
 # Download only files modified since 2024
 ./photo-copy s3 download --date-range 2024-01-01: my-bucket/photos/ ../photos
+
+# Download from Glacier/Deep Archive (first run initiates restore)
+./photo-copy s3 download my-bucket/photos/ ../photos
+# Output: "Initiating Glacier restore for 150 files (Bulk tier, ~5-12 hours)..."
+# Output: "150 files still restoring from Glacier — re-run this command in a few hours"
+
+# Re-run after a few hours to download restored files
+./photo-copy s3 download my-bucket/photos/ ../photos
 ```
+
+**Glacier/Deep Archive downloads:** Files stored in Glacier or Deep Archive storage classes require a two-step process. The first run automatically initiates a Bulk restore (5-12 hours). Re-run the same command after the restore completes to download the files. Any files already restored or in Standard storage class are downloaded immediately. You can re-run as many times as needed — already-downloaded files are skipped.
 
 ### iCloud Photos
 
