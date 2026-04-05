@@ -161,6 +161,9 @@ func (c *Client) Download(ctx context.Context, bucket, prefix, outputDir string,
 		if len(needRestore) > 0 {
 			c.log.Info("Initiating Glacier restore for %d files (Bulk tier, ~5-12 hours)...", len(needRestore))
 			if restoreErr := initiateRestore(ctx, setup.binaryPath, setup.configPath, src, needRestore, c.log); restoreErr != nil {
+				if ctx.Err() != nil {
+					return result, ctx.Err()
+				}
 				c.log.Error("restore request failed: %v", restoreErr)
 				c.log.Info("Continuing with download — already-restored files will still be downloaded")
 				restoreFailed = true
@@ -226,7 +229,10 @@ func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, a
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			// Not JSON — pass through as-is
 			c.log.Debug("rclone: %s", line)
-			nonGlacierErrors++ // non-JSON stderr counts as potential error
+			nonGlacierErrors++
+			if lastError == "" {
+				lastError = line // preserve first non-JSON line for error reporting
+			}
 			continue
 		}
 

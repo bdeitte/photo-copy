@@ -478,6 +478,9 @@ func TestRunRcloneWithProgress_GlacierPlusNonJSONFatal(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when non-JSON fatal output is present alongside glacier warnings")
 	}
+	if !strings.Contains(err.Error(), "segmentation fault") {
+		t.Errorf("error should contain the fatal stderr text, got: %v", err)
+	}
 	if glacierPending != 1 {
 		t.Errorf("glacierPending = %d, want 1", glacierPending)
 	}
@@ -566,6 +569,105 @@ func main() {
 	markerPath := filepath.Join(workspace, "restore-invoked")
 	if _, err := os.Stat(markerPath); err != nil {
 		t.Error("backend restore was not invoked (marker file not found)")
+	}
+}
+
+// TestClientDownload_GlacierRestoreTargeted verifies that backend restore
+// only requests restore for Glacier files NOT already present locally.
+func TestClientDownload_GlacierRestoreTargeted(t *testing.T) {
+	workspace := t.TempDir()
+	rcloneDir := filepath.Join(workspace, "tools-bin", "rclone")
+	if err := os.MkdirAll(rcloneDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	name := rcloneBinaryName(runtime.GOOS, runtime.GOARCH)
+	binary := filepath.Join(rcloneDir, name)
+	src := filepath.Join(t.TempDir(), "main.go")
+	// Fake rclone that:
+	// - lsf --format pT: returns two glacier files
+	// - backend restore: reads --files-from and writes its contents to a marker
+	// - copy: succeeds (no glacier errors since both are "restored")
+	prog := `package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+func main() {
+	for _, arg := range os.Args[1:] {
+		if arg == "lsf" {
+			for i, a := range os.Args {
+				if a == "--format" && i+1 < len(os.Args) && os.Args[i+1] == "pT" {
+					fmt.Fprintln(os.Stdout, "already-have.jpg;DEEP_ARCHIVE")
+					fmt.Fprintln(os.Stdout, "need-restore.jpg;DEEP_ARCHIVE")
+					os.Exit(0)
+				}
+			}
+			fmt.Fprintln(os.Stdout, "already-have.jpg")
+			fmt.Fprintln(os.Stdout, "need-restore.jpg")
+			os.Exit(0)
+		}
+		if arg == "backend" {
+			// Find --files-from and write its contents to a marker
+			for i, a := range os.Args {
+				if a == "--files-from" && i+1 < len(os.Args) {
+					data, _ := os.ReadFile(os.Args[i+1])
+					exe, _ := os.Executable()
+					marker := filepath.Join(filepath.Dir(exe), "..", "..", "restore-files")
+					os.WriteFile(marker, data, 0644)
+				}
+			}
+			os.Exit(0)
+		}
+		if arg == "copy" {
+			os.Exit(0)
+		}
+	}
+}
+`
+	if err := os.WriteFile(src, []byte(prog), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "build", "-o", binary, src)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("building fake rclone: %v\n%s", err, out)
+	}
+
+	outputDir := filepath.Join(workspace, "output")
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Pre-create one of the glacier files — it should NOT appear in restore list
+	if err := os.WriteFile(filepath.Join(outputDir, "already-have.jpg"), []byte("data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Chdir(workspace)
+
+	log := logging.New(false, nil)
+	client := NewClient(&config.S3Config{
+		AccessKeyID:     "test",
+		SecretAccessKey: "test",
+		Region:          "us-east-1",
+	}, log)
+
+	_, err := client.Download(context.Background(), "test-bucket", "prefix", outputDir, false, 0, nil)
+	if err != nil {
+		t.Fatalf("Download failed: %v", err)
+	}
+
+	// Verify restore was called with only the missing file
+	markerPath := filepath.Join(workspace, "restore-files")
+	data, err := os.ReadFile(markerPath)
+	if err != nil {
+		t.Fatal("backend restore was not invoked (marker file not found)")
+	}
+	contents := strings.TrimSpace(string(data))
+	if contents != "need-restore.jpg" {
+		t.Errorf("restore --files-from should contain only 'need-restore.jpg', got: %q", contents)
 	}
 }
 

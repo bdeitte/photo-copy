@@ -76,6 +76,11 @@ func detectGlacierFiles(ctx context.Context, rclonePath, configPath, source stri
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
+		// Include stderr from the exit error for diagnostics
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			return nil, fmt.Errorf("listing storage classes: %w\n%s", err, string(exitErr.Stderr))
+		}
 		return nil, fmt.Errorf("listing storage classes: %w", err)
 	}
 	return parseStorageClasses(string(out)), nil
