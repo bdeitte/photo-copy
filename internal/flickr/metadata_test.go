@@ -3,6 +3,7 @@ package flickr
 import (
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 func TestStripHTML(t *testing.T) {
@@ -61,24 +62,30 @@ func TestFlickrDescriptionUnmarshal(t *testing.T) {
 }
 
 func TestBuildPhotoMeta(t *testing.T) {
+	testDate := time.Date(2024, 6, 15, 14, 30, 0, 0, time.UTC)
+
 	tests := []struct {
-		name        string
-		title       string
-		descHTML    string
-		tagsStr     string
-		wantTitle   string
-		wantDesc    string
-		wantTags    []string
-		wantIsEmpty bool
+		name           string
+		title          string
+		descHTML       string
+		tagsStr        string
+		createDate     time.Time
+		wantTitle      string
+		wantDesc       string
+		wantTags       []string
+		wantCreateDate time.Time
+		wantIsEmpty    bool
 	}{
 		{
-			name:      "all fields populated",
-			title:     "My Photo",
-			descHTML:  "<p>A great photo</p>",
-			tagsStr:   "vacation beach summer",
-			wantTitle: "My Photo",
-			wantDesc:  "A great photo",
-			wantTags:  []string{"vacation", "beach", "summer"},
+			name:           "all fields populated",
+			title:          "My Photo",
+			descHTML:       "<p>A great photo</p>",
+			tagsStr:        "vacation beach summer",
+			createDate:     testDate,
+			wantTitle:      "My Photo",
+			wantDesc:       "A great photo",
+			wantTags:       []string{"vacation", "beach", "summer"},
+			wantCreateDate: testDate,
 		},
 		{
 			name:        "empty fields",
@@ -118,11 +125,23 @@ func TestBuildPhotoMeta(t *testing.T) {
 			wantDesc:  "bold and italic",
 			wantTags:  nil,
 		},
+		{
+			name:           "date only",
+			title:          "",
+			descHTML:       "",
+			tagsStr:        "",
+			createDate:     testDate,
+			wantTitle:      "",
+			wantDesc:       "",
+			wantTags:       nil,
+			wantCreateDate: testDate,
+			wantIsEmpty:    false,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := buildPhotoMeta(tt.title, tt.descHTML, tt.tagsStr)
+			got := buildPhotoMeta(tt.title, tt.descHTML, tt.tagsStr, tt.createDate)
 
 			if got.Title != tt.wantTitle {
 				t.Errorf("Title = %q, want %q", got.Title, tt.wantTitle)
@@ -138,6 +157,9 @@ func TestBuildPhotoMeta(t *testing.T) {
 						t.Errorf("Tags[%d] = %q, want %q", i, got.Tags[i], tt.wantTags[i])
 					}
 				}
+			}
+			if !got.CreateDate.Equal(tt.wantCreateDate) {
+				t.Errorf("CreateDate = %v, want %v", got.CreateDate, tt.wantCreateDate)
 			}
 			if got.IsEmpty() != tt.wantIsEmpty {
 				t.Errorf("isEmpty() = %v, want %v", got.IsEmpty(), tt.wantIsEmpty)

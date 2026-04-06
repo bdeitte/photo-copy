@@ -3,6 +3,7 @@ package flickr
 import (
 	"html"
 	"strings"
+	"time"
 
 	xhtml "golang.org/x/net/html"
 
@@ -16,13 +17,14 @@ type flickrDescription struct {
 
 // buildPhotoMeta constructs an xmp.Metadata from raw Flickr API fields.
 // descriptionHTML is stripped of HTML tags, tagsStr is split on whitespace.
-func buildPhotoMeta(title, descriptionHTML, tagsStr string) xmp.Metadata {
+func buildPhotoMeta(title, descriptionHTML, tagsStr string, createDate time.Time) xmp.Metadata {
 	desc := stripHTML(descriptionHTML)
 	tags := strings.Fields(tagsStr)
 	return xmp.Metadata{
 		Title:       title,
 		Description: desc,
 		Tags:        tags,
+		CreateDate:  createDate,
 	}
 }
 

@@ -3,6 +3,7 @@ package xmp
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBuildDublinCorePacket_AllFields(t *testing.T) {
@@ -10,6 +11,7 @@ func TestBuildDublinCorePacket_AllFields(t *testing.T) {
 		Title:       "My Photo",
 		Description: "A nice sunset",
 		Tags:        []string{"sunset", "nature"},
+		CreateDate:  time.Date(2024, 6, 15, 14, 30, 0, 0, time.UTC),
 	}
 	pkt := BuildDublinCorePacket(meta)
 
@@ -18,6 +20,7 @@ func TestBuildDublinCorePacket_AllFields(t *testing.T) {
 		`id="W5M0MpCehiHzreSzNTczkc9d"`,
 		`<?xpacket end="w"?>`,
 		`xmlns:dc="http://purl.org/dc/elements/1.1/"`,
+		`xmlns:xmp="http://ns.adobe.com/xap/1.0/"`,
 		`<dc:title>`,
 		`<rdf:Alt>`,
 		`xml:lang="x-default"`,
@@ -32,6 +35,7 @@ func TestBuildDublinCorePacket_AllFields(t *testing.T) {
 		`<rdf:li>nature</rdf:li>`,
 		`</rdf:Bag>`,
 		`</dc:subject>`,
+		`<xmp:CreateDate>2024-06-15T14:30:00Z</xmp:CreateDate>`,
 	}
 	for _, want := range checks {
 		if !strings.Contains(pkt, want) {
@@ -69,6 +73,9 @@ func TestBuildDublinCorePacket_AllEmpty(t *testing.T) {
 	}
 	if strings.Contains(pkt, `dc:subject`) {
 		t.Error("dc:subject should be omitted when empty")
+	}
+	if strings.Contains(pkt, `xmp:CreateDate`) {
+		t.Error("xmp:CreateDate should be omitted when zero")
 	}
 	// Should still have xpacket wrapper
 	if !strings.Contains(pkt, `<?xpacket begin=`) {
@@ -125,6 +132,7 @@ func TestIsEmpty(t *testing.T) {
 		{"title only", Metadata{Title: "t"}, false},
 		{"description only", Metadata{Description: "d"}, false},
 		{"tags only", Metadata{Tags: []string{"t"}}, false},
+		{"create date only", Metadata{CreateDate: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)}, false},
 		{"all populated", Metadata{Title: "t", Description: "d", Tags: []string{"t"}}, false},
 		{"nil tags", Metadata{Tags: nil}, true},
 		{"empty tags slice", Metadata{Tags: []string{}}, true},

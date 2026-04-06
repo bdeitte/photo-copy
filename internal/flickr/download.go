@@ -219,7 +219,7 @@ func (c *Client) Download(ctx context.Context, outputDir string, limit int, noMe
 				// Embed title, description, and tags as XMP metadata.
 				// For MP4/MOV this appends a UUID box at EOF which gomp4 cannot
 				// parse, so it must happen after SetCreationTime.
-				meta := buildPhotoMeta(photo.Title, photo.Description.Content, photo.Tags)
+				meta := buildPhotoMeta(photo.Title, photo.Description.Content, photo.Tags, photoDate)
 				if !meta.IsEmpty() {
 					switch ext {
 					case ".jpg", ".jpeg":

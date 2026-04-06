@@ -4,6 +4,7 @@ package xmp
 import (
 	"html"
 	"strings"
+	"time"
 )
 
 // Metadata holds XMP metadata fields for embedding in media files.
@@ -11,11 +12,12 @@ type Metadata struct {
 	Title       string
 	Description string
 	Tags        []string
+	CreateDate  time.Time
 }
 
 // IsEmpty returns true if all fields are empty.
 func (m Metadata) IsEmpty() bool {
-	return m.Title == "" && m.Description == "" && len(m.Tags) == 0
+	return m.Title == "" && m.Description == "" && len(m.Tags) == 0 && m.CreateDate.IsZero()
 }
 
 // EscapeXML escapes s for safe inclusion in XML content.
@@ -31,7 +33,7 @@ func BuildDublinCorePacket(meta Metadata) string {
 	sb.WriteString(`<?xpacket begin="` + "\xef\xbb\xbf" + `" id="W5M0MpCehiHzreSzNTczkc9d"?>`)
 	sb.WriteString(`<x:xmpmeta xmlns:x="adobe:ns:meta/">`)
 	sb.WriteString(`<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">`)
-	sb.WriteString(`<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">`)
+	sb.WriteString(`<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:xmp="http://ns.adobe.com/xap/1.0/">`)
 
 	if meta.Title != "" {
 		sb.WriteString(`<dc:title><rdf:Alt><rdf:li xml:lang="x-default">`)
@@ -53,6 +55,12 @@ func BuildDublinCorePacket(meta Metadata) string {
 			sb.WriteString(`</rdf:li>`)
 		}
 		sb.WriteString(`</rdf:Bag></dc:subject>`)
+	}
+
+	if !meta.CreateDate.IsZero() {
+		sb.WriteString(`<xmp:CreateDate>`)
+		sb.WriteString(meta.CreateDate.UTC().Format("2006-01-02T15:04:05Z"))
+		sb.WriteString(`</xmp:CreateDate>`)
 	}
 
 	sb.WriteString(`</rdf:Description>`)
