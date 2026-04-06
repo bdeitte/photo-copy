@@ -661,6 +661,71 @@ func TestFlickrDownload_EmbedsXMPMetadata(t *testing.T) {
 	if !strings.Contains(xmp, "<rdf:li>nature</rdf:li>") {
 		t.Errorf("XMP should contain tags, got: %s", xmp)
 	}
+	if !strings.Contains(xmp, "<xmp:CreateDate>2020-06-15T14:30:00Z</xmp:CreateDate>") {
+		t.Errorf("XMP should contain CreateDate from date_taken, got: %s", xmp)
+	}
+}
+
+func TestFlickrDownload_XMPCreateDateFallsBackToDateUpload(t *testing.T) {
+	outputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	jpegData := buildMinimalJPEG()
+
+	// date_taken is the sentinel value that Flickr returns when the actual
+	// capture date is unknown; resolvePhotoDate should fall back to date_upload.
+	photos := []map[string]any{
+		{
+			"id": "1", "secret": "aaa", "server": "1",
+			"title":       "Old Photo",
+			"datetaken":   "1970-01-01 00:00:00",
+			"dateupload":  "1592234567",
+			"description": map[string]string{"_content": ""},
+			"tags":        "",
+		},
+	}
+
+	var mock *mockserver.FlickrMock
+	mock = mockserver.NewFlickr(t).
+		OnGetPhotos(mockserver.RespondJSON(200, map[string]any{
+			"photos": map[string]any{
+				"page":  1,
+				"pages": 1,
+				"total": 1,
+				"photo": photos,
+			},
+			"stat": "ok",
+		})).
+		OnGetSizes(func(w http.ResponseWriter, r *http.Request) {
+			photoID := r.URL.Query().Get("photo_id")
+			mockserver.RespondJSON(200, flickrSizesResponse(
+				mock.Server.URL+"/download/"+photoID+".jpg",
+			))(w, r)
+		}).
+		OnDownload(mockserver.RespondBytes(200, jpegData)).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_API_URL", mock.APIURL)
+
+	err := executeCmd(t, "flickr", "download", outputDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	filePath := filepath.Join(outputDir, "1_aaa.jpg")
+	xmp := readXMPFromJPEG(t, filePath)
+	if xmp == "" {
+		t.Fatal("no XMP metadata found in downloaded JPEG")
+	}
+
+	// date_upload 1592234567 = 2020-06-15T14:42:47Z
+	expectedDate := time.Unix(1592234567, 0).UTC().Format("2006-01-02T15:04:05Z")
+	want := "<xmp:CreateDate>" + expectedDate + "</xmp:CreateDate>"
+	if !strings.Contains(xmp, want) {
+		t.Errorf("XMP should contain CreateDate from date_upload fallback, want %s, got: %s", want, xmp)
+	}
 }
 
 // --- Flickr Upload Tests ---
@@ -1064,6 +1129,9 @@ func TestFlickrDownload_VideoMetadata(t *testing.T) {
 	}
 	if !strings.Contains(xmp, "<rdf:li>beach</rdf:li>") {
 		t.Errorf("XMP should contain tags, got: %s", xmp)
+	}
+	if !strings.Contains(xmp, "<xmp:CreateDate>2020-06-15T14:30:00Z</xmp:CreateDate>") {
+		t.Errorf("XMP should contain CreateDate from date_taken, got: %s", xmp)
 	}
 
 	// Verify file system timestamp was set
