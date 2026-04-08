@@ -73,6 +73,12 @@ The Google Photos API only allows access to photos the app itself uploaded, so d
 ./photo-copy google download ../takeout-zips ../google-photos
 ```
 
+**Google Takeout download details:**
+- **Album preservation** — Files in album folders are extracted into subdirectories (e.g., `Trip to Paris/photo.jpg`). Files in Google's year folders (`Photos from 2022`) are extracted flat to the output root.
+- **Deduplication** — Photos that appear in both an album folder and a year folder are only extracted once (the album copy is kept). Photos in multiple albums are kept in all albums.
+- **Metadata embedding** — Title, description, and creation date from Google Takeout JSON sidecar files are embedded as XMP metadata into JPEG and MP4/MOV files. File system timestamps are set from the photo's taken date.
+- **`--no-metadata`** — Skip metadata embedding during Google Takeout import.
+
 ### S3
 
 Uploads default to Glacier Deep Archive storage class. This will cause delays in retrieving the archives but is an inexpensive option to use for long-term storage. Use `--storage-class` to change (e.g. `STANDARD`, `GLACIER`).
@@ -146,7 +152,7 @@ Download works on all platforms. Upload requires macOS with Photos.app and iClou
 All transfers are resumable — if a download or upload is interrupted, re-running the same command picks up where it left off:
 
 - **Flickr downloads** — A `transfer.log` file in the output directory tracks each successfully downloaded file. Already-downloaded files are skipped on restart.
-- **Google Photos uploads** — An upload log file tracks completed uploads the same way.
+- **Google Photos uploads** — An upload log file tracks completed uploads. Files in subdirectories are tracked by relative path.
 - **S3 uploads/downloads** — Handled by rclone, which compares source and destination and only transfers changed or missing files.
 - **iCloud downloads** — Handled by icloudpd, which skips files that already exist in the output directory by filename matching.
 - **iCloud uploads** — Each run imports all files; Photos.app deduplicates automatically.
@@ -173,6 +179,10 @@ Files that fail during transfer are not marked as completed in the log, so re-ru
 - **iCloud download**: Uses icloudpd's date filtering (photo creation date from iCloud). Note: `--limit` maps to icloudpd's `--recent` flag, which selects the N most recently uploaded photos.
 - **iCloud upload**: Reads EXIF DateTimeOriginal (JPEG) or MP4 creation time, falling back to file modification time (same as Flickr/Google upload).
 
+### Subdirectory support
+
+All upload commands recursively scan subdirectories for media files. Files found in subdirectories are logged and uploaded. For S3, the subdirectory structure is preserved in the upload path. Google Takeout downloads also preserve album folder structure as subdirectories.
+
 ### Transfer summary & validation
 
 Every transfer automatically prints a summary and writes a detailed report file when it finishes. The summary includes file counts (succeeded, skipped, failed), total size transferred, and elapsed time. Any errors are re-listed so they're easy to spot.
@@ -198,7 +208,12 @@ Flickr downloads automatically preserve original capture dates and embed Flickr 
   - Video files (`.mp4`, `.mov`) get an XMP UUID box inserted in the MP4 container.
   - HTML in Flickr descriptions is stripped to plain text. Tags are split into individual keywords.
 
-- `--no-metadata` — Skip metadata embedding during Flickr downloads (XMP metadata, MP4 creation time, filesystem timestamps). The raw file is downloaded without modification.
+Google Takeout downloads similarly preserve metadata from JSON sidecar files:
+
+- **Date preservation** — Original photo dates from the JSON sidecar's `photoTakenTime` field are set as file system modification times. For MP4/MOV files, dates are also written into container metadata. Falls back to the zip entry timestamp when the sidecar date is missing.
+- **XMP metadata embedding** — Title and description from the JSON sidecar are embedded as XMP metadata (Dublin Core namespace) into JPEG and MP4/MOV files.
+
+- `--no-metadata` — Skip metadata embedding during downloads (Flickr and Google Takeout). The raw file is downloaded/extracted without modification.
 
 ### Debug mode
 
