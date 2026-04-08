@@ -371,3 +371,125 @@ func TestImportTakeout_NoMetadataFlag(t *testing.T) {
 		t.Error("file mtime should not match sidecar timestamp when --no-metadata is set")
 	}
 }
+
+func TestImportTakeout_MetadataFromJSON(t *testing.T) {
+	takeoutDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	// Create a minimal valid JPEG with SOI marker so jpegmeta.SetMetadata works
+	jpegData := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x02, 0x00, 0x00, 0xFF, 0xD9}
+
+	createTestZip(t, takeoutDir, map[string]string{
+		"Google Photos/Trip/photo.jpg":      string(jpegData),
+		"Google Photos/Trip/photo.jpg.json": `{"title":"Beach","description":"Nice day","photoTakenTime":{"timestamp":"1640000000"}}`,
+	})
+
+	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil, false)
+	if err != nil {
+		t.Fatalf("import failed: %v", err)
+	}
+	if result.Succeeded != 1 {
+		t.Fatalf("expected 1 file, got %d", result.Succeeded)
+	}
+
+	// Verify filesystem timestamp was set from JSON sidecar
+	info, err := os.Stat(filepath.Join(outputDir, "Trip", "photo.jpg"))
+	if err != nil {
+		t.Fatal("photo.jpg not found")
+	}
+	wantTime := time.Unix(1640000000, 0)
+	if !info.ModTime().Equal(wantTime) {
+		t.Errorf("ModTime = %v, want %v", info.ModTime(), wantTime)
+	}
+}
+
+func TestImportTakeout_NoSidecarNoMetadata(t *testing.T) {
+	takeoutDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	createTestZip(t, takeoutDir, map[string]string{
+		"Google Photos/Trip/photo.jpg": "jpegdata",
+		// No JSON sidecar
+	})
+
+	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil, false)
+	if err != nil {
+		t.Fatalf("import failed: %v", err)
+	}
+	if result.Succeeded != 1 {
+		t.Fatalf("expected 1 file, got %d", result.Succeeded)
+	}
+
+	// File should still be extracted even without sidecar
+	if _, err := os.Stat(filepath.Join(outputDir, "Trip", "photo.jpg")); err != nil {
+		t.Error("photo.jpg not found")
+	}
+}
+
+func TestImportTakeout_ZeroTimestampUsesZipModTime(t *testing.T) {
+	takeoutDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	// Create a zip with custom modification times using zip.CreateHeader
+	zipPath := filepath.Join(takeoutDir, "takeout.zip")
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := zip.NewWriter(f)
+
+	customTime := time.Date(2020, 6, 15, 12, 0, 0, 0, time.UTC)
+
+	// Add media file with custom mod time
+	header := &zip.FileHeader{
+		Name:     "Google Photos/Trip/photo.jpg",
+		Method:   zip.Deflate,
+		Modified: customTime,
+	}
+	fw, err := w.CreateHeader(header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw.Write([]byte("jpegdata")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Add JSON sidecar with zero timestamp
+	header2 := &zip.FileHeader{
+		Name:     "Google Photos/Trip/photo.jpg.json",
+		Method:   zip.Deflate,
+		Modified: customTime,
+	}
+	fw2, err := w.CreateHeader(header2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw2.Write([]byte(`{"title":"Photo","photoTakenTime":{"timestamp":"0"}}`)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil, false)
+	if err != nil {
+		t.Fatalf("import failed: %v", err)
+	}
+	if result.Succeeded != 1 {
+		t.Fatalf("expected 1 file, got %d", result.Succeeded)
+	}
+
+	// With zero timestamp in sidecar, should fall back to zip entry mod time
+	info, err := os.Stat(filepath.Join(outputDir, "Trip", "photo.jpg"))
+	if err != nil {
+		t.Fatal("photo.jpg not found")
+	}
+	// The file's mod time should be set to the zip entry's modification time
+	if !info.ModTime().Equal(customTime) {
+		t.Errorf("ModTime = %v, want %v (zip entry mod time)", info.ModTime(), customTime)
+	}
+}
