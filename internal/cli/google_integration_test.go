@@ -316,9 +316,9 @@ func TestGoogleUpload_NoSubdirLogWhenAllUploaded(t *testing.T) {
 	t.Setenv("PHOTO_COPY_GOOGLE_API_URL", mock.BaseURL)
 	t.Setenv("PHOTO_COPY_GOOGLE_TOKEN", "skip")
 
-	err := executeCmd(t, "google", "upload", inputDir)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	cmdErr, stderr := executeCmdCapture(t, "google", "upload", inputDir)
+	if cmdErr != nil {
+		t.Fatalf("unexpected error: %v", cmdErr)
 	}
 
 	// No upload requests should be made — all files were already uploaded
@@ -330,6 +330,11 @@ func TestGoogleUpload_NoSubdirLogWhenAllUploaded(t *testing.T) {
 	}
 	if uploadRequests != 0 {
 		t.Errorf("got %d upload requests, want 0 (all files already uploaded)", uploadRequests)
+	}
+
+	// The subdirectory log line should NOT appear when all nested files are skipped
+	if strings.Contains(stderr, "uploading files from subdirectory") {
+		t.Error("subdirectory log line should not appear when all nested files are already uploaded")
 	}
 }
 

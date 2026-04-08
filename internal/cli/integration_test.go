@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"strings"
@@ -67,6 +68,30 @@ func executeCmdWithContext(t *testing.T, ctx context.Context, args ...string) er
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	return cmd.ExecuteContext(ctx)
+}
+
+// executeCmdCapture runs a command and returns both the error and any stderr output.
+// It redirects os.Stderr to capture log output from the logger.
+func executeCmdCapture(t *testing.T, args ...string) (error, string) {
+	t.Helper()
+	// Redirect stderr to capture logger output.
+	origStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("creating pipe: %v", err)
+	}
+	os.Stderr = w
+
+	cmdErr := executeCmd(t, args...)
+
+	_ = w.Close()
+	os.Stderr = origStderr
+
+	var buf bytes.Buffer
+	_, _ = buf.ReadFrom(r)
+	_ = r.Close()
+
+	return cmdErr, buf.String()
 }
 
 // readLines reads a file and returns non-empty lines.

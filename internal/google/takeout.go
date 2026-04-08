@@ -96,56 +96,6 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 		return result, nil
 	}
 
-	// Pre-read all JSON sidecar data before extraction. Sidecars may be in
-	// different zip parts than their media files, so we collect all needed
-	// sidecar zip paths, open each once, and read the data.
-	jsonData := make(map[string][]byte) // sidecar entryName -> data
-	{
-		// Collect sidecar entries grouped by zip path.
-		type sidecarRef struct {
-			entryName string
-		}
-		sidecarsByZip := make(map[string][]sidecarRef)
-		for _, me := range toExtract {
-			if me.jsonEntry != nil {
-				sidecarsByZip[me.jsonEntry.zipPath] = append(
-					sidecarsByZip[me.jsonEntry.zipPath],
-					sidecarRef{entryName: me.jsonEntry.entryName},
-				)
-			}
-		}
-		for zp, refs := range sidecarsByZip {
-			r, err := zip.OpenReader(zp)
-			if err != nil {
-				log.Error("opening zip for sidecars %s: %v", zp, err)
-				continue
-			}
-			lookup := make(map[string]*zip.File, len(r.File))
-			for _, f := range r.File {
-				lookup[f.Name] = f
-			}
-			for _, ref := range refs {
-				jf, ok := lookup[ref.entryName]
-				if !ok {
-					continue
-				}
-				rc, err := jf.Open()
-				if err != nil {
-					log.Error("opening JSON sidecar %s: %v", ref.entryName, err)
-					continue
-				}
-				data, err := io.ReadAll(rc)
-				_ = rc.Close()
-				if err != nil {
-					log.Error("reading JSON sidecar %s: %v", ref.entryName, err)
-					continue
-				}
-				jsonData[ref.entryName] = data
-			}
-			_ = r.Close()
-		}
-	}
-
 	// Group media entries by zip file to open each zip only once.
 	type zipGroup struct {
 		zipPath string
@@ -181,6 +131,15 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 		zipLookup := make(map[string]*zip.File, len(r.File))
 		for _, f := range r.File {
 			zipLookup[f.Name] = f
+		}
+
+		// Read JSON sidecars needed by this group's entries. Sidecars may be
+		// in the current zip or in a different zip part. We only load what's
+		// needed for this group, so memory usage stays proportional to one
+		// zip's worth of entries rather than the entire export.
+		var jsonData map[string][]byte
+		if !noMetadata {
+			jsonData = readGroupSidecars(log, g.entries, zipLookup)
 		}
 
 		for _, me := range g.entries {
@@ -338,6 +297,81 @@ func applyTakeoutMetadata(log *logging.Logger, entry *mediaEntry, destPath strin
 			log.Error("setting file time for %s: %v", entry.basename, err)
 		}
 	}
+}
+
+// readGroupSidecars reads JSON sidecar data needed by a group of media entries.
+// Sidecars in the current zip are read directly from zipLookup. Sidecars in
+// other zips are opened on demand and read. This keeps memory proportional to
+// one group rather than the entire export.
+func readGroupSidecars(log *logging.Logger, entries []*mediaEntry, zipLookup map[string]*zip.File) map[string][]byte {
+	jsonData := make(map[string][]byte)
+
+	// Separate sidecars into local (same zip, already open) and external.
+	type externalRef struct {
+		entryName string
+	}
+	externalByZip := make(map[string][]externalRef)
+
+	for _, me := range entries {
+		if me.jsonEntry == nil {
+			continue
+		}
+		if jf, ok := zipLookup[me.jsonEntry.entryName]; ok {
+			// Sidecar is in the current zip — read directly.
+			data := readZipEntry(log, jf, me.jsonEntry.entryName)
+			if data != nil {
+				jsonData[me.jsonEntry.entryName] = data
+			}
+		} else {
+			// Sidecar is in a different zip part.
+			externalByZip[me.jsonEntry.zipPath] = append(
+				externalByZip[me.jsonEntry.zipPath],
+				externalRef{entryName: me.jsonEntry.entryName},
+			)
+		}
+	}
+
+	// Open each external zip, read the needed sidecars, then close.
+	for zp, refs := range externalByZip {
+		r, err := zip.OpenReader(zp)
+		if err != nil {
+			log.Error("opening zip for sidecars %s: %v", zp, err)
+			continue
+		}
+		lookup := make(map[string]*zip.File, len(r.File))
+		for _, f := range r.File {
+			lookup[f.Name] = f
+		}
+		for _, ref := range refs {
+			jf, ok := lookup[ref.entryName]
+			if !ok {
+				continue
+			}
+			data := readZipEntry(log, jf, ref.entryName)
+			if data != nil {
+				jsonData[ref.entryName] = data
+			}
+		}
+		_ = r.Close()
+	}
+
+	return jsonData
+}
+
+// readZipEntry reads the full contents of a zip file entry.
+func readZipEntry(log *logging.Logger, f *zip.File, name string) []byte {
+	rc, err := f.Open()
+	if err != nil {
+		log.Error("opening JSON sidecar %s: %v", name, err)
+		return nil
+	}
+	data, err := io.ReadAll(rc)
+	_ = rc.Close()
+	if err != nil {
+		log.Error("reading JSON sidecar %s: %v", name, err)
+		return nil
+	}
+	return data
 }
 
 func extractFile(ctx context.Context, f *zip.File, destPath string) (err error) {

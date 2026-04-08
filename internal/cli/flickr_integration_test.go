@@ -835,7 +835,10 @@ func TestFlickrUpload_CancelledDuringDiscovery(t *testing.T) {
 	configDir := t.TempDir()
 	setupFlickrConfig(t, configDir)
 
+	// Create enough files that WalkDir will encounter the cancelled context
 	_ = os.WriteFile(filepath.Join(inputDir, "photo.jpg"), testImageData, 0644)
+	_ = os.MkdirAll(filepath.Join(inputDir, "sub"), 0755)
+	_ = os.WriteFile(filepath.Join(inputDir, "sub", "nested.jpg"), testImageData, 0644)
 
 	mock := mockserver.NewFlickr(t).
 		OnUpload(mockserver.RespondStatus(200)).
@@ -845,14 +848,19 @@ func TestFlickrUpload_CancelledDuringDiscovery(t *testing.T) {
 	t.Setenv("PHOTO_COPY_FLICKR_UPLOAD_URL", mock.UploadURL)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // cancel immediately before any work
+	cancel() // cancel immediately — WalkDir's ctx.Err() check fires before any file processing
 
 	err := executeCmdWithContext(t, ctx, "flickr", "upload", inputDir)
 	if err == nil {
 		t.Fatal("expected error from cancelled context")
 	}
+	// The error must be context.Canceled, proving cancellation was detected
+	// during discovery (WalkDir) or early in execution — not during upload I/O.
+	if !strings.Contains(err.Error(), "context canceled") {
+		t.Errorf("expected context.Canceled error, got: %v", err)
+	}
 
-	// No upload requests should have been made
+	// No upload requests should have been made — cancellation happened before uploads
 	for _, req := range mock.Requests() {
 		if strings.HasPrefix(req.Path, "/services/upload/") {
 			t.Error("no upload requests should be made with a cancelled context")
