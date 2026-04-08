@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func createTestZip(t *testing.T, dir string, files map[string]string) string {
@@ -42,14 +43,14 @@ func TestImportTakeout_ExtractsMediaOnly(t *testing.T) {
 	outputDir := t.TempDir()
 
 	createTestZip(t, takeoutDir, map[string]string{
-		"Google Photos/Trip/photo1.jpg":                "jpegdata",
+		"Google Photos/Trip/photo1.jpg":               "jpegdata",
 		"Google Photos/Trip/photo1.jpg.json":           `{"title":"photo1"}`,
 		"Google Photos/Trip/video.mp4":                 "mp4data",
 		"Google Photos/Trip/metadata.json":             `{"albums":[]}`,
 		"Google Photos/Trip/print-subscriptions.json":  `{}`,
 	})
 
-	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil)
+	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil, false)
 	if err != nil {
 		t.Fatalf("import failed: %v", err)
 	}
@@ -58,11 +59,11 @@ func TestImportTakeout_ExtractsMediaOnly(t *testing.T) {
 		t.Fatalf("expected 2 files extracted, got %d", result.Succeeded)
 	}
 
-	if _, err := os.Stat(filepath.Join(outputDir, "photo1.jpg")); err != nil {
-		t.Fatal("photo1.jpg not found in output")
+	if _, err := os.Stat(filepath.Join(outputDir, "Trip", "photo1.jpg")); err != nil {
+		t.Fatal("photo1.jpg not found in Trip/ subdirectory")
 	}
-	if _, err := os.Stat(filepath.Join(outputDir, "video.mp4")); err != nil {
-		t.Fatal("video.mp4 not found in output")
+	if _, err := os.Stat(filepath.Join(outputDir, "Trip", "video.mp4")); err != nil {
+		t.Fatal("video.mp4 not found in Trip/ subdirectory")
 	}
 }
 
@@ -75,7 +76,7 @@ func TestImportTakeout_SkipsNonMedia(t *testing.T) {
 		"Google Photos/data.json":   "{}",
 	})
 
-	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil)
+	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil, false)
 	if err != nil {
 		t.Fatalf("import failed: %v", err)
 	}
@@ -90,16 +91,16 @@ func TestImportTakeout_MultipleZips(t *testing.T) {
 	outputDir := t.TempDir()
 
 	createTestZip(t, takeoutDir, map[string]string{
-		"Google Photos/a.jpg": "data1",
+		"Google Photos/Album1/a.jpg": "data1",
 	})
 	_ = os.Rename(filepath.Join(takeoutDir, "takeout.zip"), filepath.Join(takeoutDir, "takeout-001.zip"))
 
 	createTestZip(t, takeoutDir, map[string]string{
-		"Google Photos/b.png": "data2",
+		"Google Photos/Album2/b.png": "data2",
 	})
 	_ = os.Rename(filepath.Join(takeoutDir, "takeout.zip"), filepath.Join(takeoutDir, "takeout-002.zip"))
 
-	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil)
+	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil, false)
 	if err != nil {
 		t.Fatalf("import failed: %v", err)
 	}
@@ -113,8 +114,11 @@ func TestImportTakeout_DuplicateFilenameRenames(t *testing.T) {
 	takeoutDir := t.TempDir()
 	outputDir := t.TempDir()
 
-	// Pre-create a file that will collide with the zip's photo.jpg
-	if err := os.WriteFile(filepath.Join(outputDir, "photo.jpg"), []byte("existing"), 0644); err != nil {
+	// Pre-create a file that will collide with the zip's Album/photo.jpg
+	if err := os.MkdirAll(filepath.Join(outputDir, "Album"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outputDir, "Album", "photo.jpg"), []byte("existing"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -122,7 +126,7 @@ func TestImportTakeout_DuplicateFilenameRenames(t *testing.T) {
 		"Google Photos/Album/photo.jpg": "new data",
 	})
 
-	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil)
+	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil, false)
 	if err != nil {
 		t.Fatalf("import failed: %v", err)
 	}
@@ -132,7 +136,7 @@ func TestImportTakeout_DuplicateFilenameRenames(t *testing.T) {
 	}
 
 	// Original file should be untouched
-	data, err := os.ReadFile(filepath.Join(outputDir, "photo.jpg"))
+	data, err := os.ReadFile(filepath.Join(outputDir, "Album", "photo.jpg"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,10 +144,10 @@ func TestImportTakeout_DuplicateFilenameRenames(t *testing.T) {
 		t.Errorf("original file was overwritten, got %q", string(data))
 	}
 
-	// New file should be renamed to photo_1.jpg
-	data, err = os.ReadFile(filepath.Join(outputDir, "photo_1.jpg"))
+	// New file should be renamed to photo_1.jpg in the Album subdirectory
+	data, err = os.ReadFile(filepath.Join(outputDir, "Album", "photo_1.jpg"))
 	if err != nil {
-		t.Fatal("photo_1.jpg not found — duplicate rename did not work")
+		t.Fatal("Album/photo_1.jpg not found — duplicate rename did not work")
 	}
 	if string(data) != "new data" {
 		t.Errorf("renamed file has wrong content: %q", string(data))
@@ -161,7 +165,7 @@ func TestImportTakeout_CancelledBeforeStart(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately
 
-	_, err := ImportTakeout(ctx, takeoutDir, outputDir, nil)
+	_, err := ImportTakeout(ctx, takeoutDir, outputDir, nil, false)
 	if err == nil {
 		t.Fatal("expected error from cancelled context")
 	}
@@ -192,15 +196,16 @@ func TestImportTakeout_CancelledDuringExtraction(t *testing.T) {
 		}
 	}
 
-	result, err := ImportTakeout(ctx, takeoutDir, outputDir, nil, withAfterExtract(afterExtract))
+	result, err := ImportTakeout(ctx, takeoutDir, outputDir, nil, false, withAfterExtract(afterExtract))
 	if err == nil {
 		t.Fatal("expected error from cancelled context during extraction")
 	}
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected context.Canceled, got: %v", err)
 	}
-	// Verify partial extraction — some files should exist but not all
-	entries, _ := os.ReadDir(outputDir)
+	// Verify partial extraction — some files should exist in Album/ but not all
+	albumDir := filepath.Join(outputDir, "Album")
+	entries, _ := os.ReadDir(albumDir)
 	if len(entries) == 0 {
 		t.Error("expected at least one extracted file before cancellation")
 	}
@@ -237,7 +242,7 @@ func TestImportTakeout_CancelledDuringExtractFile(t *testing.T) {
 		}
 	}
 
-	result, err := ImportTakeout(ctx, takeoutDir, outputDir, nil, withBeforeExtract(beforeExtract))
+	result, err := ImportTakeout(ctx, takeoutDir, outputDir, nil, false, withBeforeExtract(beforeExtract))
 	if err == nil {
 		t.Fatal("expected error from cancelled context")
 	}
@@ -254,5 +259,115 @@ func TestImportTakeout_CancelledDuringExtractFile(t *testing.T) {
 	// The cancelled extractFile should NOT be recorded as a per-file error
 	if result.Failed > 0 {
 		t.Errorf("expected 0 failed (cancellation should not record file errors), got %d", result.Failed)
+	}
+}
+
+func TestImportTakeout_AlbumSubdirectory(t *testing.T) {
+	takeoutDir := t.TempDir()
+	outputDir := t.TempDir()
+	createTestZip(t, takeoutDir, map[string]string{
+		"Google Photos/Trip to Paris/photo.jpg": "jpegdata",
+		"Google Photos/Trip to Paris/video.mp4": "mp4data",
+	})
+	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil, false)
+	if err != nil {
+		t.Fatalf("import failed: %v", err)
+	}
+	if result.Succeeded != 2 {
+		t.Fatalf("expected 2, got %d", result.Succeeded)
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "Trip to Paris", "photo.jpg")); err != nil {
+		t.Error("expected photo.jpg in Trip to Paris/ subdirectory")
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "Trip to Paris", "video.mp4")); err != nil {
+		t.Error("expected video.mp4 in Trip to Paris/ subdirectory")
+	}
+}
+
+func TestImportTakeout_YearFolderFlattened(t *testing.T) {
+	takeoutDir := t.TempDir()
+	outputDir := t.TempDir()
+	createTestZip(t, takeoutDir, map[string]string{
+		"Google Photos/Photos from 2022/photo.jpg": "jpegdata",
+	})
+	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil, false)
+	if err != nil {
+		t.Fatalf("import failed: %v", err)
+	}
+	if result.Succeeded != 1 {
+		t.Fatalf("expected 1, got %d", result.Succeeded)
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "photo.jpg")); err != nil {
+		t.Error("expected photo.jpg in output root")
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "Photos from 2022")); err == nil {
+		t.Error("year folder subdirectory should not be created")
+	}
+}
+
+func TestImportTakeout_DedupYearVsAlbum(t *testing.T) {
+	takeoutDir := t.TempDir()
+	outputDir := t.TempDir()
+	createTestZip(t, takeoutDir, map[string]string{
+		"Google Photos/Trip/photo.jpg":             "jpegdata1234",
+		"Google Photos/Photos from 2022/photo.jpg": "jpegdata1234",
+	})
+	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil, false)
+	if err != nil {
+		t.Fatalf("import failed: %v", err)
+	}
+	if result.Succeeded != 1 {
+		t.Fatalf("expected 1 (deduped), got %d", result.Succeeded)
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "Trip", "photo.jpg")); err != nil {
+		t.Error("expected photo.jpg in Trip/")
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "photo.jpg")); err == nil {
+		t.Error("year folder photo.jpg should have been deduped away")
+	}
+}
+
+func TestImportTakeout_DedupDifferentSizeKeptBoth(t *testing.T) {
+	takeoutDir := t.TempDir()
+	outputDir := t.TempDir()
+	createTestZip(t, takeoutDir, map[string]string{
+		"Google Photos/Trip/photo.jpg":             "short",
+		"Google Photos/Photos from 2022/photo.jpg": "muchlongerdata",
+	})
+	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil, false)
+	if err != nil {
+		t.Fatalf("import failed: %v", err)
+	}
+	if result.Succeeded != 2 {
+		t.Fatalf("expected 2, got %d", result.Succeeded)
+	}
+}
+
+func TestImportTakeout_NoMetadataFlag(t *testing.T) {
+	takeoutDir := t.TempDir()
+	outputDir := t.TempDir()
+	createTestZip(t, takeoutDir, map[string]string{
+		"Google Photos/Trip/photo.jpg":      "jpegdata",
+		"Google Photos/Trip/photo.jpg.json": `{"title":"My Photo","photoTakenTime":{"timestamp":"1640000000"}}`,
+	})
+	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil, true)
+	if err != nil {
+		t.Fatalf("import failed: %v", err)
+	}
+	if result.Succeeded != 1 {
+		t.Fatalf("expected 1, got %d", result.Succeeded)
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "Trip", "photo.jpg")); err != nil {
+		t.Error("expected photo.jpg to be extracted")
+	}
+
+	// Verify metadata was NOT applied — mtime should not match sidecar timestamp.
+	info, err := os.Stat(filepath.Join(outputDir, "Trip", "photo.jpg"))
+	if err != nil {
+		t.Fatal("photo.jpg not found")
+	}
+	sidecarTime := time.Unix(1640000000, 0)
+	if info.ModTime().Equal(sidecarTime) {
+		t.Error("file mtime should not match sidecar timestamp when --no-metadata is set")
 	}
 }

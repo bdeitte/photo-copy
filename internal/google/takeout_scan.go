@@ -3,7 +3,6 @@ package google
 import (
 	"archive/zip"
 	"fmt"
-	"io"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -300,35 +299,3 @@ func scanOneZip(zipPath string) ([]*mediaEntry, error) {
 	return result, nil
 }
 
-// readJSONSidecar reads and parses the JSON sidecar for a media entry from its zip.
-// Returns nil if the entry has no matched sidecar.
-func readJSONSidecar(entry *mediaEntry) (*takeoutMeta, error) { //nolint:unused // wired up in Task 4
-	if entry.jsonEntry == nil {
-		return nil, nil
-	}
-
-	r, err := zip.OpenReader(entry.jsonEntry.zipPath)
-	if err != nil {
-		return nil, fmt.Errorf("opening zip for JSON: %w", err)
-	}
-	defer func() { _ = r.Close() }()
-
-	for _, f := range r.File {
-		if f.Name != entry.jsonEntry.entryName {
-			continue
-		}
-		rc, err := f.Open()
-		if err != nil {
-			return nil, fmt.Errorf("opening JSON entry: %w", err)
-		}
-		defer func() { _ = rc.Close() }()
-
-		data, err := io.ReadAll(rc)
-		if err != nil {
-			return nil, fmt.Errorf("reading JSON sidecar: %w", err)
-		}
-		return parseTakeoutJSON(data)
-	}
-
-	return nil, fmt.Errorf("JSON entry %s not found in zip", entry.jsonEntry.entryName)
-}

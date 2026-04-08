@@ -91,7 +91,7 @@ Then run:
   <output-dir>   Directory where photos/videos will be extracted`)
 			}
 			log := logging.New(opts.debug, nil)
-			result, err := google.ImportTakeout(cmd.Context(), args[0], args[1], log)
+			result, err := google.ImportTakeout(cmd.Context(), args[0], args[1], log, opts.noMetadata)
 			if err != nil {
 				return err
 			}

@@ -310,11 +310,11 @@ func TestGoogleDownload_HappyPath(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(outputDir, "photo1.jpg")); err != nil {
-		t.Error("photo1.jpg should have been extracted")
+	if _, err := os.Stat(filepath.Join(outputDir, "Trip", "photo1.jpg")); err != nil {
+		t.Error("photo1.jpg should have been extracted in Trip/ subdirectory")
 	}
-	if _, err := os.Stat(filepath.Join(outputDir, "video.mp4")); err != nil {
-		t.Error("video.mp4 should have been extracted")
+	if _, err := os.Stat(filepath.Join(outputDir, "Trip", "video.mp4")); err != nil {
+		t.Error("video.mp4 should have been extracted in Trip/ subdirectory")
 	}
 }
 
@@ -333,12 +333,12 @@ func TestGoogleDownload_FiltersNonMedia(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(outputDir, "photo.jpg")); err != nil {
-		t.Error("photo.jpg should have been extracted")
+	if _, err := os.Stat(filepath.Join(outputDir, "Trip", "photo.jpg")); err != nil {
+		t.Error("photo.jpg should have been extracted in Trip/ subdirectory")
 	}
 
 	// Non-media files should NOT be extracted
-	entries, _ := os.ReadDir(outputDir)
+	entries, _ := os.ReadDir(filepath.Join(outputDir, "Trip"))
 	for _, e := range entries {
 		if strings.HasSuffix(e.Name(), ".json") {
 			t.Errorf("non-media file should not be extracted: %s", e.Name())
@@ -360,12 +360,12 @@ func TestGoogleDownload_DuplicateFilenames(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Both files should exist — one as sunset.jpg, other as sunset_1.jpg
-	if _, err := os.Stat(filepath.Join(outputDir, "sunset.jpg")); err != nil {
-		t.Error("sunset.jpg should have been extracted")
+	// Both files should exist in their respective album subdirectories — no collision
+	if _, err := os.Stat(filepath.Join(outputDir, "Album1", "sunset.jpg")); err != nil {
+		t.Error("sunset.jpg should have been extracted in Album1/ subdirectory")
 	}
-	if _, err := os.Stat(filepath.Join(outputDir, "sunset_1.jpg")); err != nil {
-		t.Error("sunset_1.jpg should have been created for duplicate")
+	if _, err := os.Stat(filepath.Join(outputDir, "Album2", "sunset.jpg")); err != nil {
+		t.Error("sunset.jpg should have been extracted in Album2/ subdirectory")
 	}
 }
 
@@ -385,11 +385,11 @@ func TestGoogleDownload_MultipleZips(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(outputDir, "photo1.jpg")); err != nil {
-		t.Error("photo1.jpg from first zip should have been extracted")
+	if _, err := os.Stat(filepath.Join(outputDir, "Trip", "photo1.jpg")); err != nil {
+		t.Error("photo1.jpg from first zip should have been extracted in Trip/ subdirectory")
 	}
-	if _, err := os.Stat(filepath.Join(outputDir, "photo2.jpg")); err != nil {
-		t.Error("photo2.jpg from second zip should have been extracted")
+	if _, err := os.Stat(filepath.Join(outputDir, "Vacation", "photo2.jpg")); err != nil {
+		t.Error("photo2.jpg from second zip should have been extracted in Vacation/ subdirectory")
 	}
 }
 

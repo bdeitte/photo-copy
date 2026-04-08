@@ -10,9 +10,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/briandeitte/photo-copy/internal/jpegmeta"
 	"github.com/briandeitte/photo-copy/internal/logging"
-	"github.com/briandeitte/photo-copy/internal/media"
+	"github.com/briandeitte/photo-copy/internal/mp4meta"
 	"github.com/briandeitte/photo-copy/internal/transfer"
+	"github.com/briandeitte/photo-copy/internal/xmp"
 	"github.com/schollz/progressbar/v3"
 )
 
@@ -37,8 +39,10 @@ func withBeforeExtract(fn func()) importOption {
 }
 
 // ImportTakeout extracts media files from Google Takeout zip archives in takeoutDir
-// into outputDir, skipping non-media files and JSON metadata.
-func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *logging.Logger, opts ...importOption) (*transfer.Result, error) {
+// into outputDir. Album folders are preserved as subdirectories, year folders are
+// flattened, and duplicate year-folder entries are skipped. If noMetadata is false,
+// JSON sidecar metadata is embedded into extracted files.
+func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *logging.Logger, noMetadata bool, opts ...importOption) (*transfer.Result, error) {
 	var cfg importConfig
 	for _, o := range opts {
 		o(&cfg)
@@ -71,105 +75,245 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 
 	log.Debug("found %d zip files", len(zipFiles))
 
-	for _, zipPath := range zipFiles {
+	// Phase 1: scan all zips to build the index.
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
+	index, err := scanZips(zipFiles)
+	if err != nil {
+		return result, fmt.Errorf("scanning takeout zips: %w", err)
+	}
+
+	// Log skipped duplicates and count non-skipped entries.
+	var toExtract []*mediaEntry
+	for _, me := range index.media {
+		if me.skip {
+			log.Debug("dedup: skipping year-folder %s/%s (exists in album)", me.folderName, me.basename)
+			continue
+		}
+		toExtract = append(toExtract, me)
+	}
+
+	if len(toExtract) == 0 {
+		result.Finish()
+		return result, nil
+	}
+
+	// Group entries by zip file to open each zip only once.
+	type zipGroup struct {
+		zipPath string
+		entries []*mediaEntry
+	}
+	groupOrder := make(map[string]int) // zipPath -> index in groups
+	var groups []zipGroup
+	for _, me := range toExtract {
+		idx, ok := groupOrder[me.zipPath]
+		if !ok {
+			idx = len(groups)
+			groupOrder[me.zipPath] = idx
+			groups = append(groups, zipGroup{zipPath: me.zipPath})
+		}
+		groups[idx].entries = append(groups[idx].entries, me)
+	}
+
+	bar := progressbar.Default(int64(len(toExtract)), "extracting")
+
+	// Phase 2: extract entries, one zip at a time.
+	for _, g := range groups {
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		log.Debug("processing %s", zipPath)
 
-		if err := extractMediaFromZip(ctx, zipPath, outputDir, log, result, cfg.beforeExtract, cfg.afterExtract); err != nil {
-			if ctx.Err() != nil {
-				return result, ctx.Err()
-			}
-			log.Error("processing %s: %v", zipPath, err)
+		r, err := zip.OpenReader(g.zipPath)
+		if err != nil {
+			log.Error("opening zip %s: %v", g.zipPath, err)
 			continue
 		}
+
+		// Build lookup from entry name to *zip.File.
+		zipLookup := make(map[string]*zip.File, len(r.File))
+		for _, f := range r.File {
+			zipLookup[f.Name] = f
+		}
+
+		// Pre-read JSON sidecar data while the zip is open.
+		jsonData := make(map[string][]byte) // entryName -> data
+		for _, me := range g.entries {
+			if me.jsonEntry != nil && me.jsonEntry.zipPath == g.zipPath {
+				jf, ok := zipLookup[me.jsonEntry.entryName]
+				if !ok {
+					continue
+				}
+				rc, err := jf.Open()
+				if err != nil {
+					log.Error("opening JSON sidecar %s: %v", me.jsonEntry.entryName, err)
+					continue
+				}
+				data, err := io.ReadAll(rc)
+				_ = rc.Close()
+				if err != nil {
+					log.Error("reading JSON sidecar %s: %v", me.jsonEntry.entryName, err)
+					continue
+				}
+				jsonData[me.jsonEntry.entryName] = data
+			}
+		}
+
+		for _, me := range g.entries {
+			if err := ctx.Err(); err != nil {
+				_ = r.Close()
+				return result, err
+			}
+
+			f, ok := zipLookup[me.entryName]
+			if !ok {
+				log.Error("entry %s not found in zip %s", me.entryName, g.zipPath)
+				result.RecordError(me.basename, "entry not found in zip")
+				_ = bar.Add(1)
+				continue
+			}
+
+			// Determine destination path: album -> subdirectory, year -> flat.
+			var destPath string
+			if me.isYearFolder || me.folderName == "" {
+				destPath = filepath.Join(outputDir, me.basename)
+			} else {
+				destDir := filepath.Join(outputDir, me.folderName)
+				if err := os.MkdirAll(destDir, 0755); err != nil {
+					log.Error("creating album dir %s: %v", destDir, err)
+					result.RecordError(me.basename, err.Error())
+					_ = bar.Add(1)
+					continue
+				}
+				destPath = filepath.Join(destDir, me.basename)
+			}
+
+			// Handle filename collisions.
+			if _, err := os.Stat(destPath); err == nil {
+				base := strings.TrimSuffix(me.basename, filepath.Ext(me.basename))
+				ext := filepath.Ext(me.basename)
+				dir := filepath.Dir(destPath)
+				collisionErr := false
+				for i := 1; ; i++ {
+					destPath = filepath.Join(dir, fmt.Sprintf("%s_%d%s", base, i, ext))
+					if _, serr := os.Stat(destPath); errors.Is(serr, os.ErrNotExist) {
+						break
+					} else if serr != nil {
+						log.Error("checking destination %s: %v", destPath, serr)
+						result.RecordError(me.basename, fmt.Sprintf("checking destination: %v", serr))
+						_ = bar.Add(1)
+						collisionErr = true
+						break
+					}
+				}
+				if collisionErr {
+					continue
+				}
+				log.Debug("duplicate filename %s, saving as %s", me.basename, filepath.Base(destPath))
+			} else if !errors.Is(err, os.ErrNotExist) {
+				log.Error("checking destination %s: %v", destPath, err)
+				result.RecordError(me.basename, err.Error())
+				_ = bar.Add(1)
+				continue
+			}
+
+			log.Debug("extracting %s -> %s", me.entryName, destPath)
+
+			if cfg.beforeExtract != nil {
+				cfg.beforeExtract()
+			}
+			if err := extractFile(ctx, f, destPath); err != nil {
+				if ctx.Err() != nil {
+					_ = r.Close()
+					return result, ctx.Err()
+				}
+				log.Error("extracting %s: %v", me.entryName, err)
+				result.RecordError(me.basename, err.Error())
+				_ = bar.Add(1)
+				continue
+			}
+
+			info, statErr := os.Stat(destPath)
+			if statErr == nil {
+				result.RecordSuccess(info.Size())
+			} else {
+				result.RecordSuccess(0)
+			}
+
+			if !noMetadata {
+				var jd []byte
+				if me.jsonEntry != nil {
+					jd = jsonData[me.jsonEntry.entryName]
+				}
+				applyTakeoutMetadata(log, me, destPath, jd)
+			}
+
+			_ = bar.Add(1)
+
+			if cfg.afterExtract != nil {
+				cfg.afterExtract()
+			}
+		}
+
+		_ = r.Close()
 	}
 
 	result.Finish()
 	return result, nil
 }
 
-// extractMediaFromZip extracts supported media files from a zip archive.
-// beforeExtract/afterExtract, if non-nil, are called around each extraction (used by tests).
-func extractMediaFromZip(ctx context.Context, zipPath, outputDir string, log *logging.Logger, result *transfer.Result, beforeExtract, afterExtract func()) error {
-	r, err := zip.OpenReader(zipPath)
+// applyTakeoutMetadata embeds metadata (title, description, creation date) into
+// the extracted file using the pre-read JSON sidecar data. If jsonData is nil,
+// the file has no matched sidecar and metadata is skipped.
+func applyTakeoutMetadata(log *logging.Logger, entry *mediaEntry, destPath string, jsonData []byte) {
+	if jsonData == nil {
+		log.Debug("no JSON sidecar for %s, skipping metadata", entry.basename)
+		return
+	}
+
+	meta, err := parseTakeoutJSON(jsonData)
 	if err != nil {
-		return fmt.Errorf("opening zip: %w", err)
-	}
-	defer func() { _ = r.Close() }()
-
-	var mediaFiles []*zip.File
-	for _, f := range r.File {
-		if f.FileInfo().IsDir() {
-			continue
-		}
-		name := filepath.Base(f.Name)
-		if media.IsSupportedFile(name) {
-			mediaFiles = append(mediaFiles, f)
-		} else {
-			log.Debug("skipping non-media: %s", f.Name)
-		}
+		log.Error("parsing JSON sidecar for %s: %v", entry.basename, err)
+		return
 	}
 
-	if len(mediaFiles) == 0 {
-		return nil
+	photoDate := meta.PhotoTakenTime
+	if photoDate.IsZero() && !entry.zipModTime.IsZero() {
+		photoDate = entry.zipModTime
 	}
 
-	bar := progressbar.Default(int64(len(mediaFiles)), filepath.Base(zipPath))
+	ext := strings.ToLower(filepath.Ext(destPath))
 
-	for _, f := range mediaFiles {
-		if err := ctx.Err(); err != nil {
-			return err
+	// Set MP4 container creation time before XMP (gomp4 can't parse UUID boxes).
+	if !photoDate.IsZero() && (ext == ".mp4" || ext == ".mov") {
+		if err := mp4meta.SetCreationTime(destPath, photoDate); err != nil {
+			log.Error("setting MP4 metadata for %s: %v", entry.basename, err)
 		}
-		name := filepath.Base(f.Name)
-		destPath := filepath.Join(outputDir, name)
+	}
 
-		if _, err := os.Stat(destPath); err == nil {
-			base := strings.TrimSuffix(name, filepath.Ext(name))
-			ext := filepath.Ext(name)
-			for i := 1; ; i++ {
-				destPath = filepath.Join(outputDir, fmt.Sprintf("%s_%d%s", base, i, ext))
-				if _, err := os.Stat(destPath); errors.Is(err, os.ErrNotExist) {
-					break
-				} else if err != nil {
-					return fmt.Errorf("checking destination %s: %w", destPath, err)
-				}
+	xmpMeta := xmp.Metadata{
+		Title:       meta.Title,
+		Description: meta.Description,
+		CreateDate:  photoDate,
+	}
+	if !xmpMeta.IsEmpty() {
+		switch ext {
+		case ".jpg", ".jpeg":
+			if err := jpegmeta.SetMetadata(destPath, xmpMeta); err != nil {
+				log.Error("setting JPEG XMP metadata for %s: %v", entry.basename, err)
 			}
-			log.Debug("duplicate filename %s, saving as %s", name, filepath.Base(destPath))
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("checking destination %s: %w", destPath, err)
-		}
-
-		log.Debug("extracting %s -> %s", f.Name, destPath)
-
-		if beforeExtract != nil {
-			beforeExtract()
-		}
-		if err := extractFile(ctx, f, destPath); err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
+		case ".mp4", ".mov":
+			if err := mp4meta.SetXMPMetadata(destPath, xmpMeta); err != nil {
+				log.Error("setting MP4 XMP metadata for %s: %v", entry.basename, err)
 			}
-			log.Error("extracting %s: %v", f.Name, err)
-			result.RecordError(name, err.Error())
-			_ = bar.Add(1)
-			continue
-		}
-
-		info, statErr := os.Stat(destPath)
-		if statErr == nil {
-			result.RecordSuccess(info.Size())
-		} else {
-			result.RecordSuccess(0)
-		}
-		_ = bar.Add(1)
-
-		if afterExtract != nil {
-			afterExtract()
 		}
 	}
 
-	return nil
+	if !photoDate.IsZero() {
+		if err := os.Chtimes(destPath, photoDate, photoDate); err != nil {
+			log.Error("setting file time for %s: %v", entry.basename, err)
+		}
+	}
 }
 
 func extractFile(ctx context.Context, f *zip.File, destPath string) (err error) {
