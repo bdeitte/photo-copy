@@ -67,6 +67,63 @@ func TestImportTakeout_ExtractsMediaOnly(t *testing.T) {
 	}
 }
 
+func TestImportTakeout_TakeoutPrefixExtractsMedia(t *testing.T) {
+	// Regression: real Google Takeout zips use "Takeout/Google Photos/..." paths.
+	// Previously scanOneZip only matched "Google Photos/", silently skipping all entries.
+	takeoutDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	jpegData := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x02, 0x00, 0x00, 0xFF, 0xD9}
+
+	createTestZip(t, takeoutDir, map[string]string{
+		"Takeout/Google Photos/Trip/photo1.jpg":              string(jpegData),
+		"Takeout/Google Photos/Trip/photo1.jpg.json":         `{"title":"Beach","photoTakenTime":{"timestamp":"1640000000"}}`,
+		"Takeout/Google Photos/Trip/video.mp4":               "mp4data",
+		"Takeout/Google Photos/Photos from 2022/other.jpg":   string(jpegData),
+		"Takeout/Google Photos/Trip/metadata.json":           `{"albums":[]}`,
+	})
+
+	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil, false)
+	if err != nil {
+		t.Fatalf("import failed: %v", err)
+	}
+
+	if result.Succeeded != 3 {
+		t.Fatalf("expected 3 files extracted, got %d", result.Succeeded)
+	}
+
+	// Album media goes into subdirectory
+	if _, err := os.Stat(filepath.Join(outputDir, "Trip", "photo1.jpg")); err != nil {
+		t.Error("photo1.jpg not found in Trip/ subdirectory")
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "Trip", "video.mp4")); err != nil {
+		t.Error("video.mp4 not found in Trip/ subdirectory")
+	}
+
+	// Year folder media is flattened to output root
+	if _, err := os.Stat(filepath.Join(outputDir, "other.jpg")); err != nil {
+		t.Error("other.jpg not found in output root (year folder should be flattened)")
+	}
+
+	// Verify metadata was applied from sidecar
+	destPath := filepath.Join(outputDir, "Trip", "photo1.jpg")
+	data, err := os.ReadFile(destPath)
+	if err != nil {
+		t.Fatal("reading photo1.jpg:", err)
+	}
+	if !strings.Contains(string(data), "Beach") {
+		t.Error("XMP metadata should contain title 'Beach' from sidecar")
+	}
+	info, err := os.Stat(destPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantTime := time.Unix(1640000000, 0)
+	if !info.ModTime().Equal(wantTime) {
+		t.Errorf("ModTime = %v, want %v", info.ModTime(), wantTime)
+	}
+}
+
 func TestImportTakeout_SkipsNonMedia(t *testing.T) {
 	takeoutDir := t.TempDir()
 	outputDir := t.TempDir()
