@@ -35,6 +35,20 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 		return result, fmt.Errorf("scanning files: %w", err)
 	}
 
+	// Log subdirectories found
+	seenDirs := make(map[string]bool)
+	for _, f := range files {
+		rel, relErr := filepath.Rel(inputDir, f)
+		if relErr != nil {
+			continue
+		}
+		dir := filepath.Dir(rel)
+		if dir != "." && !seenDirs[dir] {
+			seenDirs[dir] = true
+			c.log.Info("uploading files from subdirectory: %s", dir)
+		}
+	}
+
 	if len(files) == 0 {
 		c.log.Info("no files found to upload")
 		result.Finish()
