@@ -76,10 +76,7 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 	log.Debug("found %d zip files", len(zipFiles))
 
 	// Phase 1: scan all zips to build the index.
-	if err := ctx.Err(); err != nil {
-		return result, err
-	}
-	index, err := scanZips(zipFiles)
+	index, err := scanZips(ctx, zipFiles)
 	if err != nil {
 		return result, fmt.Errorf("scanning takeout zips: %w", err)
 	}
@@ -99,7 +96,57 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 		return result, nil
 	}
 
-	// Group entries by zip file to open each zip only once.
+	// Pre-read all JSON sidecar data before extraction. Sidecars may be in
+	// different zip parts than their media files, so we collect all needed
+	// sidecar zip paths, open each once, and read the data.
+	jsonData := make(map[string][]byte) // sidecar entryName -> data
+	{
+		// Collect sidecar entries grouped by zip path.
+		type sidecarRef struct {
+			entryName string
+		}
+		sidecarsByZip := make(map[string][]sidecarRef)
+		for _, me := range toExtract {
+			if me.jsonEntry != nil {
+				sidecarsByZip[me.jsonEntry.zipPath] = append(
+					sidecarsByZip[me.jsonEntry.zipPath],
+					sidecarRef{entryName: me.jsonEntry.entryName},
+				)
+			}
+		}
+		for zp, refs := range sidecarsByZip {
+			r, err := zip.OpenReader(zp)
+			if err != nil {
+				log.Error("opening zip for sidecars %s: %v", zp, err)
+				continue
+			}
+			lookup := make(map[string]*zip.File, len(r.File))
+			for _, f := range r.File {
+				lookup[f.Name] = f
+			}
+			for _, ref := range refs {
+				jf, ok := lookup[ref.entryName]
+				if !ok {
+					continue
+				}
+				rc, err := jf.Open()
+				if err != nil {
+					log.Error("opening JSON sidecar %s: %v", ref.entryName, err)
+					continue
+				}
+				data, err := io.ReadAll(rc)
+				_ = rc.Close()
+				if err != nil {
+					log.Error("reading JSON sidecar %s: %v", ref.entryName, err)
+					continue
+				}
+				jsonData[ref.entryName] = data
+			}
+			_ = r.Close()
+		}
+	}
+
+	// Group media entries by zip file to open each zip only once.
 	type zipGroup struct {
 		zipPath string
 		entries []*mediaEntry
@@ -134,29 +181,6 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 		zipLookup := make(map[string]*zip.File, len(r.File))
 		for _, f := range r.File {
 			zipLookup[f.Name] = f
-		}
-
-		// Pre-read JSON sidecar data while the zip is open.
-		jsonData := make(map[string][]byte) // entryName -> data
-		for _, me := range g.entries {
-			if me.jsonEntry != nil && me.jsonEntry.zipPath == g.zipPath {
-				jf, ok := zipLookup[me.jsonEntry.entryName]
-				if !ok {
-					continue
-				}
-				rc, err := jf.Open()
-				if err != nil {
-					log.Error("opening JSON sidecar %s: %v", me.jsonEntry.entryName, err)
-					continue
-				}
-				data, err := io.ReadAll(rc)
-				_ = rc.Close()
-				if err != nil {
-					log.Error("reading JSON sidecar %s: %v", me.jsonEntry.entryName, err)
-					continue
-				}
-				jsonData[me.jsonEntry.entryName] = data
-			}
 		}
 
 		for _, me := range g.entries {

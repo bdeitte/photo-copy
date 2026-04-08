@@ -4,6 +4,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"net/http"
@@ -826,6 +827,36 @@ func TestFlickrUpload_NestedSubdirectories(t *testing.T) {
 	}
 	if uploadRequests != 2 {
 		t.Errorf("got %d upload requests, want 2 (root + nested)", uploadRequests)
+	}
+}
+
+func TestFlickrUpload_CancelledDuringDiscovery(t *testing.T) {
+	inputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	_ = os.WriteFile(filepath.Join(inputDir, "photo.jpg"), testImageData, 0644)
+
+	mock := mockserver.NewFlickr(t).
+		OnUpload(mockserver.RespondStatus(200)).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_UPLOAD_URL", mock.UploadURL)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately before any work
+
+	err := executeCmdWithContext(t, ctx, "flickr", "upload", inputDir)
+	if err == nil {
+		t.Fatal("expected error from cancelled context")
+	}
+
+	// No upload requests should have been made
+	for _, req := range mock.Requests() {
+		if strings.HasPrefix(req.Path, "/services/upload/") {
+			t.Error("no upload requests should be made with a cancelled context")
+		}
 	}
 }
 

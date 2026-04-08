@@ -418,6 +418,57 @@ func TestImportTakeout_MetadataFromJSON(t *testing.T) {
 	}
 }
 
+func TestImportTakeout_MetadataFromCrossZipSidecar(t *testing.T) {
+	// Media in one zip, JSON sidecar in another — metadata should still be applied.
+	dir := t.TempDir()
+	outputDir := t.TempDir()
+
+	// Minimal valid JPEG for XMP embedding
+	jpegData := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x02, 0x00, 0x00, 0xFF, 0xD9}
+
+	createTestZip(t, dir, map[string]string{
+		"Google Photos/Trip/photo.jpg": string(jpegData),
+	})
+	_ = os.Rename(filepath.Join(dir, "takeout.zip"), filepath.Join(dir, "takeout-001.zip"))
+	createTestZip(t, dir, map[string]string{
+		"Google Photos/Trip/photo.jpg.json": `{"title":"Cross-Zip Title","description":"Split archive","photoTakenTime":{"timestamp":"1640000000"}}`,
+	})
+	_ = os.Rename(filepath.Join(dir, "takeout.zip"), filepath.Join(dir, "takeout-002.zip"))
+
+	result, err := ImportTakeout(context.Background(), dir, outputDir, nil, false)
+	if err != nil {
+		t.Fatalf("import failed: %v", err)
+	}
+	if result.Succeeded != 1 {
+		t.Fatalf("expected 1 file, got %d", result.Succeeded)
+	}
+
+	destPath := filepath.Join(outputDir, "Trip", "photo.jpg")
+
+	// Verify filesystem timestamp was set from cross-zip sidecar
+	info, err := os.Stat(destPath)
+	if err != nil {
+		t.Fatal("photo.jpg not found")
+	}
+	wantTime := time.Unix(1640000000, 0)
+	if !info.ModTime().Equal(wantTime) {
+		t.Errorf("ModTime = %v, want %v", info.ModTime(), wantTime)
+	}
+
+	// Verify XMP metadata was embedded from the cross-zip sidecar
+	data, err := os.ReadFile(destPath)
+	if err != nil {
+		t.Fatal("reading photo.jpg:", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "Cross-Zip Title") {
+		t.Error("XMP metadata should contain title 'Cross-Zip Title' from cross-zip sidecar")
+	}
+	if !strings.Contains(content, "Split archive") {
+		t.Error("XMP metadata should contain description 'Split archive' from cross-zip sidecar")
+	}
+}
+
 func TestImportTakeout_NoSidecarNoMetadata(t *testing.T) {
 	takeoutDir := t.TempDir()
 	outputDir := t.TempDir()

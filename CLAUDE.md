@@ -83,8 +83,8 @@ Go CLI app using [cobra](https://github.com/spf13/cobra) for command structure. 
 - OAuth token refresh is timeout-protected by injecting a timeout-configured `http.Client` via the `oauth2.HTTPClient` context key.
 - Flickr OAuth nonce generation and signing return errors instead of panicking.
 - Cobra command `Annotations` map declares feature support (e.g., `"supportsMetadata": "true"`) for declarative flag warnings.
-- Google Takeout import uses a two-phase scan/extract approach: the scan phase builds an in-memory index with folder classification (album vs year folder), JSON sidecar matching (across zip parts), and dedup decisions; the extract phase writes files and embeds metadata. Context-awareness is preserved throughout: `extractFile` uses `copyWithContext` for cancellable large file copies, and the extract phase checks `ctx.Err()` to return immediately on cancellation.
-- All upload commands (Flickr, Google Photos) use `filepath.WalkDir` for recursive subdirectory discovery. S3 uploads recurse via rclone. iCloud uploads already handled subdirectories via osxphotos.
+- Google Takeout import uses a two-phase scan/extract approach: the scan phase builds an in-memory index with folder classification (album vs year folder), JSON sidecar matching (across zip parts), and dedup decisions; the extract phase writes files and embeds metadata. Both phases are context-aware: the scan phase checks `ctx.Err()` between zips, and the extract phase checks it per file. `extractFile` uses `copyWithContext` for cancellable large file copies.
+- All upload commands (Flickr, Google Photos, iCloud) use `filepath.WalkDir` for recursive local subdirectory discovery. S3 uploads recurse via rclone.
 - No album management — raw media files with embedded metadata only.
 
 ### Design constraints

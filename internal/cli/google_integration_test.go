@@ -292,6 +292,47 @@ func TestGoogleUpload_NestedSubdirectories(t *testing.T) {
 	}
 }
 
+func TestGoogleUpload_NoSubdirLogWhenAllUploaded(t *testing.T) {
+	inputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupGoogleConfig(t, configDir)
+
+	// Create a nested file
+	_ = os.MkdirAll(filepath.Join(inputDir, "album"), 0755)
+	_ = os.WriteFile(filepath.Join(inputDir, "album", "nested.jpg"), testImageData, 0644)
+
+	// Pre-populate upload log — nested file already uploaded
+	_ = os.WriteFile(filepath.Join(inputDir, ".photo-copy-upload.log"),
+		[]byte(filepath.Join("album", "nested.jpg")+"\n"), 0644)
+
+	mock := mockserver.NewGoogle(t).
+		OnUploadBytes(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("token"))
+		}).
+		OnBatchCreate(mockserver.RespondJSON(200, map[string]any{})).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_GOOGLE_API_URL", mock.BaseURL)
+	t.Setenv("PHOTO_COPY_GOOGLE_TOKEN", "skip")
+
+	err := executeCmd(t, "google", "upload", inputDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// No upload requests should be made — all files were already uploaded
+	uploadRequests := 0
+	for _, req := range mock.Requests() {
+		if req.Path == "/v1/uploads" {
+			uploadRequests++
+		}
+	}
+	if uploadRequests != 0 {
+		t.Errorf("got %d upload requests, want 0 (all files already uploaded)", uploadRequests)
+	}
+}
+
 func TestGoogleUpload_DateRange(t *testing.T) {
 	inputDir := t.TempDir()
 	configDir := t.TempDir()

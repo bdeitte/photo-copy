@@ -1,6 +1,7 @@
 package google
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -178,7 +179,7 @@ func TestScanZips_AlbumAndYearFolders(t *testing.T) {
 	})
 
 	zipPath := filepath.Join(takeoutDir, "takeout.zip")
-	index, err := scanZips([]string{zipPath})
+	index, err := scanZips(context.Background(), []string{zipPath})
 	if err != nil {
 		t.Fatalf("scanZips failed: %v", err)
 	}
@@ -222,7 +223,7 @@ func TestScanZips_DifferentSizeNotDeduped(t *testing.T) {
 	})
 
 	zipPath := filepath.Join(takeoutDir, "takeout.zip")
-	index, err := scanZips([]string{zipPath})
+	index, err := scanZips(context.Background(), []string{zipPath})
 	if err != nil {
 		t.Fatalf("scanZips failed: %v", err)
 	}
@@ -242,7 +243,7 @@ func TestScanZips_MultipleAlbumsNotDeduped(t *testing.T) {
 	})
 
 	zipPath := filepath.Join(takeoutDir, "takeout.zip")
-	index, err := scanZips([]string{zipPath})
+	index, err := scanZips(context.Background(), []string{zipPath})
 	if err != nil {
 		t.Fatalf("scanZips failed: %v", err)
 	}
@@ -266,7 +267,7 @@ func TestScanZips_JSONSidecarMatched(t *testing.T) {
 	})
 
 	zipPath := filepath.Join(takeoutDir, "takeout.zip")
-	index, err := scanZips([]string{zipPath})
+	index, err := scanZips(context.Background(), []string{zipPath})
 	if err != nil {
 		t.Fatalf("scanZips failed: %v", err)
 	}
@@ -293,7 +294,7 @@ func TestScanZips_MultipleZips(t *testing.T) {
 	})
 	_ = os.Rename(filepath.Join(dir, "takeout.zip"), filepath.Join(dir, "takeout-002.zip"))
 
-	index, err := scanZips([]string{
+	index, err := scanZips(context.Background(), []string{
 		filepath.Join(dir, "takeout-001.zip"),
 		filepath.Join(dir, "takeout-002.zip"),
 	})
@@ -313,7 +314,7 @@ func TestScanZips_YearFolderOnlyNotSkipped(t *testing.T) {
 	})
 
 	zipPath := filepath.Join(takeoutDir, "takeout.zip")
-	index, err := scanZips([]string{zipPath})
+	index, err := scanZips(context.Background(), []string{zipPath})
 	if err != nil {
 		t.Fatalf("scanZips failed: %v", err)
 	}
@@ -338,7 +339,7 @@ func TestScanZips_JSONSidecarAcrossZips(t *testing.T) {
 	})
 	_ = os.Rename(filepath.Join(dir, "takeout.zip"), filepath.Join(dir, "takeout-002.zip"))
 
-	index, err := scanZips([]string{
+	index, err := scanZips(context.Background(), []string{
 		filepath.Join(dir, "takeout-001.zip"),
 		filepath.Join(dir, "takeout-002.zip"),
 	})
@@ -365,7 +366,7 @@ func TestScanZips_DedupAcrossZips(t *testing.T) {
 	})
 	_ = os.Rename(filepath.Join(dir, "takeout.zip"), filepath.Join(dir, "takeout-002.zip"))
 
-	index, err := scanZips([]string{
+	index, err := scanZips(context.Background(), []string{
 		filepath.Join(dir, "takeout-001.zip"),
 		filepath.Join(dir, "takeout-002.zip"),
 	})

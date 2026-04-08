@@ -2,6 +2,7 @@ package google
 
 import (
 	"archive/zip"
+	"context"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -175,12 +176,15 @@ type folderContents struct {
 // JSON sidecars are matched to media across all zip files, not just within the
 // same zip. Google Takeout splits large exports into multiple zip parts, and a
 // folder's media and JSON sidecar may end up in different parts.
-func scanZips(zipPaths []string) (*scanIndex, error) {
+func scanZips(ctx context.Context, zipPaths []string) (*scanIndex, error) {
 	// Collect all entries across all zips, grouped by folder name.
 	// The same folder can appear in multiple zip parts.
 	allFolders := make(map[string]*folderContents)
 
 	for _, zipPath := range zipPaths {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if err := scanOneZip(zipPath, allFolders); err != nil {
 			return nil, err
 		}
