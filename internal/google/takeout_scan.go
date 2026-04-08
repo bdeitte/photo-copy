@@ -40,13 +40,24 @@ var bracketSwapRe = regexp.MustCompile(`^(.+)(\.\w+)(\(\d+\))\.json$`)
 // Returns empty string if no match is found.
 // Rules applied in order: direct match, truncated (46-char), bracket swap,
 // then edited-suffix variants of each.
+//
+// Google Takeout uses two sidecar naming formats:
+//   - Old: "photo.jpg.json"
+//   - New: "photo.jpg.supplemental-metadata.json"
 func matchJSONToMedia(jsonName string, mediaNames []string) string {
 	if !strings.HasSuffix(strings.ToLower(jsonName), ".json") {
 		return ""
 	}
 
+	// Normalize the new ".supplemental-metadata.json" format to the old
+	// ".json" format so all downstream matching logic works with both.
+	normalizedJSON := jsonName
+	if i := strings.Index(normalizedJSON, ".supplemental-metadata.json"); i >= 0 {
+		normalizedJSON = normalizedJSON[:i] + ".json"
+	}
+
 	// Try direct match and its edited variants
-	directBase := strings.TrimSuffix(jsonName, filepath.Ext(jsonName)) // strips .json
+	directBase := strings.TrimSuffix(normalizedJSON, filepath.Ext(normalizedJSON)) // strips .json
 	if m := findMedia(directBase, mediaNames); m != "" {
 		return m
 	}
@@ -59,7 +70,7 @@ func matchJSONToMedia(jsonName string, mediaNames []string) string {
 	}
 
 	// Try bracket swap: image.jpg(11).json -> image(11).jpg
-	if m := bracketSwapRe.FindStringSubmatch(jsonName); m != nil {
+	if m := bracketSwapRe.FindStringSubmatch(normalizedJSON); m != nil {
 		// m[1]="image", m[2]=".jpg", m[3]="(11)"
 		swapped := m[1] + m[3] + m[2] // "image(11).jpg"
 		if match := findMedia(swapped, mediaNames); match != "" {

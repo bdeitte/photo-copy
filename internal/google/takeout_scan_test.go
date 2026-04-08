@@ -18,6 +18,34 @@ func TestMatchJSONToMedia_Direct(t *testing.T) {
 	}
 }
 
+func TestMatchJSONToMedia_SupplementalMetadata(t *testing.T) {
+	media := []string{"photo.jpg", "video.mp4"}
+	got := matchJSONToMedia("photo.jpg.supplemental-metadata.json", media)
+	if got != "photo.jpg" {
+		t.Errorf("matchJSONToMedia() = %q, want %q", got, "photo.jpg")
+	}
+	got = matchJSONToMedia("video.mp4.supplemental-metadata.json", media)
+	if got != "video.mp4" {
+		t.Errorf("matchJSONToMedia() = %q, want %q", got, "video.mp4")
+	}
+}
+
+func TestMatchJSONToMedia_SupplementalMetadataEdited(t *testing.T) {
+	media := []string{"photo-edited.jpg"}
+	got := matchJSONToMedia("photo.jpg.supplemental-metadata.json", media)
+	if got != "photo-edited.jpg" {
+		t.Errorf("matchJSONToMedia() = %q, want %q", got, "photo-edited.jpg")
+	}
+}
+
+func TestMatchJSONToMedia_SupplementalMetadataBracketSwap(t *testing.T) {
+	media := []string{"image(11).jpg"}
+	got := matchJSONToMedia("image.jpg(11).supplemental-metadata.json", media)
+	if got != "image(11).jpg" {
+		t.Errorf("matchJSONToMedia() = %q, want %q", got, "image(11).jpg")
+	}
+}
+
 func TestMatchJSONToMedia_NoMatch(t *testing.T) {
 	media := []string{"other.jpg"}
 	got := matchJSONToMedia("photo.jpg.json", media)
@@ -276,6 +304,30 @@ func TestScanZips_JSONSidecarMatched(t *testing.T) {
 		if entry.basename == "photo.jpg" {
 			if entry.jsonEntry == nil {
 				t.Error("photo.jpg should have a matched JSON sidecar")
+			}
+			return
+		}
+	}
+	t.Error("photo.jpg not found in index")
+}
+
+func TestScanZips_SupplementalMetadataSidecar(t *testing.T) {
+	takeoutDir := t.TempDir()
+	createTestZip(t, takeoutDir, map[string]string{
+		"Google Photos/Trip/photo.jpg":                                "jpegdata",
+		"Google Photos/Trip/photo.jpg.supplemental-metadata.json":    `{"title":"my photo"}`,
+	})
+
+	zipPath := filepath.Join(takeoutDir, "takeout.zip")
+	index, err := scanZips(context.Background(), []string{zipPath})
+	if err != nil {
+		t.Fatalf("scanZips failed: %v", err)
+	}
+
+	for _, entry := range index.media {
+		if entry.basename == "photo.jpg" {
+			if entry.jsonEntry == nil {
+				t.Error("photo.jpg should have a matched supplemental-metadata JSON sidecar")
 			}
 			return
 		}
