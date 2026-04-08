@@ -326,6 +326,34 @@ func TestScanZips_YearFolderOnlyNotSkipped(t *testing.T) {
 	}
 }
 
+func TestScanZips_JSONSidecarAcrossZips(t *testing.T) {
+	// Media in one zip, JSON sidecar in another (same folder split across parts).
+	dir := t.TempDir()
+	createTestZip(t, dir, map[string]string{
+		"Google Photos/Trip/photo.jpg": "jpegdata",
+	})
+	_ = os.Rename(filepath.Join(dir, "takeout.zip"), filepath.Join(dir, "takeout-001.zip"))
+	createTestZip(t, dir, map[string]string{
+		"Google Photos/Trip/photo.jpg.json": `{"title":"my photo"}`,
+	})
+	_ = os.Rename(filepath.Join(dir, "takeout.zip"), filepath.Join(dir, "takeout-002.zip"))
+
+	index, err := scanZips([]string{
+		filepath.Join(dir, "takeout-001.zip"),
+		filepath.Join(dir, "takeout-002.zip"),
+	})
+	if err != nil {
+		t.Fatalf("scanZips failed: %v", err)
+	}
+
+	if len(index.media) != 1 {
+		t.Fatalf("expected 1 media entry, got %d", len(index.media))
+	}
+	if index.media[0].jsonEntry == nil {
+		t.Error("photo.jpg should have a matched JSON sidecar from a different zip")
+	}
+}
+
 func TestScanZips_DedupAcrossZips(t *testing.T) {
 	dir := t.TempDir()
 	createTestZip(t, dir, map[string]string{

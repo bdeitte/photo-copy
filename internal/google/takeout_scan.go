@@ -171,24 +171,49 @@ type folderContents struct {
 // scanZips reads directory entries from all provided zip files, classifies them,
 // matches JSON sidecars to media, and deduplicates year-folder entries that also
 // appear in an album folder (same basename and uncompressed size).
+//
+// JSON sidecars are matched to media across all zip files, not just within the
+// same zip. Google Takeout splits large exports into multiple zip parts, and a
+// folder's media and JSON sidecar may end up in different parts.
 func scanZips(zipPaths []string) (*scanIndex, error) {
-	// albumKeys collects (basename, size) pairs from album folders so we can
-	// identify year-folder duplicates.
+	// Collect all entries across all zips, grouped by folder name.
+	// The same folder can appear in multiple zip parts.
+	allFolders := make(map[string]*folderContents)
+
+	for _, zipPath := range zipPaths {
+		if err := scanOneZip(zipPath, allFolders); err != nil {
+			return nil, err
+		}
+	}
+
+	// Match JSON sidecars to media within each folder (across all zips).
+	var allMedia []*mediaEntry
 	type dedupKey struct {
 		basename string
 		size     uint64
 	}
 	albumKeys := make(map[dedupKey]bool)
 
-	// First pass: collect all entries, classifying folders and matching sidecars.
-	var allMedia []*mediaEntry
-
-	for _, zipPath := range zipPaths {
-		entries, err := scanOneZip(zipPath)
-		if err != nil {
-			return nil, err
+	for _, fc := range allFolders {
+		mediaNames := make([]string, len(fc.mediaEntries))
+		for i, me := range fc.mediaEntries {
+			mediaNames[i] = me.basename
 		}
-		for _, me := range entries {
+
+		for jsonBase, ze := range fc.jsonEntries {
+			matched := matchJSONToMedia(jsonBase, mediaNames)
+			if matched == "" {
+				continue
+			}
+			for _, me := range fc.mediaEntries {
+				if me.basename == matched {
+					me.jsonEntry = ze
+					break
+				}
+			}
+		}
+
+		for _, me := range fc.mediaEntries {
 			allMedia = append(allMedia, me)
 			if !me.isYearFolder {
 				albumKeys[dedupKey{basename: normalizedBasename(me.basename), size: me.size}] = true
@@ -196,7 +221,7 @@ func scanZips(zipPaths []string) (*scanIndex, error) {
 		}
 	}
 
-	// Second pass: mark year-folder entries as skipped when an album entry
+	// Mark year-folder entries as skipped when an album entry
 	// with the same basename and size exists.
 	for _, me := range allMedia {
 		if me.isYearFolder {
@@ -210,17 +235,14 @@ func scanZips(zipPaths []string) (*scanIndex, error) {
 	return &scanIndex{media: allMedia}, nil
 }
 
-// scanOneZip scans a single zip file and returns all media entries with matched
-// JSON sidecars. It classifies each entry's parent folder as a year folder or album.
-func scanOneZip(zipPath string) ([]*mediaEntry, error) {
+// scanOneZip scans a single zip file and adds its media and JSON entries to
+// allFolders, grouped by folder name. The same folder may span multiple zips.
+func scanOneZip(zipPath string, allFolders map[string]*folderContents) error {
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
-		return nil, fmt.Errorf("open zip %s: %w", zipPath, err)
+		return fmt.Errorf("open zip %s: %w", zipPath, err)
 	}
 	defer func() { _ = r.Close() }()
-
-	// Group entries by folder within the zip.
-	folders := make(map[string]*folderContents)
 
 	for _, f := range r.File {
 		name := f.Name
@@ -243,12 +265,12 @@ func scanOneZip(zipPath string) ([]*mediaEntry, error) {
 		folder := parts[0]
 		base := parts[1]
 
-		if _, ok := folders[folder]; !ok {
-			folders[folder] = &folderContents{
+		if _, ok := allFolders[folder]; !ok {
+			allFolders[folder] = &folderContents{
 				jsonEntries: make(map[string]*zipEntry),
 			}
 		}
-		fc := folders[folder]
+		fc := allFolders[folder]
 
 		lowerBase := strings.ToLower(base)
 		if strings.HasSuffix(lowerBase, ".json") {
@@ -272,30 +294,6 @@ func scanOneZip(zipPath string) ([]*mediaEntry, error) {
 		fc.mediaEntries = append(fc.mediaEntries, entry)
 	}
 
-	// Match JSON sidecars within each folder.
-	var result []*mediaEntry
-	for _, fc := range folders {
-		mediaNames := make([]string, len(fc.mediaEntries))
-		for i, me := range fc.mediaEntries {
-			mediaNames[i] = me.basename
-		}
-
-		for jsonBase, ze := range fc.jsonEntries {
-			matched := matchJSONToMedia(jsonBase, mediaNames)
-			if matched == "" {
-				continue
-			}
-			for _, me := range fc.mediaEntries {
-				if me.basename == matched {
-					me.jsonEntry = ze
-					break
-				}
-			}
-		}
-
-		result = append(result, fc.mediaEntries...)
-	}
-
-	return result, nil
+	return nil
 }
 
