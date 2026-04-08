@@ -171,8 +171,15 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 				destPath = filepath.Join(destDir, me.basename)
 			}
 
-			// Handle filename collisions.
-			if _, err := os.Stat(destPath); err == nil {
+			// Skip files that already exist with the same size.
+			if info, err := os.Stat(destPath); err == nil {
+				if info.Size() == int64(me.size) {
+					log.Debug("skipping %s (already exists with same size)", me.basename)
+					result.RecordSkip(1)
+					_ = bar.Add(1)
+					continue
+				}
+				// Different size — treat as a genuine collision, rename.
 				base := strings.TrimSuffix(me.basename, filepath.Ext(me.basename))
 				ext := filepath.Ext(me.basename)
 				dir := filepath.Dir(destPath)
