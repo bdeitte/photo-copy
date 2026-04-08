@@ -69,7 +69,7 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 	// Filter already uploaded files
 	var toUpload []string
 	for _, f := range files {
-		if !uploaded[filepath.Base(f)] {
+		if !uploaded[f] {
 			toUpload = append(toUpload, f)
 		}
 	}
@@ -78,17 +78,18 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 	if dateRange != nil {
 		var filtered []string
 		dateFiltered := 0
-		for _, filePath := range toUpload {
-			fileDate := mediadate.ResolveDate(filePath)
+		for _, relPath := range toUpload {
+			fullPath := filepath.Join(inputDir, relPath)
+			fileDate := mediadate.ResolveDate(fullPath)
 			switch {
 			case fileDate.IsZero():
-				c.log.Info("including %s despite date range filter: no date available", filepath.Base(filePath))
-				filtered = append(filtered, filePath)
+				c.log.Info("including %s despite date range filter: no date available", filepath.Base(relPath))
+				filtered = append(filtered, relPath)
 			case dateRange.Contains(fileDate):
-				filtered = append(filtered, filePath)
+				filtered = append(filtered, relPath)
 			default:
 				dateFiltered++
-				c.log.Debug("skipping %s: date %s outside range", filepath.Base(filePath), fileDate.Format("2006-01-02"))
+				c.log.Debug("skipping %s: date %s outside range", filepath.Base(relPath), fileDate.Format("2006-01-02"))
 			}
 		}
 		if dateFiltered > 0 {
@@ -119,53 +120,64 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 	result.Expected = len(toUpload) + len(uploaded)
 	result.RecordSkip(len(uploaded))
 
+	// Log subdirectories after all filtering is done
+	seenDirs := make(map[string]bool)
+	for _, f := range toUpload {
+		dir := filepath.Dir(f)
+		if dir != "." && !seenDirs[dir] {
+			seenDirs[dir] = true
+			c.log.Info("uploading files from subdirectory: %s", dir)
+		}
+	}
+
 	c.log.Info("uploading %d files (%d already uploaded)", len(toUpload), len(uploaded))
 	estimator := transfer.NewEstimator()
 
-	for i, filePath := range toUpload {
-		filename := filepath.Base(filePath)
+	for i, relPath := range toUpload {
+		filename := filepath.Base(relPath)
+		fullPath := filepath.Join(inputDir, relPath)
 		dateStr := ""
-		if fileDate := mediadate.ResolveDate(filePath); !fileDate.IsZero() {
+		if fileDate := mediadate.ResolveDate(fullPath); !fileDate.IsZero() {
 			dateStr = fmt.Sprintf(" (%s)", fileDate.Format("2006-01-02"))
 		}
-		c.log.Info("[%d/%d] %suploading %s%s", i+1, len(toUpload), estimator.Estimate(len(toUpload)-(i+1)), filename, dateStr)
-		c.log.Debug("reading file: %s", filePath)
+		c.log.Info("[%d/%d] %suploading %s%s", i+1, len(toUpload), estimator.Estimate(len(toUpload)-(i+1)), relPath, dateStr)
+		c.log.Debug("reading file: %s", fullPath)
 
-		uploadToken, err := c.uploadBytes(ctx, filePath, filename)
+		uploadToken, err := c.uploadBytes(ctx, fullPath, filename)
 		if err != nil {
 			if errors.Is(err, errTokenExpired) {
 				result.Finish()
 				return result, err
 			}
-			result.RecordError(filename, err.Error())
-			c.log.Error("upload failed for %s: %v", filename, err)
+			result.RecordError(relPath, err.Error())
+			c.log.Error("upload failed for %s: %v", relPath, err)
 			estimator.Tick()
 			continue
 		}
 
-		c.log.Debug("got upload token for %s, creating media item", filename)
+		c.log.Debug("got upload token for %s, creating media item", relPath)
 		if err := c.createMediaItem(ctx, uploadToken, filename); err != nil {
 			if errors.Is(err, errTokenExpired) {
 				result.Finish()
 				return result, err
 			}
-			result.RecordError(filename, err.Error())
-			c.log.Error("create media item failed for %s: %v", filename, err)
+			result.RecordError(relPath, err.Error())
+			c.log.Error("create media item failed for %s: %v", relPath, err)
 			estimator.Tick()
 			continue
 		}
 
-		if err := appendUploadLog(logPath, filename); err != nil {
+		if err := appendUploadLog(logPath, relPath); err != nil {
 			c.log.Error("failed to update upload log: %v", err)
 		}
 
-		info, statErr := os.Stat(filePath)
+		info, statErr := os.Stat(fullPath)
 		if statErr == nil {
 			result.RecordSuccess(info.Size())
 		} else {
 			result.RecordSuccess(0)
 		}
-		c.log.Debug("successfully uploaded %s", filename)
+		c.log.Debug("successfully uploaded %s", relPath)
 		estimator.Tick()
 	}
 
@@ -254,24 +266,29 @@ func (c *Client) createMediaItem(ctx context.Context, uploadToken, filename stri
 	return nil
 }
 
-// collectMediaFiles lists media files in a directory filtered by supported types.
+// collectMediaFiles walks a directory recursively and returns relative paths
+// of supported media files.
 func collectMediaFiles(dir string) ([]string, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, fmt.Errorf("reading directory: %w", err)
-	}
-
 	var files []string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		if media.IsSupportedFile(entry.Name()) {
-			files = append(files, filepath.Join(dir, entry.Name()))
-		}
-	}
 
-	return files, nil
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if media.IsSupportedFile(d.Name()) {
+			rel, relErr := filepath.Rel(dir, path)
+			if relErr != nil {
+				return fmt.Errorf("computing relative path: %w", relErr)
+			}
+			files = append(files, rel)
+		}
+		return nil
+	})
+
+	return files, err
 }
 
 // loadUploadLog reads the upload log and returns a set of already-uploaded filenames.

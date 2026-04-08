@@ -66,9 +66,10 @@ func newGoogleUploadCmd(opts *rootOpts) *cobra.Command {
 
 func newGoogleDownloadCmd(opts *rootOpts) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "download <takeout-dir> <output-dir>",
-		Short: "Download photos/videos from Google Takeout zip files",
-		Args:  cobra.RangeArgs(0, 2),
+		Use:         "download <takeout-dir> <output-dir>",
+		Short:       "Download photos/videos from Google Takeout zip files",
+		Args:        cobra.RangeArgs(0, 2),
+		Annotations: map[string]string{"supportsMetadata": "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) < 2 {
 				//nolint:staticcheck // user-facing message, capitalization is intentional
@@ -91,7 +92,7 @@ Then run:
   <output-dir>   Directory where photos/videos will be extracted`)
 			}
 			log := logging.New(opts.debug, nil)
-			result, err := google.ImportTakeout(cmd.Context(), args[0], args[1], log)
+			result, err := google.ImportTakeout(cmd.Context(), args[0], args[1], log, opts.noMetadata)
 			if err != nil {
 				return err
 			}

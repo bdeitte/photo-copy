@@ -22,16 +22,34 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 	c.log.Debug("starting Flickr upload from %s", inputDir)
 	result := transfer.NewResult("flickr", "upload", inputDir)
 
-	entries, err := os.ReadDir(inputDir)
-	if err != nil {
-		return result, fmt.Errorf("reading input dir: %w", err)
-	}
-
 	var files []string
-	for _, e := range entries {
-		if !e.IsDir() && media.IsSupportedFile(e.Name()) {
-			files = append(files, e.Name())
+	seenDirs := make(map[string]bool)
+	err := filepath.WalkDir(inputDir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if media.IsSupportedFile(d.Name()) {
+			rel, relErr := filepath.Rel(inputDir, path)
+			if relErr != nil {
+				return fmt.Errorf("computing relative path: %w", relErr)
+			}
+			dir := filepath.Dir(rel)
+			if dir != "." && !seenDirs[dir] {
+				seenDirs[dir] = true
+				c.log.Info("uploading files from subdirectory: %s", dir)
+			}
+			files = append(files, rel)
+		}
+		return nil
+	})
+	if err != nil {
+		return result, fmt.Errorf("scanning input dir: %w", err)
 	}
 
 	if len(files) == 0 {
@@ -44,18 +62,21 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 	if dateRange != nil {
 		var filtered []string
 		dateFiltered := 0
-		for _, name := range files {
-			filePath := filepath.Join(inputDir, name)
+		for _, relPath := range files {
+			if err := ctx.Err(); err != nil {
+				return result, err
+			}
+			filePath := filepath.Join(inputDir, relPath)
 			fileDate := mediadate.ResolveDate(filePath)
 			switch {
 			case fileDate.IsZero():
-				c.log.Info("including %s despite date range filter: no date available", name)
-				filtered = append(filtered, name)
+				c.log.Info("including %s despite date range filter: no date available", relPath)
+				filtered = append(filtered, relPath)
 			case dateRange.Contains(fileDate):
-				filtered = append(filtered, name)
+				filtered = append(filtered, relPath)
 			default:
 				dateFiltered++
-				c.log.Debug("skipping %s: date %s outside range", name, fileDate.Format("2006-01-02"))
+				c.log.Debug("skipping %s: date %s outside range", relPath, fileDate.Format("2006-01-02"))
 			}
 		}
 		if dateFiltered > 0 {
@@ -81,7 +102,7 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 	estimator := transfer.NewEstimator()
 
 	consecutiveFailures := 0
-	for i, filename := range files {
+	for i, relPath := range files {
 		select {
 		case <-ctx.Done():
 			result.Finish()
@@ -89,11 +110,12 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 		default:
 		}
 
-		if err := c.uploadFile(ctx, filepath.Join(inputDir, filename)); err != nil {
-			result.RecordError(filename, err.Error())
+		fullPath := filepath.Join(inputDir, relPath)
+		if err := c.uploadFile(ctx, fullPath); err != nil {
+			result.RecordError(relPath, err.Error())
 			estimator.Tick()
 			remaining := len(files) - (i + 1)
-			c.log.Error("[%d/%d] %suploading %s: %v", i+1, len(files), estimator.Estimate(remaining), filename, err)
+			c.log.Error("[%d/%d] %suploading %s: %v", i+1, len(files), estimator.Estimate(remaining), relPath, err)
 			consecutiveFailures++
 			if consecutiveFailures >= maxConsecutiveFailures {
 				c.log.Error("aborting: %d consecutive upload failures", consecutiveFailures)
@@ -104,9 +126,9 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 		}
 
 		consecutiveFailures = 0
-		info, statErr := os.Stat(filepath.Join(inputDir, filename))
+		info, statErr := os.Stat(fullPath)
 		if statErr != nil {
-			c.log.Error("stat after upload for %s: %v", filename, statErr)
+			c.log.Error("stat after upload for %s: %v", relPath, statErr)
 			result.RecordSuccess(0)
 		} else {
 			result.RecordSuccess(info.Size())
@@ -114,10 +136,10 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 		estimator.Tick()
 		remaining := len(files) - (i + 1)
 		dateStr := ""
-		if fileDate := mediadate.ResolveDate(filepath.Join(inputDir, filename)); !fileDate.IsZero() {
+		if fileDate := mediadate.ResolveDate(fullPath); !fileDate.IsZero() {
 			dateStr = fmt.Sprintf(" (%s)", fileDate.Format("2006-01-02"))
 		}
-		c.log.Info("[%d/%d] %suploaded %s%s", i+1, len(files), estimator.Estimate(remaining), filename, dateStr)
+		c.log.Info("[%d/%d] %suploaded %s%s", i+1, len(files), estimator.Estimate(remaining), relPath, dateStr)
 	}
 
 	result.Finish()

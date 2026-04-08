@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"strings"
 	"testing"
@@ -56,6 +57,16 @@ func executeCmd(t *testing.T, args ...string) error {
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	return cmd.Execute()
+}
+
+// executeCmdWithContext creates a new root command, sets args, and executes it with the given context.
+func executeCmdWithContext(t *testing.T, ctx context.Context, args ...string) error {
+	t.Helper()
+	cmd := NewRootCmd()
+	cmd.SetArgs(args)
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	return cmd.ExecuteContext(ctx)
 }
 
 // readLines reads a file and returns non-empty lines.

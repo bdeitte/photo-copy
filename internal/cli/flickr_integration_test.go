@@ -4,6 +4,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"net/http"
@@ -792,6 +793,70 @@ func TestFlickrUpload_SkipsNonMedia(t *testing.T) {
 	}
 	if uploadRequests != 1 {
 		t.Errorf("got %d upload requests, want 1 (only .jpg)", uploadRequests)
+	}
+}
+
+func TestFlickrUpload_NestedSubdirectories(t *testing.T) {
+	inputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	// Create files in root and a subdirectory
+	_ = os.WriteFile(filepath.Join(inputDir, "root.jpg"), testImageData, 0644)
+	_ = os.MkdirAll(filepath.Join(inputDir, "album"), 0755)
+	_ = os.WriteFile(filepath.Join(inputDir, "album", "nested.jpg"), testImageData, 0644)
+
+	mock := mockserver.NewFlickr(t).
+		OnUpload(mockserver.RespondStatus(200)).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_UPLOAD_URL", mock.UploadURL)
+
+	err := executeCmd(t, "flickr", "upload", inputDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Both root and nested files should be uploaded
+	uploadRequests := 0
+	for _, req := range mock.Requests() {
+		if strings.HasPrefix(req.Path, "/services/upload/") {
+			uploadRequests++
+		}
+	}
+	if uploadRequests != 2 {
+		t.Errorf("got %d upload requests, want 2 (root + nested)", uploadRequests)
+	}
+}
+
+func TestFlickrUpload_CancelledDuringDiscovery(t *testing.T) {
+	inputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupFlickrConfig(t, configDir)
+
+	_ = os.WriteFile(filepath.Join(inputDir, "photo.jpg"), testImageData, 0644)
+
+	mock := mockserver.NewFlickr(t).
+		OnUpload(mockserver.RespondStatus(200)).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_FLICKR_UPLOAD_URL", mock.UploadURL)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately before any work
+
+	err := executeCmdWithContext(t, ctx, "flickr", "upload", inputDir)
+	if err == nil {
+		t.Fatal("expected error from cancelled context")
+	}
+
+	// No upload requests should have been made
+	for _, req := range mock.Requests() {
+		if strings.HasPrefix(req.Path, "/services/upload/") {
+			t.Error("no upload requests should be made with a cancelled context")
+		}
 	}
 }
 

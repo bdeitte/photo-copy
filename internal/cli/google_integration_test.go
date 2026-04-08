@@ -242,6 +242,97 @@ func TestGoogleUpload_LimitFlag(t *testing.T) {
 	}
 }
 
+func TestGoogleUpload_NestedSubdirectories(t *testing.T) {
+	inputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupGoogleConfig(t, configDir)
+
+	// Create files in root and a subdirectory
+	_ = os.WriteFile(filepath.Join(inputDir, "root.jpg"), testImageData, 0644)
+	_ = os.MkdirAll(filepath.Join(inputDir, "album"), 0755)
+	_ = os.WriteFile(filepath.Join(inputDir, "album", "nested.jpg"), testImageData, 0644)
+
+	mock := mockserver.NewGoogle(t).
+		OnUploadBytes(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("token"))
+		}).
+		OnBatchCreate(mockserver.RespondJSON(200, map[string]any{})).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_GOOGLE_API_URL", mock.BaseURL)
+	t.Setenv("PHOTO_COPY_GOOGLE_TOKEN", "skip")
+
+	err := executeCmd(t, "google", "upload", inputDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Both files should be uploaded
+	uploadRequests := 0
+	for _, req := range mock.Requests() {
+		if req.Path == "/v1/uploads" {
+			uploadRequests++
+		}
+	}
+	if uploadRequests != 2 {
+		t.Errorf("got %d upload requests, want 2 (root + nested)", uploadRequests)
+	}
+
+	// Upload log should contain relative path for nested file
+	logLines := readLines(t, filepath.Join(inputDir, ".photo-copy-upload.log"))
+	hasNested := false
+	for _, line := range logLines {
+		if line == filepath.Join("album", "nested.jpg") {
+			hasNested = true
+		}
+	}
+	if !hasNested {
+		t.Errorf("upload log should contain relative path %q, got: %v", filepath.Join("album", "nested.jpg"), logLines)
+	}
+}
+
+func TestGoogleUpload_NoSubdirLogWhenAllUploaded(t *testing.T) {
+	inputDir := t.TempDir()
+	configDir := t.TempDir()
+	setupGoogleConfig(t, configDir)
+
+	// Create a nested file
+	_ = os.MkdirAll(filepath.Join(inputDir, "album"), 0755)
+	_ = os.WriteFile(filepath.Join(inputDir, "album", "nested.jpg"), testImageData, 0644)
+
+	// Pre-populate upload log — nested file already uploaded
+	_ = os.WriteFile(filepath.Join(inputDir, ".photo-copy-upload.log"),
+		[]byte(filepath.Join("album", "nested.jpg")+"\n"), 0644)
+
+	mock := mockserver.NewGoogle(t).
+		OnUploadBytes(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("token"))
+		}).
+		OnBatchCreate(mockserver.RespondJSON(200, map[string]any{})).
+		Start()
+
+	setTestEnv(t, configDir)
+	t.Setenv("PHOTO_COPY_GOOGLE_API_URL", mock.BaseURL)
+	t.Setenv("PHOTO_COPY_GOOGLE_TOKEN", "skip")
+
+	err := executeCmd(t, "google", "upload", inputDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// No upload requests should be made — all files were already uploaded
+	uploadRequests := 0
+	for _, req := range mock.Requests() {
+		if req.Path == "/v1/uploads" {
+			uploadRequests++
+		}
+	}
+	if uploadRequests != 0 {
+		t.Errorf("got %d upload requests, want 0 (all files already uploaded)", uploadRequests)
+	}
+}
+
 func TestGoogleUpload_DateRange(t *testing.T) {
 	inputDir := t.TempDir()
 	configDir := t.TempDir()
@@ -310,11 +401,11 @@ func TestGoogleDownload_HappyPath(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(outputDir, "photo1.jpg")); err != nil {
-		t.Error("photo1.jpg should have been extracted")
+	if _, err := os.Stat(filepath.Join(outputDir, "Trip", "photo1.jpg")); err != nil {
+		t.Error("photo1.jpg should have been extracted in Trip/ subdirectory")
 	}
-	if _, err := os.Stat(filepath.Join(outputDir, "video.mp4")); err != nil {
-		t.Error("video.mp4 should have been extracted")
+	if _, err := os.Stat(filepath.Join(outputDir, "Trip", "video.mp4")); err != nil {
+		t.Error("video.mp4 should have been extracted in Trip/ subdirectory")
 	}
 }
 
@@ -333,12 +424,12 @@ func TestGoogleDownload_FiltersNonMedia(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(outputDir, "photo.jpg")); err != nil {
-		t.Error("photo.jpg should have been extracted")
+	if _, err := os.Stat(filepath.Join(outputDir, "Trip", "photo.jpg")); err != nil {
+		t.Error("photo.jpg should have been extracted in Trip/ subdirectory")
 	}
 
 	// Non-media files should NOT be extracted
-	entries, _ := os.ReadDir(outputDir)
+	entries, _ := os.ReadDir(filepath.Join(outputDir, "Trip"))
 	for _, e := range entries {
 		if strings.HasSuffix(e.Name(), ".json") {
 			t.Errorf("non-media file should not be extracted: %s", e.Name())
@@ -360,12 +451,12 @@ func TestGoogleDownload_DuplicateFilenames(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Both files should exist — one as sunset.jpg, other as sunset_1.jpg
-	if _, err := os.Stat(filepath.Join(outputDir, "sunset.jpg")); err != nil {
-		t.Error("sunset.jpg should have been extracted")
+	// Both files should exist in their respective album subdirectories — no collision
+	if _, err := os.Stat(filepath.Join(outputDir, "Album1", "sunset.jpg")); err != nil {
+		t.Error("sunset.jpg should have been extracted in Album1/ subdirectory")
 	}
-	if _, err := os.Stat(filepath.Join(outputDir, "sunset_1.jpg")); err != nil {
-		t.Error("sunset_1.jpg should have been created for duplicate")
+	if _, err := os.Stat(filepath.Join(outputDir, "Album2", "sunset.jpg")); err != nil {
+		t.Error("sunset.jpg should have been extracted in Album2/ subdirectory")
 	}
 }
 
@@ -385,11 +476,48 @@ func TestGoogleDownload_MultipleZips(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(outputDir, "photo1.jpg")); err != nil {
-		t.Error("photo1.jpg from first zip should have been extracted")
+	if _, err := os.Stat(filepath.Join(outputDir, "Trip", "photo1.jpg")); err != nil {
+		t.Error("photo1.jpg from first zip should have been extracted in Trip/ subdirectory")
 	}
-	if _, err := os.Stat(filepath.Join(outputDir, "photo2.jpg")); err != nil {
-		t.Error("photo2.jpg from second zip should have been extracted")
+	if _, err := os.Stat(filepath.Join(outputDir, "Vacation", "photo2.jpg")); err != nil {
+		t.Error("photo2.jpg from second zip should have been extracted in Vacation/ subdirectory")
+	}
+}
+
+func TestGoogleDownload_NoMetadataFlag(t *testing.T) {
+	takeoutDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	// Use a minimal valid JPEG so metadata embedding would succeed if attempted
+	jpegData := buildMinimalJPEG()
+	createTestZip(t, takeoutDir, "takeout.zip", map[string]string{
+		"Google Photos/Trip/photo.jpg":      string(jpegData),
+		"Google Photos/Trip/photo.jpg.json": `{"title":"Beach","description":"Nice day","photoTakenTime":{"timestamp":"1640000000"}}`,
+	})
+
+	err := executeCmd(t, "google", "download", "--no-metadata", takeoutDir, outputDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(outputDir, "Trip", "photo.jpg")); err != nil {
+		t.Error("photo.jpg should have been extracted in Trip/ subdirectory")
+	}
+
+	// Verify metadata was NOT applied — mtime should not match sidecar timestamp
+	info, err := os.Stat(filepath.Join(outputDir, "Trip", "photo.jpg"))
+	if err != nil {
+		t.Fatal("photo.jpg not found")
+	}
+	sidecarTime := time.Date(2021, 12, 20, 17, 46, 40, 0, time.UTC)
+	if info.ModTime().Equal(sidecarTime) {
+		t.Error("file mtime should not match sidecar timestamp when --no-metadata is set")
+	}
+
+	// Verify no XMP metadata was embedded
+	xmpContent := readXMPFromJPEG(t, filepath.Join(outputDir, "Trip", "photo.jpg"))
+	if xmpContent != "" {
+		t.Error("XMP metadata should not be embedded when --no-metadata is set")
 	}
 }
 
