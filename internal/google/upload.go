@@ -60,15 +60,6 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 
 	c.log.Info("found %d media files in %s", len(files), inputDir)
 
-	seenDirs := make(map[string]bool)
-	for _, f := range files {
-		dir := filepath.Dir(f)
-		if dir != "." && !seenDirs[dir] {
-			seenDirs[dir] = true
-			c.log.Info("uploading files from subdirectory: %s", dir)
-		}
-	}
-
 	logPath := filepath.Join(inputDir, ".photo-copy-upload.log")
 	uploaded, err := loadUploadLog(logPath)
 	if err != nil {
@@ -128,6 +119,16 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 
 	result.Expected = len(toUpload) + len(uploaded)
 	result.RecordSkip(len(uploaded))
+
+	// Log subdirectories after all filtering is done
+	seenDirs := make(map[string]bool)
+	for _, f := range toUpload {
+		dir := filepath.Dir(f)
+		if dir != "." && !seenDirs[dir] {
+			seenDirs[dir] = true
+			c.log.Info("uploading files from subdirectory: %s", dir)
+		}
+	}
 
 	c.log.Info("uploading %d files (%d already uploaded)", len(toUpload), len(uploaded))
 	estimator := transfer.NewEstimator()

@@ -392,14 +392,29 @@ func TestImportTakeout_MetadataFromJSON(t *testing.T) {
 		t.Fatalf("expected 1 file, got %d", result.Succeeded)
 	}
 
+	destPath := filepath.Join(outputDir, "Trip", "photo.jpg")
+
 	// Verify filesystem timestamp was set from JSON sidecar
-	info, err := os.Stat(filepath.Join(outputDir, "Trip", "photo.jpg"))
+	info, err := os.Stat(destPath)
 	if err != nil {
 		t.Fatal("photo.jpg not found")
 	}
 	wantTime := time.Unix(1640000000, 0)
 	if !info.ModTime().Equal(wantTime) {
 		t.Errorf("ModTime = %v, want %v", info.ModTime(), wantTime)
+	}
+
+	// Verify XMP metadata was embedded in the JPEG
+	data, err := os.ReadFile(destPath)
+	if err != nil {
+		t.Fatal("reading photo.jpg:", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "Beach") {
+		t.Error("XMP metadata should contain title 'Beach'")
+	}
+	if !strings.Contains(content, "Nice day") {
+		t.Error("XMP metadata should contain description 'Nice day'")
 	}
 }
 

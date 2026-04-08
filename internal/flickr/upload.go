@@ -28,6 +28,9 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 		if walkErr != nil {
 			return walkErr
 		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if d.IsDir() {
 			return nil
 		}
@@ -60,6 +63,9 @@ func (c *Client) Upload(ctx context.Context, inputDir string, limit int, dateRan
 		var filtered []string
 		dateFiltered := 0
 		for _, relPath := range files {
+			if err := ctx.Err(); err != nil {
+				return result, err
+			}
 			filePath := filepath.Join(inputDir, relPath)
 			fileDate := mediadate.ResolveDate(filePath)
 			switch {
