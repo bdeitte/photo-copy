@@ -211,7 +211,7 @@ Flickr downloads automatically preserve original capture dates and embed Flickr 
 Google Takeout downloads similarly preserve metadata from JSON sidecar files:
 
 - **Date preservation** — Original photo dates from the JSON sidecar's `photoTakenTime` field are set as file system modification times. For MP4/MOV files, dates are also written into container metadata. Falls back to the zip entry timestamp when the sidecar date is missing.
-- **XMP metadata embedding** — Title and description from the JSON sidecar are embedded as XMP metadata (Dublin Core namespace) into JPEG and MP4/MOV files.
+- **XMP metadata embedding** — Title, description, and creation date from the JSON sidecar are embedded as XMP metadata (Dublin Core namespace) into JPEG and MP4/MOV files.
 
 - `--no-metadata` — Skip metadata embedding during downloads (Flickr and Google Takeout). The raw file is downloaded/extracted without modification.
 
