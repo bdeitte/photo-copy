@@ -355,6 +355,48 @@ func TestScanZips_JSONSidecarAcrossZips(t *testing.T) {
 	}
 }
 
+func TestScanZips_TakeoutPrefix(t *testing.T) {
+	// Google Takeout zips use "Takeout/Google Photos/..." as the top-level path.
+	takeoutDir := t.TempDir()
+	createTestZip(t, takeoutDir, map[string]string{
+		"Takeout/Google Photos/Trip/photo.jpg":      "jpegdata",
+		"Takeout/Google Photos/Trip/photo.jpg.json": `{"title":"my photo"}`,
+		"Takeout/Google Photos/Photos from 2022/other.jpg": "otherdata",
+	})
+
+	zipPath := filepath.Join(takeoutDir, "takeout.zip")
+	index, err := scanZips(context.Background(), []string{zipPath})
+	if err != nil {
+		t.Fatalf("scanZips failed: %v", err)
+	}
+
+	if len(index.media) != 2 {
+		t.Fatalf("expected 2 media entries, got %d", len(index.media))
+	}
+
+	var foundTrip, foundYear bool
+	for _, entry := range index.media {
+		switch {
+		case entry.folderName == "Trip" && entry.basename == "photo.jpg":
+			foundTrip = true
+			if entry.jsonEntry == nil {
+				t.Error("photo.jpg should have a matched JSON sidecar")
+			}
+		case entry.folderName == "Photos from 2022" && entry.basename == "other.jpg":
+			foundYear = true
+			if !entry.isYearFolder {
+				t.Error("Photos from 2022 should be classified as year folder")
+			}
+		}
+	}
+	if !foundTrip {
+		t.Error("Trip/photo.jpg not found in index")
+	}
+	if !foundYear {
+		t.Error("Photos from 2022/other.jpg not found in index")
+	}
+}
+
 func TestScanZips_DedupAcrossZips(t *testing.T) {
 	dir := t.TempDir()
 	createTestZip(t, dir, map[string]string{

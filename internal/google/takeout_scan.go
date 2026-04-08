@@ -270,11 +270,17 @@ func scanOneZip(zipPath string, allFolders map[string]*folderContents) error {
 	for _, f := range r.File {
 		name := f.Name
 		// Only handle entries under "Google Photos/" with a subfolder.
-		const prefix = "Google Photos/"
-		if !strings.HasPrefix(name, prefix) {
+		// Google Takeout zips may use either "Google Photos/..." or
+		// "Takeout/Google Photos/..." as the top-level path.
+		var rest string
+		switch {
+		case strings.HasPrefix(name, "Takeout/Google Photos/"):
+			rest = strings.TrimPrefix(name, "Takeout/Google Photos/")
+		case strings.HasPrefix(name, "Google Photos/"):
+			rest = strings.TrimPrefix(name, "Google Photos/")
+		default:
 			continue
 		}
-		rest := strings.TrimPrefix(name, prefix)
 		// Skip the top-level directory entry itself.
 		if rest == "" || strings.HasSuffix(name, "/") {
 			continue
