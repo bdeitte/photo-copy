@@ -469,6 +469,53 @@ func TestImportTakeout_MetadataFromCrossZipSidecar(t *testing.T) {
 	}
 }
 
+func TestImportTakeout_CrossZipSidecarWithDuplicatePaths(t *testing.T) {
+	// Both zips contain the same sidecar path but with different content.
+	// The scanner records which zip the sidecar was matched from; extraction
+	// must read from the recorded zip, not from whichever zip happens to
+	// contain the same entry name.
+	dir := t.TempDir()
+	outputDir := t.TempDir()
+
+	jpegData := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x02, 0x00, 0x00, 0xFF, 0xD9}
+
+	// Zip 1: has both the media and a sidecar with title "Zip1 Title"
+	createTestZip(t, dir, map[string]string{
+		"Google Photos/Trip/photo.jpg":      string(jpegData),
+		"Google Photos/Trip/photo.jpg.json": `{"title":"Zip1 Title","photoTakenTime":{"timestamp":"1640000000"}}`,
+	})
+	_ = os.Rename(filepath.Join(dir, "takeout.zip"), filepath.Join(dir, "takeout-001.zip"))
+
+	// Zip 2: has the same sidecar path but different content
+	createTestZip(t, dir, map[string]string{
+		"Google Photos/Trip/photo.jpg.json": `{"title":"Zip2 Title","photoTakenTime":{"timestamp":"1650000000"}}`,
+	})
+	_ = os.Rename(filepath.Join(dir, "takeout.zip"), filepath.Join(dir, "takeout-002.zip"))
+
+	result, err := ImportTakeout(context.Background(), dir, outputDir, nil, false)
+	if err != nil {
+		t.Fatalf("import failed: %v", err)
+	}
+	if result.Succeeded != 1 {
+		t.Fatalf("expected 1 file, got %d", result.Succeeded)
+	}
+
+	// The media is in zip 1, and the scanner matches the sidecar from zip 1
+	// (same zip as the media, scanned first). Verify zip 1's metadata is used.
+	destPath := filepath.Join(outputDir, "Trip", "photo.jpg")
+	data, err := os.ReadFile(destPath)
+	if err != nil {
+		t.Fatal("reading photo.jpg:", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "Zip1 Title") {
+		t.Error("should use sidecar from the same zip as the media (Zip1 Title)")
+	}
+	if strings.Contains(content, "Zip2 Title") {
+		t.Error("should NOT use sidecar from a different zip (Zip2 Title)")
+	}
+}
+
 func TestImportTakeout_NoSidecarNoMetadata(t *testing.T) {
 	takeoutDir := t.TempDir()
 	outputDir := t.TempDir()

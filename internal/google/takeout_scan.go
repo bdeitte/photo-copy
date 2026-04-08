@@ -278,7 +278,10 @@ func scanOneZip(zipPath string, allFolders map[string]*folderContents) error {
 
 		lowerBase := strings.ToLower(base)
 		if strings.HasSuffix(lowerBase, ".json") {
-			fc.jsonEntries[base] = &zipEntry{zipPath: zipPath, entryName: name}
+			// Keep the first-seen sidecar when the same path appears in multiple zips.
+			if _, exists := fc.jsonEntries[base]; !exists {
+				fc.jsonEntries[base] = &zipEntry{zipPath: zipPath, entryName: name}
+			}
 			continue
 		}
 
