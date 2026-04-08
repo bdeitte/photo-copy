@@ -163,10 +163,13 @@ type scanIndex struct {
 	media []*mediaEntry
 }
 
-// folderContents groups media and JSON entries found in a single folder within a zip.
+// folderContents groups media and JSON entries found in a single folder.
+// The same folder may span multiple zip parts; jsonEntries stores all
+// occurrences so matching can prefer the sidecar from the same zip as
+// the media file.
 type folderContents struct {
 	mediaEntries []*mediaEntry
-	jsonEntries  map[string]*zipEntry // basename -> zipEntry
+	jsonEntries  map[string][]*zipEntry // basename -> all zipEntries across zips
 }
 
 // scanZips reads directory entries from all provided zip files, classifies them,
@@ -204,16 +207,32 @@ func scanZips(ctx context.Context, zipPaths []string) (*scanIndex, error) {
 			mediaNames[i] = me.basename
 		}
 
-		for jsonBase, ze := range fc.jsonEntries {
+		// Build a map from media basename to all matching media entries
+		// (same basename can appear in multiple zips within the same folder).
+		mediaByName := make(map[string][]*mediaEntry)
+		for _, me := range fc.mediaEntries {
+			mediaByName[me.basename] = append(mediaByName[me.basename], me)
+		}
+
+		for jsonBase, zes := range fc.jsonEntries {
 			matched := matchJSONToMedia(jsonBase, mediaNames)
 			if matched == "" {
 				continue
 			}
-			for _, me := range fc.mediaEntries {
-				if me.basename == matched {
-					me.jsonEntry = ze
-					break
+			// Assign each media entry its best sidecar: prefer same-zip,
+			// fall back to first available cross-zip sidecar.
+			for _, me := range mediaByName[matched] {
+				var best *zipEntry
+				for _, ze := range zes {
+					if ze.zipPath == me.zipPath {
+						best = ze
+						break
+					}
+					if best == nil {
+						best = ze
+					}
 				}
+				me.jsonEntry = best
 			}
 		}
 
@@ -271,17 +290,14 @@ func scanOneZip(zipPath string, allFolders map[string]*folderContents) error {
 
 		if _, ok := allFolders[folder]; !ok {
 			allFolders[folder] = &folderContents{
-				jsonEntries: make(map[string]*zipEntry),
+				jsonEntries: make(map[string][]*zipEntry),
 			}
 		}
 		fc := allFolders[folder]
 
 		lowerBase := strings.ToLower(base)
 		if strings.HasSuffix(lowerBase, ".json") {
-			// Keep the first-seen sidecar when the same path appears in multiple zips.
-			if _, exists := fc.jsonEntries[base]; !exists {
-				fc.jsonEntries[base] = &zipEntry{zipPath: zipPath, entryName: name}
-			}
+			fc.jsonEntries[base] = append(fc.jsonEntries[base], &zipEntry{zipPath: zipPath, entryName: name})
 			continue
 		}
 

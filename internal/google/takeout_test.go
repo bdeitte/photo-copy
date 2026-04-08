@@ -516,6 +516,49 @@ func TestImportTakeout_CrossZipSidecarWithDuplicatePaths(t *testing.T) {
 	}
 }
 
+func TestImportTakeout_CrossZipSidecarMediaInLaterZip(t *testing.T) {
+	// Media in zip 2, both zips have the same sidecar path.
+	// The sidecar from zip 2 (same zip as media) should be used.
+	dir := t.TempDir()
+	outputDir := t.TempDir()
+
+	jpegData := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x02, 0x00, 0x00, 0xFF, 0xD9}
+
+	// Zip 1: only has a sidecar (different content than zip 2)
+	createTestZip(t, dir, map[string]string{
+		"Google Photos/Trip/photo.jpg.json": `{"title":"Zip1 Title","photoTakenTime":{"timestamp":"1640000000"}}`,
+	})
+	_ = os.Rename(filepath.Join(dir, "takeout.zip"), filepath.Join(dir, "takeout-001.zip"))
+
+	// Zip 2: has both the media and a sidecar
+	createTestZip(t, dir, map[string]string{
+		"Google Photos/Trip/photo.jpg":      string(jpegData),
+		"Google Photos/Trip/photo.jpg.json": `{"title":"Zip2 Title","photoTakenTime":{"timestamp":"1650000000"}}`,
+	})
+	_ = os.Rename(filepath.Join(dir, "takeout.zip"), filepath.Join(dir, "takeout-002.zip"))
+
+	result, err := ImportTakeout(context.Background(), dir, outputDir, nil, false)
+	if err != nil {
+		t.Fatalf("import failed: %v", err)
+	}
+	if result.Succeeded != 1 {
+		t.Fatalf("expected 1 file, got %d", result.Succeeded)
+	}
+
+	destPath := filepath.Join(outputDir, "Trip", "photo.jpg")
+	data, err := os.ReadFile(destPath)
+	if err != nil {
+		t.Fatal("reading photo.jpg:", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "Zip2 Title") {
+		t.Error("should use sidecar from the same zip as the media (Zip2 Title)")
+	}
+	if strings.Contains(content, "Zip1 Title") {
+		t.Error("should NOT use sidecar from a different zip (Zip1 Title)")
+	}
+}
+
 func TestImportTakeout_NoSidecarNoMetadata(t *testing.T) {
 	takeoutDir := t.TempDir()
 	outputDir := t.TempDir()
