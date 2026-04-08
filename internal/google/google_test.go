@@ -47,21 +47,36 @@ func TestUploadLog_SaveAndLoad(t *testing.T) {
 	}
 }
 
-func TestCollectMediaFiles(t *testing.T) {
+func TestCollectMediaFiles_IncludesSubdirectories(t *testing.T) {
 	tmpDir := t.TempDir()
-
 	_ = os.WriteFile(filepath.Join(tmpDir, "photo.jpg"), []byte("fake"), 0644)
-	_ = os.WriteFile(filepath.Join(tmpDir, "video.mp4"), []byte("fake"), 0644)
+	_ = os.MkdirAll(filepath.Join(tmpDir, "album"), 0755)
+	_ = os.WriteFile(filepath.Join(tmpDir, "album", "nested.jpg"), []byte("fake"), 0644)
 	_ = os.WriteFile(filepath.Join(tmpDir, "readme.txt"), []byte("fake"), 0644)
-	_ = os.WriteFile(filepath.Join(tmpDir, "metadata.json"), []byte("fake"), 0644)
 
 	files, err := collectMediaFiles(tmpDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
 	if len(files) != 2 {
-		t.Fatalf("expected 2 media files, got %d: %v", len(files), files)
+		t.Fatalf("expected 2 media files (including nested), got %d: %v", len(files), files)
+	}
+}
+
+func TestCollectMediaFiles_ReturnsRelativePaths(t *testing.T) {
+	tmpDir := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(tmpDir, "sub"), 0755)
+	_ = os.WriteFile(filepath.Join(tmpDir, "sub", "pic.jpg"), []byte("fake"), 0644)
+
+	files, err := collectMediaFiles(tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(files))
+	}
+	if files[0] != filepath.Join("sub", "pic.jpg") {
+		t.Errorf("expected relative path %q, got %q", filepath.Join("sub", "pic.jpg"), files[0])
 	}
 }
 
@@ -227,7 +242,7 @@ func TestCollectMediaFiles_EmptyDir(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(files) != 0 {
-		t.Errorf("expected 0 files, got %d", len(files))
+		t.Fatalf("expected 0 files, got %d", len(files))
 	}
 }
 
@@ -321,16 +336,3 @@ func TestRetryableDo_NonInvalidGrantRetries(t *testing.T) {
 	}
 }
 
-func TestCollectMediaFiles_SkipsDirectories(t *testing.T) {
-	tmpDir := t.TempDir()
-	_ = os.MkdirAll(filepath.Join(tmpDir, "subdir"), 0755)
-	_ = os.WriteFile(filepath.Join(tmpDir, "photo.jpg"), []byte("fake"), 0644)
-
-	files, err := collectMediaFiles(tmpDir)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(files) != 1 {
-		t.Errorf("expected 1 file, got %d", len(files))
-	}
-}
