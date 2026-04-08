@@ -31,7 +31,7 @@ func NewRootCmd() *cobra.Command {
 
 	rootCmd.PersistentFlags().BoolVar(&opts.debug, "debug", false, "Enable verbose debug logging to stderr")
 	rootCmd.PersistentFlags().IntVar(&opts.limit, "limit", 0, "Maximum number of files to upload/download (0 = no limit)")
-	rootCmd.PersistentFlags().BoolVar(&opts.noMetadata, "no-metadata", false, "Skip metadata embedding during Flickr downloads (XMP, MP4 creation time, timestamps)")
+	rootCmd.PersistentFlags().BoolVar(&opts.noMetadata, "no-metadata", false, "Skip metadata embedding during downloads (XMP, MP4 creation time, timestamps)")
 	rootCmd.PersistentFlags().StringVar(&opts.dateRangeStr, "date-range", "", "Filter by date range (YYYY-MM-DD:YYYY-MM-DD, either side optional). For S3, filters by file modification time. For all others, filters by embedded metadata dates.")
 
 	// NOTE: Cobra silently overrides a parent's PersistentPreRunE if a child
@@ -50,7 +50,7 @@ func NewRootCmd() *cobra.Command {
 		// No-op warnings — use command annotations instead of name matching
 		errW := cmd.ErrOrStderr()
 		if opts.noMetadata && cmd.Annotations["supportsMetadata"] != "true" {
-			_, _ = fmt.Fprintln(errW, "Warning: --no-metadata has no effect on "+cmd.CommandPath()+"; metadata embedding only occurs during Flickr downloads")
+			_, _ = fmt.Fprintln(errW, "Warning: --no-metadata has no effect on "+cmd.CommandPath()+"; metadata embedding only occurs during downloads")
 		}
 
 		if opts.parsedDateRange != nil && cmd.Annotations["supportsDateRange"] != "true" {
