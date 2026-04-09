@@ -17,6 +17,8 @@ func TestEstimator_BelowThreshold(t *testing.T) {
 
 func TestEstimator_AtThreshold(t *testing.T) {
 	e := NewEstimator()
+	// Pretend some time has elapsed so the cumulative average is non-zero.
+	e.startTime = e.startTime.Add(-10 * time.Second)
 	for i := 0; i < estimateThreshold; i++ {
 		e.Tick()
 	}
@@ -28,6 +30,7 @@ func TestEstimator_AtThreshold(t *testing.T) {
 
 func TestEstimator_ZeroRemaining(t *testing.T) {
 	e := NewEstimator()
+	e.startTime = e.startTime.Add(-10 * time.Second)
 	for i := 0; i < estimateThreshold; i++ {
 		e.Tick()
 	}
@@ -36,52 +39,80 @@ func TestEstimator_ZeroRemaining(t *testing.T) {
 	}
 }
 
-func TestEstimator_WindowSmoothing(t *testing.T) {
+// TestEstimator_CumulativeAverage verifies that with a consistent per-item
+// duration, the estimate is exactly (avg * remaining).
+func TestEstimator_CumulativeAverage(t *testing.T) {
 	e := NewEstimator()
-	// Simulate items with 1-second durations
+	// 20 items averaging 1 second each.
+	e.startTime = e.startTime.Add(-20 * time.Second)
 	for i := 0; i < 20; i++ {
-		e.lastTick = e.lastTick.Add(-time.Second)
 		e.Tick()
 	}
-	// Window average should be ~1 second, so 100 remaining ≈ 100 seconds
-	est1 := e.Estimate(100)
-	if est1 != "[Estimated 1 min. 40 sec. left] " {
-		t.Errorf("expected ~100 sec estimate, got %q", est1)
-	}
-
-	// Now simulate one slow item (60 second retry)
-	e.lastTick = e.lastTick.Add(-60 * time.Second)
-	e.Tick()
-	est2 := e.Estimate(100)
-	// With window of 20 items (19 x 1s + 1 x 60s = 79s), avg ≈ 3.76s, ETA ≈ 376s ≈ 6 min 16 sec
-	// This is much better than the overall average approach which would spike the ETA
-	// The key assertion: the estimate should NOT have jumped to hours
-	if est2 == "" {
-		t.Error("expected non-empty estimate after spike")
-	}
-	// After the spike is pushed out of the window, estimate recovers
-	for i := 0; i < windowSize; i++ {
-		e.lastTick = e.lastTick.Add(-time.Second)
-		e.Tick()
-	}
-	est3 := e.Estimate(100)
-	if est3 != "[Estimated 1 min. 40 sec. left] " {
-		t.Errorf("expected recovered estimate of ~100 sec, got %q", est3)
+	got := e.Estimate(100)
+	if got != "[Estimated 1 min. 40 sec. left] " {
+		t.Errorf("expected ~100 sec estimate, got %q", got)
 	}
 }
 
-func TestEstimator_WindowWraparound(t *testing.T) {
+// TestEstimator_FastBurstDoesNotCollapseEstimate is a regression test for
+// the sliding-window bug where a run of very fast items would drag the
+// estimate down to near-zero even though many files were left. With the
+// cumulative-average implementation, the overall rate stays accurate
+// regardless of short-term bursts.
+func TestEstimator_FastBurstDoesNotCollapseEstimate(t *testing.T) {
 	e := NewEstimator()
-	// Fill more than windowSize items
-	for i := 0; i < windowSize*2; i++ {
-		e.lastTick = e.lastTick.Add(-time.Second)
+	// Simulate 1000 items taking 1 second each (so total elapsed = 1000 s).
+	// With 500 items remaining, the correct estimate is ~500 s (8 min 20 s).
+	e.startTime = e.startTime.Add(-1000 * time.Second)
+	for i := 0; i < 1000; i++ {
 		e.Tick()
 	}
-	if e.windowLen != windowSize {
-		t.Errorf("window len = %d, want %d", e.windowLen, windowSize)
+	// Now simulate a "fast burst": 100 additional ticks without advancing
+	// the clock much. The cumulative average should barely move.
+	for i := 0; i < 100; i++ {
+		e.Tick()
 	}
-	if e.processed != windowSize*2 {
-		t.Errorf("processed = %d, want %d", e.processed, windowSize*2)
+	// Processed = 1100, elapsed ≈ 1000 s, avg ≈ 0.909 s/item.
+	// With 500 remaining, ETA ≈ 454 s = 7 min 34 sec.
+	got := e.Estimate(500)
+	if got == "" {
+		t.Fatal("expected non-empty estimate")
+	}
+	// The key assertion: the estimate must remain in minutes, not collapse to
+	// a few seconds like the sliding-window version did.
+	if got == "[Estimated 1 sec. left] " || got == "[Estimated 0 sec. left] " {
+		t.Errorf("estimate collapsed to near-zero after fast burst: %q", got)
+	}
+}
+
+// TestEstimator_SpikeAmortized verifies that a large one-off spike (e.g. a
+// 60-second HTTP retry backoff) does not dominate the estimate — it gets
+// amortized across all processed items.
+func TestEstimator_SpikeAmortized(t *testing.T) {
+	e := NewEstimator()
+	// 100 items at 1 second each.
+	e.startTime = e.startTime.Add(-100 * time.Second)
+	for i := 0; i < 100; i++ {
+		e.Tick()
+	}
+	baseline := e.Estimate(100)
+	if baseline == "" {
+		t.Fatal("expected baseline estimate")
+	}
+
+	// Simulate a 60-second spike followed by one more tick.
+	e.startTime = e.startTime.Add(-60 * time.Second)
+	e.Tick()
+
+	// Processed = 101, elapsed = 160 s, avg ≈ 1.58 s.
+	// With 100 remaining, ETA ≈ 158 s — a moderate bump over the 100 s
+	// baseline, not a runaway spike.
+	got := e.Estimate(100)
+	if got == "" {
+		t.Fatal("expected non-empty estimate after spike")
+	}
+	if got == baseline {
+		t.Errorf("spike should shift estimate; still %q", got)
 	}
 }
 
