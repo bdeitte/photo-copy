@@ -2,6 +2,7 @@ package google
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/briandeitte/photo-copy/internal/logging"
 )
 
 func createTestZip(t *testing.T, dir string, files map[string]string) string {
@@ -891,5 +894,64 @@ func TestImportTakeout_ZeroTimestampUsesZipModTime(t *testing.T) {
 	// The file's mod time should be set to the zip entry's modification time
 	if !info.ModTime().Equal(customTime) {
 		t.Errorf("ModTime = %v, want %v (zip entry mod time)", info.ModTime(), customTime)
+	}
+}
+
+// TestImportTakeout_NoSidecarLogsNoDate is a regression test: when a media
+// file has no matched JSON sidecar, metadata is skipped and no timestamps are
+// written to the file. The "extracted" log line must therefore NOT include a
+// "(YYYY-MM-DD)" date suffix, since such a date would not correspond to
+// anything actually applied to the file on disk.
+func TestImportTakeout_NoSidecarLogsNoDate(t *testing.T) {
+	takeoutDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	// Build a zip whose media entry has a non-zero modification time but no
+	// JSON sidecar, so applyTakeoutMetadata takes the "skip, no sidecar" path.
+	zipPath := filepath.Join(takeoutDir, "takeout.zip")
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := zip.NewWriter(f)
+	customTime := time.Date(2020, 6, 15, 12, 0, 0, 0, time.UTC)
+	header := &zip.FileHeader{
+		Name:     "Google Photos/Trip/photo.jpg",
+		Method:   zip.Deflate,
+		Modified: customTime,
+	}
+	fw, err := w.CreateHeader(header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw.Write([]byte("jpegdata")); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	log := logging.New(false, &buf)
+
+	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, log, false)
+	if err != nil {
+		t.Fatalf("import failed: %v", err)
+	}
+	if result.Succeeded != 1 {
+		t.Fatalf("expected 1 file, got %d", result.Succeeded)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "extracted Trip/photo.jpg") {
+		t.Fatalf("expected an 'extracted Trip/photo.jpg' log line, got:\n%s", out)
+	}
+	// The customTime would format as "(2020-06-15)" — must not appear because
+	// that date was never written to the extracted file.
+	if strings.Contains(out, "(2020-06-15)") {
+		t.Errorf("extracted log line must not include a date when no sidecar was matched, got:\n%s", out)
 	}
 }

@@ -315,9 +315,6 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 func applyTakeoutMetadata(log *logging.Logger, entry *mediaEntry, destPath string, jsonData []byte) time.Time {
 	if jsonData == nil {
 		log.Debug("no JSON sidecar for %s, skipping metadata", entry.basename)
-		if !entry.zipModTime.IsZero() {
-			return entry.zipModTime
-		}
 		return time.Time{}
 	}
 
