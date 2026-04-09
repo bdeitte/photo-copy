@@ -12,22 +12,22 @@ type fakeClock struct {
 	t time.Time
 }
 
-func (c *fakeClock) now() time.Time       { return c.t }
+func (c *fakeClock) now() time.Time          { return c.t }
 func (c *fakeClock) advance(d time.Duration) { c.t = c.t.Add(d) }
 
 // newTestEstimator returns an Estimator wired to a fakeClock so tests can
-// control elapsed time precisely.
+// control elapsed time precisely. startTime is anchored to the fake clock's
+// initial time, mirroring NewEstimator()'s default behavior.
 func newTestEstimator() (*Estimator, *fakeClock) {
 	c := &fakeClock{t: time.Unix(1700000000, 0)}
-	e := &Estimator{now: c.now}
+	e := &Estimator{now: c.now, startTime: c.t}
 	return e, c
 }
 
 func TestEstimator_BelowThreshold(t *testing.T) {
 	e, c := newTestEstimator()
-	// First Tick starts the clock; it does not count as a measured item.
-	// estimateThreshold total Ticks gives processed = threshold-1, below threshold.
-	for i := 0; i < estimateThreshold; i++ {
+	// estimateThreshold-1 ticks: processed is below threshold.
+	for i := 0; i < estimateThreshold-1; i++ {
 		c.advance(time.Second)
 		e.Tick()
 	}
@@ -38,8 +38,7 @@ func TestEstimator_BelowThreshold(t *testing.T) {
 
 func TestEstimator_AtThreshold(t *testing.T) {
 	e, c := newTestEstimator()
-	// One baseline Tick plus estimateThreshold measured Ticks.
-	e.Tick()
+	// Exactly estimateThreshold ticks: ETA should fire.
 	for i := 0; i < estimateThreshold; i++ {
 		c.advance(time.Second)
 		e.Tick()
@@ -50,9 +49,32 @@ func TestEstimator_AtThreshold(t *testing.T) {
 	}
 }
 
+// TestEstimator_SequentialNormalCase is a regression test for the "first Tick
+// as baseline" bug: with estimateThreshold=10 and 10 completed items, the
+// estimator must emit an ETA. A previous iteration treated the first Tick as
+// a baseline-only call, effectively requiring 11 ticks before the first ETA
+// and silently dropping the first item's duration from the cumulative
+// average. This test pins the intended contract for sequential callers like
+// flickr download and google upload that begin work immediately.
+func TestEstimator_SequentialNormalCase(t *testing.T) {
+	e, c := newTestEstimator()
+	// 10 items at 1 second each. All 10 must count toward processed.
+	for i := 0; i < 10; i++ {
+		c.advance(time.Second)
+		e.Tick()
+	}
+	got := e.Estimate(100)
+	if got == "" {
+		t.Fatal("expected ETA after exactly 10 ticks")
+	}
+	// elapsed = 10s, processed = 10, avg = 1s, ETA(100) = 100s
+	if got != "[Estimated 1 min. 40 sec. left] " {
+		t.Errorf("expected first-tick counted in avg, got %q", got)
+	}
+}
+
 func TestEstimator_ZeroRemaining(t *testing.T) {
 	e, c := newTestEstimator()
-	e.Tick()
 	for i := 0; i < estimateThreshold; i++ {
 		c.advance(time.Second)
 		e.Tick()
@@ -66,7 +88,6 @@ func TestEstimator_ZeroRemaining(t *testing.T) {
 // duration, the estimate is exactly (avg * remaining).
 func TestEstimator_CumulativeAverage(t *testing.T) {
 	e, c := newTestEstimator()
-	e.Tick() // baseline
 	for i := 0; i < 20; i++ {
 		c.advance(time.Second)
 		e.Tick()
@@ -79,21 +100,24 @@ func TestEstimator_CumulativeAverage(t *testing.T) {
 }
 
 // TestEstimator_StartupDelayIgnored is a regression test: a long delay
-// between NewEstimator() and the first Tick (e.g., rclone's compare phase
-// before any copy events) must not inflate the cumulative per-item average.
+// between NewEstimator() and the start of real work (e.g., rclone's compare
+// phase before any copy events) must not inflate the cumulative per-item
+// average. Callers with such a setup phase call Start() when real work
+// begins.
 func TestEstimator_StartupDelayIgnored(t *testing.T) {
 	e, c := newTestEstimator()
-	// Simulate 60 seconds of pre-first-Tick setup.
+	// Simulate 60 seconds of pre-work setup (e.g. rclone scan phase).
 	c.advance(60 * time.Second)
-	e.Tick() // baseline; clock anchors here, not at construction
+	// Caller signals real work is starting — reanchor the clock.
+	e.Start()
 	// 20 items at 1 second each.
 	for i := 0; i < 20; i++ {
 		c.advance(time.Second)
 		e.Tick()
 	}
-	// elapsed (from first Tick) = 20s, processed = 20, avg = 1s.
+	// elapsed (from Start) = 20s, processed = 20, avg = 1s.
 	// 100 remaining → ETA = 100 s = "1 min. 40 sec." (NOT ~11 min, which
-	// is what the old elapsed-from-construction impl produced).
+	// is what an impl that measured from NewEstimator() would produce).
 	got := e.Estimate(100)
 	if got != "[Estimated 1 min. 40 sec. left] " {
 		t.Errorf("startup delay leaked into estimate: %q", got)
@@ -107,7 +131,6 @@ func TestEstimator_StartupDelayIgnored(t *testing.T) {
 // regardless of short-term bursts.
 func TestEstimator_FastBurstDoesNotCollapseEstimate(t *testing.T) {
 	e, c := newTestEstimator()
-	e.Tick() // baseline
 	// 1000 items at 1 second each.
 	for i := 0; i < 1000; i++ {
 		c.advance(time.Second)
@@ -135,7 +158,6 @@ func TestEstimator_FastBurstDoesNotCollapseEstimate(t *testing.T) {
 // amortized across all processed items.
 func TestEstimator_SpikeAmortized(t *testing.T) {
 	e, c := newTestEstimator()
-	e.Tick() // baseline
 	// 100 items at 1 second each.
 	for i := 0; i < 100; i++ {
 		c.advance(time.Second)

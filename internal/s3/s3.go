@@ -254,6 +254,12 @@ func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, a
 		}
 
 		copied++
+		if copied == 1 {
+			// Anchor the estimator clock to the first real copy event so the
+			// rclone scan/compare phase preceding any copy isn't folded into
+			// the per-item average.
+			estimator.Start()
+		}
 		estimator.Tick()
 		if result != nil {
 			result.RecordSuccess(0)

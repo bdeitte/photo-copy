@@ -15,31 +15,34 @@ const estimateThreshold = 10
 // fast. Retry spikes (e.g., HTTP 429 backoffs) are gracefully amortized over
 // the full run rather than dominating a small window.
 //
-// The clock starts on the first Tick, not at construction time, so any
-// pre-first-Tick setup (for example, rclone's compare phase before the first
-// copy event) is excluded from the per-item average.
+// By default the clock starts at NewEstimator() time, which is correct for
+// callers that begin measurable work immediately. Callers with a non-trivial
+// setup/compare phase before the first measurable unit of work (for example,
+// rclone's scan phase before the first copy event) should call Start() when
+// real work begins, so that pre-work delay is not folded into the per-item
+// rate.
 type Estimator struct {
 	now       func() time.Time // injectable for tests; defaults to time.Now
 	startTime time.Time
-	started   bool
 	processed int
 }
 
 // NewEstimator creates a new time estimator. Call Tick after each item completes.
 func NewEstimator() *Estimator {
-	return &Estimator{now: time.Now}
+	now := time.Now
+	return &Estimator{now: now, startTime: now()}
 }
 
-// Tick records that one work item (download/upload) has completed. The first
-// Tick establishes the clock baseline rather than counting as a measured item,
-// so that any pre-first-Tick setup/compare delay is not folded into the
-// per-item rate.
+// Start (re)anchors the elapsed-time clock to now. Use this from callers that
+// have a setup/compare phase between NewEstimator() and the first real unit of
+// work, so that pre-work delay does not inflate the cumulative per-item
+// average. Callers without such a setup phase can ignore this method.
+func (e *Estimator) Start() {
+	e.startTime = e.now()
+}
+
+// Tick records that one work item (download/upload) has completed.
 func (e *Estimator) Tick() {
-	if !e.started {
-		e.startTime = e.now()
-		e.started = true
-		return
-	}
 	e.processed++
 }
 
