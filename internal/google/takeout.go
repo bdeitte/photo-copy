@@ -2,6 +2,7 @@ package google
 
 import (
 	"archive/zip"
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -17,6 +18,8 @@ import (
 	"github.com/briandeitte/photo-copy/internal/xmp"
 	"github.com/schollz/progressbar/v3"
 )
+
+const importLogFile = ".photo-copy-import.log"
 
 // importOption configures optional ImportTakeout behavior.
 type importOption func(*importConfig)
@@ -55,6 +58,12 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return result, fmt.Errorf("creating output dir: %w", err)
+	}
+
+	logPath := filepath.Join(outputDir, importLogFile)
+	imported, err := loadImportLog(logPath)
+	if err != nil {
+		return result, fmt.Errorf("reading import log: %w", err)
 	}
 
 	entries, err := os.ReadDir(takeoutDir)
@@ -157,6 +166,21 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 			}
 
 			// Determine destination path: album -> subdirectory, year -> flat.
+			var relPath string
+			if me.isYearFolder || me.folderName == "" {
+				relPath = me.basename
+			} else {
+				relPath = filepath.Join(me.folderName, me.basename)
+			}
+
+			// Skip files already recorded in the import log.
+			if imported[relPath] {
+				log.Debug("skipping %s (already imported)", relPath)
+				result.RecordSkip(1)
+				_ = bar.Add(1)
+				continue
+			}
+
 			var destPath string
 			if me.isYearFolder || me.folderName == "" {
 				destPath = filepath.Join(outputDir, me.basename)
@@ -171,15 +195,8 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 				destPath = filepath.Join(destDir, me.basename)
 			}
 
-			// Skip files that already exist with the same size.
-			if info, err := os.Stat(destPath); err == nil {
-				if info.Size() == int64(me.size) {
-					log.Debug("skipping %s (already exists with same size)", me.basename)
-					result.RecordSkip(1)
-					_ = bar.Add(1)
-					continue
-				}
-				// Different size — treat as a genuine collision, rename.
+			// Handle filename collisions.
+			if _, err := os.Stat(destPath); err == nil {
 				base := strings.TrimSuffix(me.basename, filepath.Ext(me.basename))
 				ext := filepath.Ext(me.basename)
 				dir := filepath.Dir(destPath)
@@ -236,6 +253,10 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 					jd = jsonData[me.jsonEntry.entryName]
 				}
 				applyTakeoutMetadata(log, me, destPath, jd)
+			}
+
+			if err := appendImportLog(logPath, relPath); err != nil {
+				log.Error("writing import log for %s: %v", relPath, err)
 			}
 
 			_ = bar.Add(1)
@@ -415,6 +436,46 @@ func extractFile(ctx context.Context, f *zip.File, destPath string) (err error) 
 		return fmt.Errorf("zip entry exceeds %d byte limit: %s", maxFileSize, f.Name)
 	}
 	return nil
+}
+
+// loadImportLog reads the import log and returns a set of relative paths
+// that have already been imported.
+func loadImportLog(logPath string) (map[string]bool, error) {
+	result := make(map[string]bool)
+
+	f, err := os.Open(logPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return result, nil
+		}
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" {
+			result[line] = true
+		}
+	}
+	return result, scanner.Err()
+}
+
+// appendImportLog appends a relative path to the import log.
+func appendImportLog(path, relPath string) (err error) {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
+
+	_, err = fmt.Fprintln(f, relPath)
+	return err
 }
 
 // copyWithContext copies from src to dst, checking for context cancellation

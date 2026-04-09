@@ -167,23 +167,19 @@ func TestImportTakeout_MultipleZips(t *testing.T) {
 	}
 }
 
-func TestImportTakeout_SkipsExistingSameSize(t *testing.T) {
+func TestImportTakeout_SkipsAlreadyImported(t *testing.T) {
 	takeoutDir := t.TempDir()
 	outputDir := t.TempDir()
 
-	content := "jpegdata"
-
-	// Pre-create a file with the same content/size as the zip entry.
-	if err := os.MkdirAll(filepath.Join(outputDir, "Album"), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(outputDir, "Album", "photo.jpg"), []byte(content), 0644); err != nil {
-		t.Fatal(err)
-	}
-
 	createTestZip(t, takeoutDir, map[string]string{
-		"Google Photos/Album/photo.jpg": content,
+		"Google Photos/Album/photo.jpg": "jpegdata",
 	})
+
+	// Pre-populate the import log as if the file was already imported.
+	logPath := filepath.Join(outputDir, ".photo-copy-import.log")
+	if err := os.WriteFile(logPath, []byte("Album/photo.jpg\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil, false)
 	if err != nil {
@@ -196,22 +192,17 @@ func TestImportTakeout_SkipsExistingSameSize(t *testing.T) {
 	if result.Skipped != 1 {
 		t.Errorf("expected 1 skipped, got %d", result.Skipped)
 	}
-
-	// No renamed duplicate should exist.
-	if _, err := os.Stat(filepath.Join(outputDir, "Album", "photo_1.jpg")); err == nil {
-		t.Error("photo_1.jpg should not exist — file should have been skipped, not renamed")
-	}
 }
 
 func TestImportTakeout_DuplicateFilenameRenames(t *testing.T) {
 	takeoutDir := t.TempDir()
 	outputDir := t.TempDir()
 
-	// Pre-create a file with a DIFFERENT size than the zip entry to trigger rename.
+	// Pre-create a file that will collide with the zip's Album/photo.jpg
 	if err := os.MkdirAll(filepath.Join(outputDir, "Album"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(outputDir, "Album", "photo.jpg"), []byte("existing-longer-content"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(outputDir, "Album", "photo.jpg"), []byte("existing"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -233,7 +224,7 @@ func TestImportTakeout_DuplicateFilenameRenames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(data) != "existing-longer-content" {
+	if string(data) != "existing" {
 		t.Errorf("original file was overwritten, got %q", string(data))
 	}
 
@@ -256,8 +247,8 @@ func TestImportTakeout_RerunSkipsAllFiles(t *testing.T) {
 		"Google Photos/Photos from 2022/other.jpg": "otherdata",
 	})
 
-	// First run: extract everything.
-	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil, true)
+	// First run: extract everything (with metadata enabled — the default path).
+	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil, false)
 	if err != nil {
 		t.Fatalf("first import failed: %v", err)
 	}
@@ -265,8 +256,14 @@ func TestImportTakeout_RerunSkipsAllFiles(t *testing.T) {
 		t.Fatalf("first run: expected 2 succeeded, got %d", result.Succeeded)
 	}
 
-	// Second run: everything should be skipped.
-	result, err = ImportTakeout(context.Background(), takeoutDir, outputDir, nil, true)
+	// Import log should have been created.
+	logPath := filepath.Join(outputDir, ".photo-copy-import.log")
+	if _, err := os.Stat(logPath); err != nil {
+		t.Fatalf("import log not created: %v", err)
+	}
+
+	// Second run: everything should be skipped via import log.
+	result, err = ImportTakeout(context.Background(), takeoutDir, outputDir, nil, false)
 	if err != nil {
 		t.Fatalf("second import failed: %v", err)
 	}
