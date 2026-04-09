@@ -49,11 +49,15 @@ func matchJSONToMedia(jsonName string, mediaNames []string) string {
 		return ""
 	}
 
-	// Normalize the new ".supplemental-metadata.json" format to the old
-	// ".json" format so all downstream matching logic works with both.
+	// Normalize supplemental-metadata sidecars to the old ".json" format.
+	// Google Takeout uses ".supplemental-metadata.json" but truncates long
+	// filenames, producing variants like ".supplemental-metada.json",
+	// ".supplemental-met.json", or even ".supplemental-.json". Strip
+	// the ".supplemental-*" portion between the media extension and ".json".
 	normalizedJSON := jsonName
-	if strings.HasSuffix(normalizedJSON, ".supplemental-metadata.json") {
-		normalizedJSON = strings.TrimSuffix(normalizedJSON, ".supplemental-metadata.json") + ".json"
+	base := strings.TrimSuffix(normalizedJSON, ".json")
+	if i := strings.LastIndex(base, ".supplemental-"); i >= 0 {
+		normalizedJSON = base[:i] + ".json"
 	}
 
 	// Try direct match and its edited variants

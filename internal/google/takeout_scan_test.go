@@ -38,13 +38,29 @@ func TestMatchJSONToMedia_SupplementalMetadataEdited(t *testing.T) {
 	}
 }
 
-func TestMatchJSONToMedia_SupplementalMetadataSubstring(t *testing.T) {
-	// Media filename contains ".supplemental-metadata.json" before its real extension.
-	// The normalization must only strip the suffix, not an interior occurrence.
-	media := []string{"clip.supplemental-metadata.json.mp4"}
-	got := matchJSONToMedia("clip.supplemental-metadata.json.mp4.json", media)
-	if got != "clip.supplemental-metadata.json.mp4" {
-		t.Errorf("matchJSONToMedia() = %q, want %q", got, "clip.supplemental-metadata.json.mp4")
+func TestMatchJSONToMedia_SupplementalMetadataTruncated(t *testing.T) {
+	// Google truncates long filenames, cutting into the ".supplemental-metadata"
+	// portion. All these variants should match.
+	media := []string{"PXL_20211213_204601759.jpg"}
+	tests := []struct {
+		name     string
+		jsonName string
+	}{
+		{"full", "PXL_20211213_204601759.jpg.supplemental-metadata.json"},
+		{"metada", "PXL_20211213_204601759.jpg.supplemental-metada.json"},
+		{"metadat", "PXL_20211213_204601759.jpg.supplemental-metadat.json"},
+		{"met", "PXL_20211213_204601759.jpg.supplemental-met.json"},
+		{"meta", "PXL_20211213_204601759.jpg.supplemental-meta.json"},
+		{"m", "PXL_20211213_204601759.jpg.supplemental-m.json"},
+		{"bare", "PXL_20211213_204601759.jpg.supplemental-.json"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := matchJSONToMedia(tt.jsonName, media)
+			if got != media[0] {
+				t.Errorf("matchJSONToMedia(%q) = %q, want %q", tt.jsonName, got, media[0])
+			}
+		})
 	}
 }
 
