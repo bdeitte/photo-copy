@@ -14,18 +14,32 @@ const estimateThreshold = 10
 // collapse the estimate to near-zero just because the most recent items were
 // fast. Retry spikes (e.g., HTTP 429 backoffs) are gracefully amortized over
 // the full run rather than dominating a small window.
+//
+// The clock starts on the first Tick, not at construction time, so any
+// pre-first-Tick setup (for example, rclone's compare phase before the first
+// copy event) is excluded from the per-item average.
 type Estimator struct {
+	now       func() time.Time // injectable for tests; defaults to time.Now
 	startTime time.Time
+	started   bool
 	processed int
 }
 
 // NewEstimator creates a new time estimator. Call Tick after each item completes.
 func NewEstimator() *Estimator {
-	return &Estimator{startTime: time.Now()}
+	return &Estimator{now: time.Now}
 }
 
-// Tick records that one work item (download/upload) has completed.
+// Tick records that one work item (download/upload) has completed. The first
+// Tick establishes the clock baseline rather than counting as a measured item,
+// so that any pre-first-Tick setup/compare delay is not folded into the
+// per-item rate.
 func (e *Estimator) Tick() {
+	if !e.started {
+		e.startTime = e.now()
+		e.started = true
+		return
+	}
 	e.processed++
 }
 
@@ -40,7 +54,7 @@ func (e *Estimator) Estimate(remaining int) string {
 		return ""
 	}
 
-	elapsed := time.Since(e.startTime)
+	elapsed := e.now().Sub(e.startTime)
 	avg := elapsed / time.Duration(e.processed)
 	eta := avg * time.Duration(remaining)
 	return fmt.Sprintf("[Estimated %s left] ", formatEstimate(eta))

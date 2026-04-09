@@ -1,13 +1,34 @@
 package transfer
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
 
+// fakeClock is a test clock that advances only when explicitly told to,
+// so estimator tests are deterministic and independent of wall-clock time.
+type fakeClock struct {
+	t time.Time
+}
+
+func (c *fakeClock) now() time.Time       { return c.t }
+func (c *fakeClock) advance(d time.Duration) { c.t = c.t.Add(d) }
+
+// newTestEstimator returns an Estimator wired to a fakeClock so tests can
+// control elapsed time precisely.
+func newTestEstimator() (*Estimator, *fakeClock) {
+	c := &fakeClock{t: time.Unix(1700000000, 0)}
+	e := &Estimator{now: c.now}
+	return e, c
+}
+
 func TestEstimator_BelowThreshold(t *testing.T) {
-	e := NewEstimator()
-	for i := 0; i < estimateThreshold-1; i++ {
+	e, c := newTestEstimator()
+	// First Tick starts the clock; it does not count as a measured item.
+	// estimateThreshold total Ticks gives processed = threshold-1, below threshold.
+	for i := 0; i < estimateThreshold; i++ {
+		c.advance(time.Second)
 		e.Tick()
 	}
 	if got := e.Estimate(100); got != "" {
@@ -16,10 +37,11 @@ func TestEstimator_BelowThreshold(t *testing.T) {
 }
 
 func TestEstimator_AtThreshold(t *testing.T) {
-	e := NewEstimator()
-	// Pretend some time has elapsed so the cumulative average is non-zero.
-	e.startTime = e.startTime.Add(-10 * time.Second)
+	e, c := newTestEstimator()
+	// One baseline Tick plus estimateThreshold measured Ticks.
+	e.Tick()
 	for i := 0; i < estimateThreshold; i++ {
+		c.advance(time.Second)
 		e.Tick()
 	}
 	got := e.Estimate(100)
@@ -29,9 +51,10 @@ func TestEstimator_AtThreshold(t *testing.T) {
 }
 
 func TestEstimator_ZeroRemaining(t *testing.T) {
-	e := NewEstimator()
-	e.startTime = e.startTime.Add(-10 * time.Second)
+	e, c := newTestEstimator()
+	e.Tick()
 	for i := 0; i < estimateThreshold; i++ {
+		c.advance(time.Second)
 		e.Tick()
 	}
 	if got := e.Estimate(0); got != "" {
@@ -42,15 +65,38 @@ func TestEstimator_ZeroRemaining(t *testing.T) {
 // TestEstimator_CumulativeAverage verifies that with a consistent per-item
 // duration, the estimate is exactly (avg * remaining).
 func TestEstimator_CumulativeAverage(t *testing.T) {
-	e := NewEstimator()
-	// 20 items averaging 1 second each.
-	e.startTime = e.startTime.Add(-20 * time.Second)
+	e, c := newTestEstimator()
+	e.Tick() // baseline
 	for i := 0; i < 20; i++ {
+		c.advance(time.Second)
 		e.Tick()
 	}
+	// elapsed = 20s, processed = 20, avg = 1s. 100 remaining → 1 min 40 sec.
 	got := e.Estimate(100)
 	if got != "[Estimated 1 min. 40 sec. left] " {
 		t.Errorf("expected ~100 sec estimate, got %q", got)
+	}
+}
+
+// TestEstimator_StartupDelayIgnored is a regression test: a long delay
+// between NewEstimator() and the first Tick (e.g., rclone's compare phase
+// before any copy events) must not inflate the cumulative per-item average.
+func TestEstimator_StartupDelayIgnored(t *testing.T) {
+	e, c := newTestEstimator()
+	// Simulate 60 seconds of pre-first-Tick setup.
+	c.advance(60 * time.Second)
+	e.Tick() // baseline; clock anchors here, not at construction
+	// 20 items at 1 second each.
+	for i := 0; i < 20; i++ {
+		c.advance(time.Second)
+		e.Tick()
+	}
+	// elapsed (from first Tick) = 20s, processed = 20, avg = 1s.
+	// 100 remaining → ETA = 100 s = "1 min. 40 sec." (NOT ~11 min, which
+	// is what the old elapsed-from-construction impl produced).
+	got := e.Estimate(100)
+	if got != "[Estimated 1 min. 40 sec. left] " {
+		t.Errorf("startup delay leaked into estimate: %q", got)
 	}
 }
 
@@ -60,27 +106,26 @@ func TestEstimator_CumulativeAverage(t *testing.T) {
 // cumulative-average implementation, the overall rate stays accurate
 // regardless of short-term bursts.
 func TestEstimator_FastBurstDoesNotCollapseEstimate(t *testing.T) {
-	e := NewEstimator()
-	// Simulate 1000 items taking 1 second each (so total elapsed = 1000 s).
-	// With 500 items remaining, the correct estimate is ~500 s (8 min 20 s).
-	e.startTime = e.startTime.Add(-1000 * time.Second)
+	e, c := newTestEstimator()
+	e.Tick() // baseline
+	// 1000 items at 1 second each.
 	for i := 0; i < 1000; i++ {
+		c.advance(time.Second)
 		e.Tick()
 	}
-	// Now simulate a "fast burst": 100 additional ticks without advancing
-	// the clock much. The cumulative average should barely move.
+	// Fast burst: 100 more ticks without advancing the clock at all.
 	for i := 0; i < 100; i++ {
 		e.Tick()
 	}
-	// Processed = 1100, elapsed ≈ 1000 s, avg ≈ 0.909 s/item.
-	// With 500 remaining, ETA ≈ 454 s = 7 min 34 sec.
+	// processed = 1100, elapsed = 1000 s, avg ≈ 909 ms.
+	// 500 remaining → ETA ≈ 454 s ≈ 7 min 34 sec.
 	got := e.Estimate(500)
 	if got == "" {
 		t.Fatal("expected non-empty estimate")
 	}
-	// The key assertion: the estimate must remain in minutes, not collapse to
-	// a few seconds like the sliding-window version did.
-	if got == "[Estimated 1 sec. left] " || got == "[Estimated 0 sec. left] " {
+	// Key assertion: must not collapse to "0 sec" or "1 sec" like the
+	// sliding-window version did when the window was dominated by the burst.
+	if strings.Contains(got, " 0 sec.") || strings.Contains(got, " 1 sec.") {
 		t.Errorf("estimate collapsed to near-zero after fast burst: %q", got)
 	}
 }
@@ -89,30 +134,36 @@ func TestEstimator_FastBurstDoesNotCollapseEstimate(t *testing.T) {
 // 60-second HTTP retry backoff) does not dominate the estimate — it gets
 // amortized across all processed items.
 func TestEstimator_SpikeAmortized(t *testing.T) {
-	e := NewEstimator()
+	e, c := newTestEstimator()
+	e.Tick() // baseline
 	// 100 items at 1 second each.
-	e.startTime = e.startTime.Add(-100 * time.Second)
 	for i := 0; i < 100; i++ {
+		c.advance(time.Second)
 		e.Tick()
 	}
 	baseline := e.Estimate(100)
 	if baseline == "" {
 		t.Fatal("expected baseline estimate")
 	}
+	// baseline: elapsed=100s, processed=100, avg=1s, ETA(100)=100s = "1 min. 40 sec."
+	if baseline != "[Estimated 1 min. 40 sec. left] " {
+		t.Errorf("unexpected baseline: %q", baseline)
+	}
 
-	// Simulate a 60-second spike followed by one more tick.
-	e.startTime = e.startTime.Add(-60 * time.Second)
+	// 60-second spike (e.g., HTTP retry backoff) followed by one more tick.
+	c.advance(60 * time.Second)
 	e.Tick()
-
-	// Processed = 101, elapsed = 160 s, avg ≈ 1.58 s.
-	// With 100 remaining, ETA ≈ 158 s — a moderate bump over the 100 s
-	// baseline, not a runaway spike.
 	got := e.Estimate(100)
+	// processed=101, elapsed=160s, avg≈1.584s, ETA(100)≈158s = "2 min. 38 sec."
 	if got == "" {
 		t.Fatal("expected non-empty estimate after spike")
 	}
 	if got == baseline {
 		t.Errorf("spike should shift estimate; still %q", got)
+	}
+	// Sanity-check the expected post-spike value (deterministic under fake clock).
+	if got != "[Estimated 2 min. 38 sec. left] " {
+		t.Errorf("unexpected post-spike estimate: %q", got)
 	}
 }
 
