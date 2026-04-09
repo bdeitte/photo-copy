@@ -52,8 +52,8 @@ func matchJSONToMedia(jsonName string, mediaNames []string) string {
 	// Normalize the new ".supplemental-metadata.json" format to the old
 	// ".json" format so all downstream matching logic works with both.
 	normalizedJSON := jsonName
-	if i := strings.Index(normalizedJSON, ".supplemental-metadata.json"); i >= 0 {
-		normalizedJSON = normalizedJSON[:i] + ".json"
+	if strings.HasSuffix(normalizedJSON, ".supplemental-metadata.json") {
+		normalizedJSON = strings.TrimSuffix(normalizedJSON, ".supplemental-metadata.json") + ".json"
 	}
 
 	// Try direct match and its edited variants

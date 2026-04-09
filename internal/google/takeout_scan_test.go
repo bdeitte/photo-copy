@@ -38,6 +38,16 @@ func TestMatchJSONToMedia_SupplementalMetadataEdited(t *testing.T) {
 	}
 }
 
+func TestMatchJSONToMedia_SupplementalMetadataSubstring(t *testing.T) {
+	// Media filename contains ".supplemental-metadata.json" before its real extension.
+	// The normalization must only strip the suffix, not an interior occurrence.
+	media := []string{"clip.supplemental-metadata.json.mp4"}
+	got := matchJSONToMedia("clip.supplemental-metadata.json.mp4.json", media)
+	if got != "clip.supplemental-metadata.json.mp4" {
+		t.Errorf("matchJSONToMedia() = %q, want %q", got, "clip.supplemental-metadata.json.mp4")
+	}
+}
+
 func TestMatchJSONToMedia_SupplementalMetadataBracketSwap(t *testing.T) {
 	media := []string{"image(11).jpg"}
 	got := matchJSONToMedia("image.jpg(11).supplemental-metadata.json", media)
