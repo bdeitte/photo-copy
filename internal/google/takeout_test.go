@@ -238,22 +238,90 @@ func TestImportTakeout_DuplicateFilenameRenames(t *testing.T) {
 	}
 }
 
-func TestImportTakeout_RerunSkipsAllFiles(t *testing.T) {
+func TestImportTakeout_CollisionLogsActualPath(t *testing.T) {
+	// When a collision renames photo.jpg to photo_1.jpg, the import log must
+	// record the renamed path so reruns skip correctly.
 	takeoutDir := t.TempDir()
 	outputDir := t.TempDir()
 
+	// Pre-create a file to force a collision.
+	if err := os.MkdirAll(filepath.Join(outputDir, "Album"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outputDir, "Album", "photo.jpg"), []byte("existing"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	createTestZip(t, takeoutDir, map[string]string{
-		"Google Photos/Trip/photo.jpg":             "jpegdata",
-		"Google Photos/Photos from 2022/other.jpg": "otherdata",
+		"Google Photos/Album/photo.jpg": "new data",
 	})
 
-	// First run: extract everything (with metadata enabled — the default path).
+	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil, true)
+	if err != nil {
+		t.Fatalf("import failed: %v", err)
+	}
+	if result.Succeeded != 1 {
+		t.Fatalf("expected 1 succeeded, got %d", result.Succeeded)
+	}
+
+	// Import log should contain the renamed path, not the original.
+	logData, err := os.ReadFile(filepath.Join(outputDir, ".photo-copy-import.log"))
+	if err != nil {
+		t.Fatal("import log not found")
+	}
+	logContent := string(logData)
+	if !strings.Contains(logContent, "Album/photo_1.jpg") {
+		t.Errorf("import log should contain renamed path 'Album/photo_1.jpg', got: %q", logContent)
+	}
+	if strings.Contains(logContent, "Album/photo.jpg\n") {
+		t.Error("import log should NOT contain original path 'Album/photo.jpg' for a collision-renamed file")
+	}
+
+	// Second run: the source entry (Album/photo.jpg) is not in the log (it was
+	// renamed), so it will be re-imported and collision-renamed to photo_2.jpg.
+	// But photo_1.jpg is in the log and would be skipped if encountered again.
+	_, err = ImportTakeout(context.Background(), takeoutDir, outputDir, nil, true)
+	if err != nil {
+		t.Fatalf("second import failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "Album", "photo_2.jpg")); err != nil {
+		t.Error("photo_2.jpg should exist from second run collision rename")
+	}
+}
+
+func TestImportTakeout_RerunSkipsAllFiles(t *testing.T) {
+	// Uses a valid JPEG with a matching sidecar so metadata embedding actually
+	// changes the file size, exercising the path that motivated the log-based skip.
+	takeoutDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	// Minimal valid JPEG that jpegmeta.SetMetadata can write XMP into.
+	jpegData := string([]byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x02, 0x00, 0x00, 0xFF, 0xD9})
+
+	createTestZip(t, takeoutDir, map[string]string{
+		"Google Photos/Trip/photo.jpg":                             jpegData,
+		"Google Photos/Trip/photo.jpg.supplemental-metadata.json":  `{"title":"Beach","description":"Nice day","photoTakenTime":{"timestamp":"1640000000"}}`,
+		"Google Photos/Photos from 2022/other.jpg":                 jpegData,
+		"Google Photos/Photos from 2022/other.jpg.supplemental-metadata.json": `{"title":"Park","photoTakenTime":{"timestamp":"1650000000"}}`,
+	})
+
+	// First run: extract everything with metadata enabled (the default path).
 	result, err := ImportTakeout(context.Background(), takeoutDir, outputDir, nil, false)
 	if err != nil {
 		t.Fatalf("first import failed: %v", err)
 	}
 	if result.Succeeded != 2 {
 		t.Fatalf("first run: expected 2 succeeded, got %d", result.Succeeded)
+	}
+
+	// Verify metadata was actually embedded (file size changed from zip entry).
+	tripPhoto := filepath.Join(outputDir, "Trip", "photo.jpg")
+	info, err := os.Stat(tripPhoto)
+	if err != nil {
+		t.Fatalf("photo.jpg not found: %v", err)
+	}
+	if info.Size() == int64(len(jpegData)) {
+		t.Fatal("metadata embedding did not change file size — test is not exercising the right path")
 	}
 
 	// Import log should have been created.
