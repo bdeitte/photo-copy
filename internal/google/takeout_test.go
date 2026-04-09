@@ -238,9 +238,9 @@ func TestImportTakeout_DuplicateFilenameRenames(t *testing.T) {
 	}
 }
 
-func TestImportTakeout_CollisionLogsActualPath(t *testing.T) {
-	// When a collision renames photo.jpg to photo_1.jpg, the import log must
-	// record the renamed path so reruns skip correctly.
+func TestImportTakeout_CollisionRerunSkips(t *testing.T) {
+	// When a collision renames photo.jpg to photo_1.jpg, the import log records
+	// the source key (Album/photo.jpg) so reruns skip instead of creating photo_2.jpg.
 	takeoutDir := t.TempDir()
 	outputDir := t.TempDir()
 
@@ -264,28 +264,28 @@ func TestImportTakeout_CollisionLogsActualPath(t *testing.T) {
 		t.Fatalf("expected 1 succeeded, got %d", result.Succeeded)
 	}
 
-	// Import log should contain the renamed path, not the original.
+	// Import log should contain the source key so reruns recognize it.
 	logData, err := os.ReadFile(filepath.Join(outputDir, ".photo-copy-import.log"))
 	if err != nil {
 		t.Fatal("import log not found")
 	}
-	logContent := string(logData)
-	if !strings.Contains(logContent, "Album/photo_1.jpg") {
-		t.Errorf("import log should contain renamed path 'Album/photo_1.jpg', got: %q", logContent)
-	}
-	if strings.Contains(logContent, "Album/photo.jpg\n") {
-		t.Error("import log should NOT contain original path 'Album/photo.jpg' for a collision-renamed file")
+	if !strings.Contains(string(logData), "Album/photo.jpg") {
+		t.Errorf("import log should contain source key 'Album/photo.jpg', got: %q", string(logData))
 	}
 
-	// Second run: the source entry (Album/photo.jpg) is not in the log (it was
-	// renamed), so it will be re-imported and collision-renamed to photo_2.jpg.
-	// But photo_1.jpg is in the log and would be skipped if encountered again.
-	_, err = ImportTakeout(context.Background(), takeoutDir, outputDir, nil, true)
+	// Second run: should skip, not create photo_2.jpg.
+	result, err = ImportTakeout(context.Background(), takeoutDir, outputDir, nil, true)
 	if err != nil {
 		t.Fatalf("second import failed: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(outputDir, "Album", "photo_2.jpg")); err != nil {
-		t.Error("photo_2.jpg should exist from second run collision rename")
+	if result.Skipped != 1 {
+		t.Errorf("second run: expected 1 skipped, got %d", result.Skipped)
+	}
+	if result.Succeeded != 0 {
+		t.Errorf("second run: expected 0 succeeded, got %d", result.Succeeded)
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "Album", "photo_2.jpg")); err == nil {
+		t.Error("photo_2.jpg should NOT exist — second run should skip, not re-import")
 	}
 }
 

@@ -216,14 +216,7 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 				if collisionErr {
 					continue
 				}
-				renamedBase := filepath.Base(destPath)
-				log.Debug("duplicate filename %s, saving as %s", me.basename, renamedBase)
-				// Update relPath so the import log records the actual written file.
-				if me.isYearFolder || me.folderName == "" {
-					relPath = renamedBase
-				} else {
-					relPath = filepath.Join(me.folderName, renamedBase)
-				}
+				log.Debug("duplicate filename %s, saving as %s", me.basename, filepath.Base(destPath))
 			} else if !errors.Is(err, os.ErrNotExist) {
 				log.Error("checking destination %s: %v", destPath, err)
 				result.RecordError(me.basename, err.Error())
