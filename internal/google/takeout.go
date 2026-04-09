@@ -10,13 +10,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/briandeitte/photo-copy/internal/jpegmeta"
 	"github.com/briandeitte/photo-copy/internal/logging"
 	"github.com/briandeitte/photo-copy/internal/mp4meta"
 	"github.com/briandeitte/photo-copy/internal/transfer"
 	"github.com/briandeitte/photo-copy/internal/xmp"
-	"github.com/schollz/progressbar/v3"
 )
 
 const importLogFile = ".photo-copy-import.log"
@@ -100,10 +100,14 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 		toExtract = append(toExtract, me)
 	}
 
+	result.Expected = len(toExtract)
+
 	if len(toExtract) == 0 {
 		result.Finish()
 		return result, nil
 	}
+
+	log.Info("found %d media files in Google Takeout", result.Expected)
 
 	// Group media entries by zip file to open each zip only once.
 	type zipGroup struct {
@@ -122,7 +126,7 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 		groups[idx].entries = append(groups[idx].entries, me)
 	}
 
-	bar := progressbar.Default(int64(len(toExtract)), "extracting")
+	estimator := transfer.NewEstimator()
 
 	// Phase 2: extract entries, one zip at a time.
 	for _, g := range groups {
@@ -151,6 +155,7 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 			jsonData = readGroupSidecars(log, g.entries, g.zipPath, zipLookup)
 		}
 
+		zipSkipped := 0
 		for _, me := range g.entries {
 			if err := ctx.Err(); err != nil {
 				_ = r.Close()
@@ -159,25 +164,30 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 
 			f, ok := zipLookup[me.entryName]
 			if !ok {
-				log.Error("entry %s not found in zip %s", me.entryName, g.zipPath)
 				result.RecordError(me.basename, "entry not found in zip")
-				_ = bar.Add(1)
+				estimator.Tick()
+				processed := result.Succeeded + result.Skipped + result.Failed
+				log.Error("[%d/%d] %sentry %s not found in zip %s", processed, result.Expected, estimator.Estimate(result.Expected-processed), me.entryName, g.zipPath)
 				continue
 			}
 
 			// Determine destination path: album -> subdirectory, year -> flat.
+			// relPath is the source-key form used for the import log so that
+			// collision-renamed files still skip on rerun. displayPath reflects
+			// the actual on-disk name and is used for user-facing logs.
 			var relPath string
 			if me.isYearFolder || me.folderName == "" {
 				relPath = me.basename
 			} else {
 				relPath = filepath.Join(me.folderName, me.basename)
 			}
+			displayPath := relPath
 
 			// Skip files already recorded in the import log.
 			if imported[relPath] {
 				log.Debug("skipping %s (already imported)", relPath)
 				result.RecordSkip(1)
-				_ = bar.Add(1)
+				zipSkipped++
 				continue
 			}
 
@@ -187,9 +197,10 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 			} else {
 				destDir := filepath.Join(outputDir, me.folderName)
 				if err := os.MkdirAll(destDir, 0755); err != nil {
-					log.Error("creating album dir %s: %v", destDir, err)
 					result.RecordError(me.basename, err.Error())
-					_ = bar.Add(1)
+					estimator.Tick()
+					processed := result.Succeeded + result.Skipped + result.Failed
+					log.Error("[%d/%d] %screating album dir %s: %v", processed, result.Expected, estimator.Estimate(result.Expected-processed), destDir, err)
 					continue
 				}
 				destPath = filepath.Join(destDir, me.basename)
@@ -206,9 +217,10 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 					if _, serr := os.Stat(destPath); errors.Is(serr, os.ErrNotExist) {
 						break
 					} else if serr != nil {
-						log.Error("checking destination %s: %v", destPath, serr)
 						result.RecordError(me.basename, fmt.Sprintf("checking destination: %v", serr))
-						_ = bar.Add(1)
+						estimator.Tick()
+						processed := result.Succeeded + result.Skipped + result.Failed
+						log.Error("[%d/%d] %schecking destination %s: %v", processed, result.Expected, estimator.Estimate(result.Expected-processed), destPath, serr)
 						collisionErr = true
 						break
 					}
@@ -216,11 +228,20 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 				if collisionErr {
 					continue
 				}
+				// Update displayPath (but not relPath) to reflect the
+				// collision-renamed filename. relPath stays on the source
+				// basename so reruns can skip via the import log.
+				if me.isYearFolder || me.folderName == "" {
+					displayPath = filepath.Base(destPath)
+				} else {
+					displayPath = filepath.Join(me.folderName, filepath.Base(destPath))
+				}
 				log.Debug("duplicate filename %s, saving as %s", me.basename, filepath.Base(destPath))
 			} else if !errors.Is(err, os.ErrNotExist) {
-				log.Error("checking destination %s: %v", destPath, err)
 				result.RecordError(me.basename, err.Error())
-				_ = bar.Add(1)
+				estimator.Tick()
+				processed := result.Succeeded + result.Skipped + result.Failed
+				log.Error("[%d/%d] %schecking destination %s: %v", processed, result.Expected, estimator.Estimate(result.Expected-processed), destPath, err)
 				continue
 			}
 
@@ -234,9 +255,10 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 					_ = r.Close()
 					return result, ctx.Err()
 				}
-				log.Error("extracting %s: %v", me.entryName, err)
 				result.RecordError(me.basename, err.Error())
-				_ = bar.Add(1)
+				estimator.Tick()
+				processed := result.Succeeded + result.Skipped + result.Failed
+				log.Error("[%d/%d] %sextracting %s: %v", processed, result.Expected, estimator.Estimate(result.Expected-processed), me.entryName, err)
 				continue
 			}
 
@@ -247,23 +269,35 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 				result.RecordSuccess(0)
 			}
 
+			var photoDate time.Time
 			if !noMetadata {
 				var jd []byte
 				if me.jsonEntry != nil {
 					jd = jsonData[me.jsonEntry.entryName]
 				}
-				applyTakeoutMetadata(log, me, destPath, jd)
+				photoDate = applyTakeoutMetadata(log, me, destPath, jd)
 			}
 
 			if err := appendImportLog(logPath, relPath); err != nil {
 				log.Error("writing import log for %s: %v", relPath, err)
 			}
 
-			_ = bar.Add(1)
+			estimator.Tick()
+			processed := result.Succeeded + result.Skipped + result.Failed
+			detail := ""
+			if !photoDate.IsZero() {
+				detail = fmt.Sprintf(" (%s)", photoDate.Format("2006-01-02"))
+			}
+			log.Info("[%d/%d] %sextracted %s%s", processed, result.Expected, estimator.Estimate(result.Expected-processed), displayPath, detail)
 
 			if cfg.afterExtract != nil {
 				cfg.afterExtract()
 			}
+		}
+
+		if zipSkipped > 0 {
+			processed := result.Succeeded + result.Skipped + result.Failed
+			log.Info("[%d/%d] skipped %d already-imported files in %s", processed, result.Expected, zipSkipped, filepath.Base(g.zipPath))
 		}
 
 		_ = r.Close()
@@ -275,17 +309,22 @@ func ImportTakeout(ctx context.Context, takeoutDir, outputDir string, log *loggi
 
 // applyTakeoutMetadata embeds metadata (title, description, creation date) into
 // the extracted file using the pre-read JSON sidecar data. If jsonData is nil,
-// the file has no matched sidecar and metadata is skipped.
-func applyTakeoutMetadata(log *logging.Logger, entry *mediaEntry, destPath string, jsonData []byte) {
+// the file has no matched sidecar and metadata is skipped. Returns the photo
+// date used (or zero time if none was resolved) so callers can reuse it for
+// logging.
+func applyTakeoutMetadata(log *logging.Logger, entry *mediaEntry, destPath string, jsonData []byte) time.Time {
 	if jsonData == nil {
 		log.Debug("no JSON sidecar for %s, skipping metadata", entry.basename)
-		return
+		if !entry.zipModTime.IsZero() {
+			return entry.zipModTime
+		}
+		return time.Time{}
 	}
 
 	meta, err := parseTakeoutJSON(jsonData)
 	if err != nil {
 		log.Error("parsing JSON sidecar for %s: %v", entry.basename, err)
-		return
+		return time.Time{}
 	}
 
 	photoDate := meta.PhotoTakenTime
@@ -325,6 +364,8 @@ func applyTakeoutMetadata(log *logging.Logger, entry *mediaEntry, destPath strin
 			log.Error("setting file time for %s: %v", entry.basename, err)
 		}
 	}
+
+	return photoDate
 }
 
 // readGroupSidecars reads JSON sidecar data needed by a group of media entries.
