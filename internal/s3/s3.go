@@ -255,12 +255,15 @@ func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, a
 
 		copied++
 		if copied == 1 {
-			// Anchor the estimator clock to the first real copy event so the
-			// rclone scan/compare phase preceding any copy isn't folded into
-			// the per-item average.
+			// Anchor the estimator clock to the first completed copy so the
+			// rclone scan/compare phase is excluded from the per-item average.
+			// Skip Tick() for this event: its transfer duration is unknown
+			// because it overlapped with the scan phase. Only Start() is
+			// called so the clock is reanchored without counting a data point.
 			estimator.Start()
+		} else {
+			estimator.Tick()
 		}
-		estimator.Tick()
 		if result != nil {
 			result.RecordSuccess(0)
 		}

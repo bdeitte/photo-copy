@@ -1,6 +1,7 @@
 package s3
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -287,6 +288,14 @@ func TestHelperProcess(t *testing.T) {
 		fmt.Fprintln(os.Stderr, "FATAL: segmentation fault in rclone")
 		os.Exit(1)
 	case "restore_success":
+		os.Exit(0)
+	case "scan_then_copies":
+		// Simulate rclone's scan phase (debug messages) followed by 15 copies.
+		fmt.Fprintln(os.Stderr, `{"level":"info","msg":"Building file list"}`)
+		fmt.Fprintln(os.Stderr, `{"level":"info","msg":"Waiting for checks to finish"}`)
+		for i := 1; i <= 15; i++ {
+			fmt.Fprintf(os.Stderr, "{\"level\":\"info\",\"msg\":\"Copied (new)\",\"object\":\"photo%d.jpg\"}\n", i)
+		}
 		os.Exit(0)
 	}
 	os.Exit(0)
@@ -855,5 +864,48 @@ func main() {
 	}
 	if _, err := os.Stat(filepath.Join(workspace, "copy-invoked")); err == nil {
 		t.Error("rclone copy should not have been invoked after context cancellation")
+	}
+}
+
+// TestRunRcloneWithProgress_ScanPhaseExcludedFromEstimate is a regression test
+// for the startup-delay bug at the S3 layer. It drives runRcloneWithProgress
+// with fake rclone output that includes scan-phase debug messages before the
+// first Copied line. The key assertion is that all 15 copied files appear in
+// the progress output and the result counts are correct — pinning the calling
+// convention that Start() anchors the clock on the first Copied event without
+// counting it as a measured data point.
+func TestRunRcloneWithProgress_ScanPhaseExcludedFromEstimate(t *testing.T) {
+	t.Setenv("GO_TEST_HELPER_PROCESS", "1")
+	t.Setenv("GO_TEST_HELPER_MODE", "scan_then_copies")
+
+	var buf bytes.Buffer
+	log := logging.New(false, &buf)
+	client := NewClient(&config.S3Config{}, log)
+
+	binary := os.Args[0]
+	args := []string{"-test.run=TestHelperProcess", "--"}
+
+	result := transfer.NewResult("s3", "download", "/tmp")
+	_, err := client.runRcloneWithProgress(context.Background(), binary, args, 15, "downloaded", result)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// All 15 files should be counted as successful copies.
+	if result.Succeeded != 15 {
+		t.Errorf("Succeeded = %d, want 15", result.Succeeded)
+	}
+
+	// Verify progress output includes all 15 copied files.
+	output := buf.String()
+	for i := 1; i <= 15; i++ {
+		tag := fmt.Sprintf("[%d/15]", i)
+		if !strings.Contains(output, tag) {
+			t.Errorf("expected progress tag %s in output", tag)
+		}
+		filename := fmt.Sprintf("photo%d.jpg", i)
+		if !strings.Contains(output, filename) {
+			t.Errorf("expected filename %s in output", filename)
+		}
 	}
 }
