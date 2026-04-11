@@ -5,7 +5,7 @@ Copy between iCloud Photos, Google Photos, Flickr, AWS S3, and local directories
 <a href="https://github.com/bdeitte/photo-copy/actions/workflows/ci.yml"><img src="https://github.com/bdeitte/photo-copy/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 
 photo-copy transfers photos and videos between iCloud Photos, Google Photos, Flickr, AWS S3, and local directories. It handles the download, upload, and metadata. Use it to:
-- **Back up** your photo library to S3 or a local drive
+- **Back up** your photo library to a local drive or AWS S3
 - **Move photos** between services (Flickr to Google Photos, iCloud to S3, etc.)
 - **Consolidate** scattered photos from multiple services into one place
 
@@ -26,48 +26,43 @@ Requires Go 1.25+. Build the binary first:
 Download your library to a local directory or S3 for safekeeping.
 
 ```bash
-# Download all Flickr photos to a local directory
+# Initial configuration of flickr
 ./photo-copy config flickr
+# Download all Flickr photos to a local directory
 ./photo-copy flickr download ~/flickr-backup
 
-# Back up local photos to S3 Glacier Deep Archive
+# Initial configuration of S3
 ./photo-copy config s3
+# Back up local photos to S3 Glacier Deep Archive
 ./photo-copy s3 upload ~/photos my-bucket/photos/
 ```
+
+When you run a config command, all credentials are saved to `~/.config/photo-copy/` (override with `PHOTO_COPY_CONFIG_DIR`).
 
 ### Move photos between services
 
 Download from one service, then upload to another. photo-copy uses a local directory as the intermediate step — there is no direct service-to-service transfer. Configure each service first (see service sections below).
 
 ```bash
-# Flickr → Google Photos
 ./photo-copy config flickr
-./photo-copy flickr download ~/flickr-photos
 ./photo-copy config google
+
+# Flickr → Google Photos
+./photo-copy flickr download ~/flickr-photos
 ./photo-copy google upload ~/flickr-photos
+
+./photo-copy config s3
 
 # Google Takeout → S3
 ./photo-copy google download ~/takeout-zips ~/google-photos
-./photo-copy config s3
 ./photo-copy s3 upload ~/google-photos my-bucket/photos/
 ```
 
-### Service capabilities
-
-| Service | Download | Upload | Config required | Platform limits |
-|---------|----------|--------|-----------------|-----------------|
-| Flickr | Yes | Yes | Yes | — |
-| Google Photos | Yes, through Takeout import | Yes | Upload only | 10,000 uploads/day |
-| S3 | Yes | Yes | Yes | — |
-| iCloud | Yes | macOS only | Download only | Upload requires Photos.app |
-
 ### Dates and duplicates
 
-Dates on old photos are not always accurate across services. photo-copy reads EXIF data, MP4 container metadata, and service API dates to set the best available timestamp, but some photos — especially older ones — may still have wrong dates. Check your files after transfer with a tool like [Immich](https://immich.app/), [PhotoPrism](https://www.photoprism.app/), [digiKam](https://www.digikam.org/), or [Darktable](https://www.darktable.org/) before uploading to another service if date accuracy matters to you.
+Dates on old photos are not always accurate across services. photo-copy reads EXIF data, MP4 container metadata, and service API dates to set the best available timestamp, but some photos — especially older ones — may still have wrong dates.
 
 Duplicates can happen when downloading from one service and uploading to another, even with identical files. Each photo service handles deduplication differently, and their behavior changes over time. Use `--date-range` to transfer in smaller batches and reduce the chance of duplicates building up across repeated runs.
-
-All credentials are saved to `~/.config/photo-copy/` (override with `PHOTO_COPY_CONFIG_DIR`).
 
 ## Flickr
 
@@ -212,6 +207,16 @@ Download and upload:
 - osxphotos bundled for macOS ARM64 only. Intel Macs: `pipx install osxphotos`.
 
 ## Features
+
+### Service capabilities
+
+| Service | Download | Upload | Config required | Platform limits |
+|---------|----------|--------|-----------------|-----------------|
+| Flickr | Yes | Yes | Yes | — |
+| Google Photos | Yes, through Takeout import | Yes | Upload only | 10,000 uploads/day |
+| S3 | Yes | Yes | Yes | — |
+| iCloud | Yes | macOS only | Download only | Upload requires Photos.app |
+
 
 ### Resumable transfers
 
