@@ -54,5 +54,5 @@ Update a specific tool:
 ```bash
 ./tools-bin/update.sh rclone v1.73.2
 ./tools-bin/update.sh icloudpd 1.32.2
-./tools-bin/update.sh osxphotos 0.75.6
+./tools-bin/update.sh osxphotos 0.75.6    # macOS only
 ```
