@@ -35,7 +35,7 @@ Download your library to a local directory or S3 for safekeeping.
 
 ### Move photos between services
 
-Download from one service, then upload to another. photo-copy uses a local directory as the intermediate step — there is no direct service-to-service transfer.
+Download from one service, then upload to another. photo-copy uses a local directory as the intermediate step — there is no direct service-to-service transfer. Configure each service first (see service sections below).
 
 ```bash
 # Flickr → Google Photos
@@ -64,6 +64,8 @@ Dates on old photos are not always accurate across services. photo-copy reads EX
 Duplicates can happen when downloading from one service and uploading to another, even with identical files. Each photo service handles deduplication differently, and their behavior changes over time. Use `--date-range` to transfer in smaller batches and reduce the chance of duplicates building up across repeated runs.
 
 ## Flickr
+
+Credentials are saved to `~/.config/photo-copy/` (override with `PHOTO_COPY_CONFIG_DIR`).
 
 Configure credentials:
 
@@ -225,7 +227,7 @@ Failed files are not marked as completed, so re-running retries them automatical
 
 - **Flickr** — Requests throttled to stay under 3,600/hour. The interval adapts: doubles on HTTP 429, gradually decreases on success. 429 responses retry indefinitely with exponential backoff capped at 5 minutes. 5xx errors retry up to 7 times. Both honor `Retry-After` headers.
 - **Flickr uploads** — Continue past individual failures. 10 consecutive failures abort the transfer.
-- **Google Photos** — 10,000 uploads/day limit. Transfers exceeding this cap automatically at 10,000 with a log message — re-run the next day.
+- **Google Photos** — 10,000 uploads/day limit. Transfers are capped at 10,000 with a log message — re-run the next day.
 
 ### Filtering options
 
@@ -250,7 +252,7 @@ Flickr and Google Takeout downloads preserve original dates and embed metadata.
 - Dates from JSON sidecar `photoTakenTime` set as file system modification times. MP4/MOV files also get container metadata updated. Falls back to zip entry timestamp.
 - Title and description from JSON sidecars embedded as XMP into JPEG and MP4/MOV files.
 
-`--no-metadata` skips all metadata embedding during downloads.
+`--no-metadata` skips all metadata embedding during Flickr and Google Takeout downloads.
 
 ### Subdirectory support
 
@@ -268,6 +270,8 @@ Validation checks after transfer:
 Report files are written to the transfer directory as `photo-copy-report-{service}-{operation}-{timestamp}.txt`.
 
 ### Debug mode
+
+Add `--debug` to any command for verbose logging:
 
 ```bash
 ./photo-copy flickr download ~/photos --debug
