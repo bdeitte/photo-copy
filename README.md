@@ -39,12 +39,14 @@ Download from one service, then upload to another. photo-copy uses a local direc
 
 ```bash
 # Flickr → Google Photos
+./photo-copy config flickr
 ./photo-copy flickr download ~/flickr-photos
 ./photo-copy config google
 ./photo-copy google upload ~/flickr-photos
 
 # Google Takeout → S3
 ./photo-copy google download ~/takeout-zips ~/google-photos
+./photo-copy config s3
 ./photo-copy s3 upload ~/google-photos my-bucket/photos/
 ```
 
@@ -63,9 +65,9 @@ Dates on old photos are not always accurate across services. photo-copy reads EX
 
 Duplicates can happen when downloading from one service and uploading to another, even with identical files. Each photo service handles deduplication differently, and their behavior changes over time. Use `--date-range` to transfer in smaller batches and reduce the chance of duplicates building up across repeated runs.
 
-## Flickr
+All credentials are saved to `~/.config/photo-copy/` (override with `PHOTO_COPY_CONFIG_DIR`).
 
-Credentials are saved to `~/.config/photo-copy/` (override with `PHOTO_COPY_CONFIG_DIR`).
+## Flickr
 
 Configure credentials:
 
@@ -123,7 +125,7 @@ Download via Google Takeout:
 - **Album preservation** — Files in album folders are extracted into subdirectories (e.g., `Trip to Paris/photo.jpg`). Files in year folders (`Photos from 2022`) go to the output root.
 - **Deduplication** — Photos in both an album folder and a year folder are extracted once (album copy kept). Photos in multiple albums are kept in all.
 - **Metadata embedding** — Title, description, and creation date from JSON sidecar files are embedded as XMP metadata into JPEG and MP4/MOV files. File system timestamps are set from the photo's taken date.
-- **`--no-metadata`** — Skip metadata embedding during Takeout import.
+- **`--no-metadata`** — Leave extracted files unmodified: skip XMP embedding, container timestamp updates, and filesystem timestamp restoration.
 
 ## S3
 
@@ -252,7 +254,7 @@ Flickr and Google Takeout downloads preserve original dates and embed metadata.
 - Dates from JSON sidecar `photoTakenTime` set as file system modification times. MP4/MOV files also get container metadata updated. Falls back to zip entry timestamp.
 - Title and description from JSON sidecars embedded as XMP into JPEG and MP4/MOV files.
 
-`--no-metadata` skips all metadata embedding during Flickr and Google Takeout downloads.
+`--no-metadata` leaves downloaded files unmodified during Flickr and Google Takeout downloads — skips XMP embedding, container timestamp updates, and filesystem timestamp restoration.
 
 ### Subdirectory support
 
