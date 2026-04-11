@@ -32,6 +32,8 @@ echo "=== osxphotos Update: $CURRENT_VERSION -> $OSXPHOTOS_VERSION ==="
 echo ""
 echo "Release: https://github.com/RhetTbull/osxphotos/releases/tag/v${OSXPHOTOS_VERSION}"
 echo ""
+bash "$SCRIPT_DIR/../show-github-release-notes.sh" "RhetTbull/osxphotos" "v${OSXPHOTOS_VERSION}"
+echo ""
 
 WORK_DIR=$(mktemp -d)
 trap 'rm -rf "$WORK_DIR"' EXIT

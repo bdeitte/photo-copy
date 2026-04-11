@@ -37,6 +37,8 @@ if [ "$CURRENT_VERSION" != "unknown" ]; then
         '
     echo ""
 fi
+bash "$SCRIPT_DIR/../show-github-release-notes.sh" "rclone/rclone" "$RCLONE_VERSION"
+echo ""
 
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT

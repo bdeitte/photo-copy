@@ -27,6 +27,8 @@ echo "=== icloudpd Update: $CURRENT_VERSION -> $ICLOUDPD_VERSION ==="
 echo ""
 echo "Release: https://github.com/icloud-photos-downloader/icloud_photos_downloader/releases/tag/v${ICLOUDPD_VERSION}"
 echo ""
+bash "$SCRIPT_DIR/../show-github-release-notes.sh" "icloud-photos-downloader/icloud_photos_downloader" "v${ICLOUDPD_VERSION}"
+echo ""
 
 WORK_DIR=$(mktemp -d)
 trap 'rm -rf "$WORK_DIR"' EXIT
