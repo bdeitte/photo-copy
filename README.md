@@ -4,20 +4,22 @@ Copy and backup your photos and videos.<br>
 Copy between iCloud Photos, Google Photos, Flickr, AWS S3, and local directories.<br>
 <a href="https://github.com/bdeitte/photo-copy/actions/workflows/ci.yml"><img src="https://github.com/bdeitte/photo-copy/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 
-photo-copy transfers photos and videos between iCloud Photos, Google Photos, Flickr, AWS S3, and local directories. It handles the download, upload, and metadata — you pick the services.
-
-Use it to:
+photo-copy transfers photos and videos between iCloud Photos, Google Photos, Flickr, AWS S3, and local directories. It handles the download, upload, and metadata. Use it to:
 - **Back up** your photo library to S3 or a local drive
 - **Move photos** between services (Flickr to Google Photos, iCloud to S3, etc.)
 - **Consolidate** scattered photos from multiple services into one place
 
-photo-copy transfers files and embedded metadata (dates, titles, descriptions, tags). It does not transfer albums, collections, comments, or favorites — just the photos and videos themselves.
+photo-copy transfers files and embedded metadata (dates, titles, descriptions, tags). It does not currently transfer albums, collections, comments, or favorites — just the photos and videos themselves.
 
 ## Quick Start
 
-> **Note:** Google Photos and Flickr support is well-tested. S3 and iCloud support is still in alpha.
+:warning: Google Photos, Flickr, and S3 support are well-tested. iCloud support is still in alpha.
 
-Requires Go 1.25+. Run `./setup.sh` (or `setup.bat` on Windows) to build.
+Requires Go 1.25+. Build the binary first:
+```bash
+# Or setup.bat on Windows
+./setup.sh
+```
 
 ### Back up your photos
 
@@ -279,18 +281,12 @@ Add `--debug` to any command for verbose logging:
 ./photo-copy flickr download ~/photos --debug
 ```
 
-### Supported file types
-
-**Uploads and S3 downloads:** JPEG, PNG, TIFF, GIF, HEIC, WebP, MP4, MOV, AVI, MKV — other extensions are skipped.
-
-**Flickr and iCloud downloads:** All file types downloaded as-is from the service.
-
 ## Organizing your photos
 
-photo-copy handles transfers. For browsing, organizing, and verifying dates on your local files, these tools work well:
+photo-copy handles transfers. For browsing, organizing, and verifying dates on your local files, try out these tools:
 
-- **[Immich](https://immich.app/)** — Self-hosted photo management
 - **[PhotoPrism](https://www.photoprism.app/)** — Self-hosted photo management
+- **[Immich](https://immich.app/)** — Self-hosted photo management
 - **[digiKam](https://www.digikam.org/)** — Desktop photo management
 - **[Darktable](https://www.darktable.org/)** — Photo workflow and raw processing
 
@@ -305,3 +301,4 @@ photo-copy relies on these open-source tools for parts of upload and download:
 - **[rclone](https://rclone.org/)** — S3 uploads and downloads
 - **[icloudpd](https://github.com/icloud-photos-downloader/icloud_photos_downloader)** — iCloud Photos downloads
 - **[osxphotos](https://github.com/RhetTbull/osxphotos)** — iCloud Photos uploads on macOS
+

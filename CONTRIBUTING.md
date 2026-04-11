@@ -1,5 +1,7 @@
 # Contributing to photo-copy
 
+All contributions welcome!
+
 ## Architecture
 
 See [CLAUDE.md](CLAUDE.md#architecture) for architecture details.
@@ -56,3 +58,14 @@ Update a specific tool:
 ./tools-bin/update.sh icloudpd 1.32.2
 ./tools-bin/update.sh osxphotos 0.75.6    # macOS only
 ```
+
+### Supported file types
+
+**Uploads and S3 downloads:** JPEG, PNG, TIFF, GIF, HEIC, WebP, MP4, MOV, AVI, MKV
+
+**Flickr and iCloud downloads:** All file types downloaded as-is from the service.
+
+## License
+
+photo-copy is licensed under the MIT license
+
