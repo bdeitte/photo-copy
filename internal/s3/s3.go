@@ -18,8 +18,9 @@ import (
 )
 
 type Client struct {
-	cfg *config.S3Config
-	log *logging.Logger
+	cfg          *config.S3Config
+	log          *logging.Logger
+	newEstimator func() *transfer.Estimator // overridable for tests; defaults to transfer.NewEstimator
 }
 
 // rcloneSetup holds the paths resolved during shared rclone preparation.
@@ -58,7 +59,7 @@ func buildFilterArgs(mediaOnly bool, dr *daterange.DateRange) []string {
 }
 
 func NewClient(cfg *config.S3Config, log *logging.Logger) *Client {
-	return &Client{cfg: cfg, log: log}
+	return &Client{cfg: cfg, log: log, newEstimator: transfer.NewEstimator}
 }
 
 func (c *Client) Upload(ctx context.Context, inputDir, bucket, prefix string, mediaOnly bool, limit int, dateRange *daterange.DateRange, storageClass string) (*transfer.Result, error) {
@@ -216,7 +217,7 @@ func (c *Client) runRcloneWithProgress(ctx context.Context, rclonePath string, a
 		return 0, fmt.Errorf("starting rclone: %w", startErr)
 	}
 
-	estimator := transfer.NewEstimator()
+	estimator := c.newEstimator()
 	copied := 0
 	var lastError string
 	var nonGlacierErrors int

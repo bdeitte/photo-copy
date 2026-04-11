@@ -870,17 +870,33 @@ func main() {
 // TestRunRcloneWithProgress_ScanPhaseExcludedFromEstimate is a regression test
 // for the startup-delay bug at the S3 layer. It drives runRcloneWithProgress
 // with fake rclone output that includes scan-phase debug messages before the
-// first Copied line. The key assertion is that all 15 copied files appear in
-// the progress output and the result counts are correct — pinning the calling
-// convention that Start() anchors the clock on the first Copied event without
-// counting it as a measured data point.
+// first Copied line, using a deterministic auto-advancing clock injected via
+// the client's newEstimator factory.
+//
+// The key behavioral difference pinned here: the first Copied event only
+// calls Start() (reanchoring the clock), NOT Tick(). So processed reaches
+// estimateThreshold (10) after the 11th Copied event, meaning the first ETA
+// appears at [11/15]. If someone regresses to calling Start()+Tick() on the
+// first event, processed would reach 10 at event 10 and the ETA would first
+// appear at [10/15], failing this test.
 func TestRunRcloneWithProgress_ScanPhaseExcludedFromEstimate(t *testing.T) {
 	t.Setenv("GO_TEST_HELPER_PROCESS", "1")
 	t.Setenv("GO_TEST_HELPER_MODE", "scan_then_copies")
 
+	// Auto-advancing clock: each now() call returns 1 second later.
+	// This makes the estimator deterministic regardless of real wall time.
+	var tick int64
+	fakeClock := func() time.Time {
+		tick++
+		return time.Unix(1700000000+tick, 0)
+	}
+
 	var buf bytes.Buffer
 	log := logging.New(false, &buf)
 	client := NewClient(&config.S3Config{}, log)
+	client.newEstimator = func() *transfer.Estimator {
+		return transfer.NewEstimatorWithClock(fakeClock)
+	}
 
 	binary := os.Args[0]
 	args := []string{"-test.run=TestHelperProcess", "--"}
@@ -891,21 +907,28 @@ func TestRunRcloneWithProgress_ScanPhaseExcludedFromEstimate(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// All 15 files should be counted as successful copies.
 	if result.Succeeded != 15 {
 		t.Errorf("Succeeded = %d, want 15", result.Succeeded)
 	}
 
-	// Verify progress output includes all 15 copied files.
 	output := buf.String()
-	for i := 1; i <= 15; i++ {
-		tag := fmt.Sprintf("[%d/15]", i)
-		if !strings.Contains(output, tag) {
-			t.Errorf("expected progress tag %s in output", tag)
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+
+	// Find the first progress line that contains an "[Estimated" ETA tag.
+	firstETALine := ""
+	for _, line := range lines {
+		if strings.Contains(line, "[Estimated") {
+			firstETALine = line
+			break
 		}
-		filename := fmt.Sprintf("photo%d.jpg", i)
-		if !strings.Contains(output, filename) {
-			t.Errorf("expected filename %s in output", filename)
-		}
+	}
+	if firstETALine == "" {
+		t.Fatal("expected at least one line with an ETA estimate")
+	}
+	// With the fix (Start-only on first Copied, Tick from second onward),
+	// processed reaches 10 on the 11th Copied event → first ETA at [11/15].
+	// The broken version (Start+Tick on first) would hit 10 on event 10 → [10/15].
+	if !strings.Contains(firstETALine, "[11/15]") {
+		t.Errorf("first ETA should appear at [11/15], got line: %s", firstETALine)
 	}
 }

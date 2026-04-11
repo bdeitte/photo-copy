@@ -33,6 +33,12 @@ func NewEstimator() *Estimator {
 	return &Estimator{now: now, startTime: now()}
 }
 
+// NewEstimatorWithClock creates an Estimator that uses the provided clock
+// function instead of time.Now. Intended for testing from external packages.
+func NewEstimatorWithClock(now func() time.Time) *Estimator {
+	return &Estimator{now: now, startTime: now()}
+}
+
 // Start (re)anchors the elapsed-time clock to now. Use this from callers that
 // have a setup/compare phase between NewEstimator() and the first real unit of
 // work, so that pre-work delay does not inflate the cumulative per-item
