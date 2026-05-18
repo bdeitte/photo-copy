@@ -1,19 +1,19 @@
 ## Photo Copy
 
 Copy and backup your photos and videos.<br>
-Copy between iCloud Photos, Google Photos, Flickr, AWS S3, and local directories.<br>
+Copy between Google Photos, Flickr, AWS S3, and local directories.<br>
 <a href="https://github.com/bdeitte/photo-copy/actions/workflows/ci.yml"><img src="https://github.com/bdeitte/photo-copy/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 
-photo-copy transfers photos and videos between iCloud Photos, Google Photos, Flickr, AWS S3, and local directories. It handles the download, upload, and metadata. Use it to:
+photo-copy transfers photos and videos between Google Photos, Flickr, AWS S3, and local directories. It handles the download, upload, and metadata. Use it to:
 - **Back up** your photo library to a local drive or AWS S3
-- **Move photos** between services (Flickr to Google Photos, iCloud to S3, etc.)
+- **Move photos** between services (Flickr to Google Photos, Flickr to S3, etc.)
 - **Consolidate** scattered photos from multiple services into one place
 
 photo-copy transfers files and embedded metadata (dates, titles, descriptions, tags). It does not currently transfer albums, collections, comments, or favorites — just the photos and videos themselves.
 
 ## Quick Start
 
-:warning: Google Photos, Flickr, and S3 support are well-tested. iCloud support is still in alpha.
+:warning: Google Photos, Flickr, and S3 support are fairly well-tested and have been used by me, but they don't support albums. iCloud support is in here too, but it hasn't been tested.
 
 Requires Go 1.25+. Build the binary first:
 ```bash
@@ -171,7 +171,7 @@ Upload and download:
 
 ## iCloud Photos
 
-Download works on all platforms. Upload requires macOS with Photos.app and iCloud Photos sync enabled.
+Download works on all platforms. Upload requires macOS with Photos.app and iCloud Photos sync enabled. Note that iCloud support is untested against a real account, so be careful here!
 
 Configure credentials (needed for download only):
 
